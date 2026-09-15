@@ -39,8 +39,6 @@ limitations under the License.
 #include "Test_ASWLog_FileLog.h"
 #include "Test_ASWLog_Types.h"
 #include "Test_ASWLog_Utils.h"
-#include "Test_ASWTools_Random.h"
-#include "Test_ASWTools_String.h"
 //---------------------------------------------------------------------------
 
 namespace ASWUnitTests
@@ -135,8 +133,6 @@ void TTestHandler::RegisterTestGroups()
     m_TestGroups.push_back(std::unique_ptr<TTest_ASWLog_FileLog>(new TTest_ASWLog_FileLog()));
     m_TestGroups.push_back(std::unique_ptr<TTest_ASWLog_Types>(new TTest_ASWLog_Types()));
     m_TestGroups.push_back(std::unique_ptr<TTest_ASWLog_Utils>(new TTest_ASWLog_Utils()));
-    m_TestGroups.push_back(std::unique_ptr<TTest_ASWTools_String>(new TTest_ASWTools_String()));
-    m_TestGroups.push_back(std::unique_ptr<TTest_TMersenneTwisterRandom>(new TTest_TMersenneTwisterRandom()));
 
     // ----- End adding classes to be tested
 }

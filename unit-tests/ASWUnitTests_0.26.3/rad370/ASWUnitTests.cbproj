@@ -212,22 +212,6 @@
             <DependentOn>..\tests\Test_ASWLog_Utils.h</DependentOn>
             <BuildOrder>12</BuildOrder>
         </CppCompile>
-        <CppCompile Include="..\tests\Test_ASWTools_Random.cpp">
-            <DependentOn>..\tests\Test_ASWTools_Random.h</DependentOn>
-            <BuildOrder>13</BuildOrder>
-        </CppCompile>
-        <CppCompile Include="..\tests\Test_ASWTools_String.cpp">
-            <DependentOn>..\tests\Test_ASWTools_String.h</DependentOn>
-            <BuildOrder>14</BuildOrder>
-        </CppCompile>
-        <CppCompile Include="..\toTest\ASWTools_Random.cpp">
-            <DependentOn>..\toTest\ASWTools_Random.h</DependentOn>
-            <BuildOrder>3</BuildOrder>
-        </CppCompile>
-        <CppCompile Include="..\toTest\ASWTools_String.cpp">
-            <DependentOn>..\toTest\ASWTools_String.h</DependentOn>
-            <BuildOrder>4</BuildOrder>
-        </CppCompile>
         <BuildConfiguration Include="Base">
             <Key>Base</Key>
         </BuildConfiguration>

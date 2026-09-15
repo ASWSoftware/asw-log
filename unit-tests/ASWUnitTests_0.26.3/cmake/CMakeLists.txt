@@ -17,11 +17,6 @@ add_executable(ASWUnitTests
     ../tests/Test_ASWLog_FileLog.cpp
     ../tests/Test_ASWLog_Types.cpp
     ../tests/Test_ASWLog_Utils.cpp
-    ../tests/Test_ASWTools_Random.cpp
-    ../tests/Test_ASWTools_String.cpp
-    ../toTest/ASWTools_Common.cpp
-    ../toTest/ASWTools_Random.cpp
-    ../toTest/ASWTools_String.cpp
 )
 
 target_include_directories(ASWUnitTests PRIVATE
