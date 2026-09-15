@@ -68,13 +68,14 @@ int main(int argc, char* argv[])
     ASWLog::TASWLogConfig globalConfig;
     globalConfig.MinimumLevel  = ASWLog::Level::Trace; // Trap all logging thresholds
     globalConfig.LogFilePath   = generatedName;
-    globalConfig.BannerMessage = "--- WELCOME TO ASWLogExample - GLOBAL CONFIG ---";
+    globalConfig.BannerMessage_Init = "--- WELCOME TO ASWLogExample - GLOBAL CONFIG ---";
+    globalConfig.BannerMessage_Shutdown = "GLOBAL LOGGER - I'm outta here";
 
     // Toggle properties on
     globalConfig.LogSourceLine = true;
     globalConfig.LogMethodName = true;
-//    globalConfig.LogModuleName = true;
-//    globalConfig.ModuleName    = "CORE_ENGINE";
+    globalConfig.LogAppMem_WorkingSet = true;
+    globalConfig.LogAppMem_PeakWorkingSet = true;
 
     // Get singleton instance - the logger supports singleton and non-singleton instances
     auto& globalLogger = ASWLog::TASWFileLog::GetInstance();
@@ -89,7 +90,14 @@ int main(int argc, char* argv[])
     // Example of diverse log layers across different contextual zones
     globalLogger.LogTrace("Testing Trace log line layout parameters.");
 
-    // Pass by abstract interface reference to verify polymorphism compatibility
+    std::cout << "Cleaning up old global logs...\n";
+    globalLogger.LogInfo("Cleaning up old global logs...");
+    auto logDir = globalConfig.ResolveLogFileDir();
+    std::size_t nLogsDeleted = ASWLog::TASWFileLog::DeleteOldLogs(logDir, "*ExampleLog.txt", std::chrono::hours(1));
+    globalLogger.LogInfoFmt("Deleted {} old global logs...", nLogsDeleted);
+    std::cout << "Deleted " << nLogsDeleted << " old global logs...\n";
+
+    // Polymorphism compatibility
     SampleFunction(globalLogger);
 
     MyTestClass tester;
@@ -102,6 +110,8 @@ int main(int argc, char* argv[])
     std::cout << "Testing independent local stack instance execution...\n";
     ASWLog::TASWLogConfig localConfig;
     localConfig.MinimumLevel   = ASWLog::Level::Warn; // Skips trace/debug/info
+    localConfig.BannerMessage_Init = "Local logger - howdy";
+    localConfig.BannerMessage_Shutdown = "Local logger - cya";
     localConfig.LogFilePath    = "local_standalone_errors.txt";
     localConfig.LogUTCDateTime = true;
     localConfig.LogLevelStr    = true;
@@ -116,16 +126,16 @@ int main(int argc, char* argv[])
 
         // This will be caught
         localLogger.LogError("Test local logger error message.");
-
-        // Teardown with localized close message
-        localLogger.Finalize("Local logger contextual shutdown successful.");
+    }
+    else
+    {
+        std::cout << "Local logger failed to initialize!\n";
     }
 
-    // Step E: Finalize Global Logger explicitly with final timestamp injection
-    globalLogger.Finalize("Application terminated naturally via main exit block.");
+    globalLogger.LogInfo("Application terminated naturally via main exit block.");
     std::cout << "Execution completed.\n";
 
-#if !defined(NDEBUG)
+#if !defined(NDEBUG) && defined(__BORLANDC__)
     std::cout << "Press enter to continue..." << std::endl;
     std::cin.get();
 #endif
