@@ -37,6 +37,38 @@ namespace ASWLog
 
 //---------------------------------------------------------------------------
 
+enum class FlushMode
+{
+    EveryWrite,
+    OnNewLine,
+    Manual,
+    Periodic,
+};
+
+[[nodiscard]] std::optional<FlushMode> FlushMode_FromString(std::string_view str) noexcept;
+
+[[nodiscard]] constexpr std::string_view FlushMode_ToString(FlushMode flushMode) noexcept
+{
+    switch (flushMode)
+    {
+        case FlushMode::EveryWrite:
+            return "EVERY_WRITE";
+
+        case FlushMode::OnNewLine:
+            return "ON_NEW_LINE";
+
+        case FlushMode::Manual:
+            return "MANUAL";
+
+        case FlushMode::Periodic:
+            return "PERIODIC";
+    }
+
+    return "UNKNOWN";
+}
+
+//---------------------------------------------------------------------------
+
 /*
   Level enum
 
@@ -97,6 +129,30 @@ enum class Level : std::uint8_t
 
         case Level::Critical:
             return "CRITICAL";
+    }
+
+    return "UNKNOWN";
+}
+
+//---------------------------------------------------------------------------
+
+enum class LineEnding
+{
+    LF,
+    CRLF,
+};
+
+[[nodiscard]] std::optional<LineEnding> LineEnding_FromString(std::string_view str) noexcept;
+
+[[nodiscard]] constexpr std::string_view LineEnding_ToString(LineEnding lineEnding) noexcept
+{
+    switch (lineEnding)
+    {
+        case LineEnding::LF:
+            return "LF";
+
+        case LineEnding::CRLF:
+            return "CRLF";
     }
 
     return "UNKNOWN";

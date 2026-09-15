@@ -27,14 +27,72 @@ limitations under the License.
 #ifndef ASWLog_FileLogH
 #define ASWLog_FileLogH
 //---------------------------------------------------------------------------
-#include <fstream>
+#include <atomic>
+#include <chrono>
+#include <cstddef>
+#include <cstdio>
+#include <filesystem>
 #include <mutex>
+#include <ostream>
+#include <string_view>
+#include <streambuf>
+#include <string>
 //---------------------------------------------------------------------------
 #include "ASWLog_Base.h"
 //---------------------------------------------------------------------------
 
 namespace ASWLog
 {
+
+/////////////////////////////////////////////////////////////////////////////
+// TASWFileStreamBuf
+//
+// A file stream buffer.
+/////////////////////////////////////////////////////////////////////////////
+class TASWFileStreamBuf final : public std::streambuf
+{
+private:
+    typedef std::streambuf inherited;
+
+private:
+    std::FILE* m_File = nullptr;
+
+protected:
+    int_type overflow(int_type character = traits_type::eof()) override;
+    std::streamsize xsputn(const char* data, std::streamsize size) override;
+    int sync() override;
+
+public:
+    bool Open(const std::filesystem::path& path);
+    bool Close();
+    bool IsOpen() const noexcept;
+    bool Write(std::string_view data);
+};
+
+
+/////////////////////////////////////////////////////////////////////////////
+// TASWFileStream
+//
+// A file stream wrapper.
+/////////////////////////////////////////////////////////////////////////////
+class TASWFileStream final : public std::ostream
+{
+private:
+    typedef std::ostream inherited;
+
+private:
+    TASWFileStreamBuf m_Buffer;
+
+public:
+    TASWFileStream();
+    ~TASWFileStream();
+    bool Open(const std::filesystem::path& path);
+    bool Close();
+    bool IsOpen() const noexcept;
+    void Flush();
+    bool Write(std::string_view data);
+};
+
 
 /////////////////////////////////////////////////////////////////////////////
 // TASWFileLog
@@ -47,12 +105,29 @@ private:
     typedef TASWLogBase inherited;
 
 private:
-    std::ofstream m_FileStream;
+    TASWFileStream m_FileStream;
     std::mutex m_FileMutex; // Protects file write bounds across multiple threads
     std::string m_LastLogDateStr; // Stores YYYY-MM-DD state to detect structural calendar shifts
+    std::atomic<bool> m_IsOpen{ false };
+    std::chrono::steady_clock::time_point m_LastFlushTime{};
 
 private:
-    void RotateLogFiles(std::string_view reasonTag);
+    void AppendLineEnding(std::string& line);
+    bool CloseUnlocked();
+    bool EnsureOpen();
+    void Finalize();
+    bool FlushUnlocked();
+    void MaybeFlush(bool isNewLine);
+    bool OpenUnlocked();
+    bool RotateLogFilesUnlocked(std::string_view reasonTag);
+    void WriteApplicationInfo();
+    void WriteDriveInfo();
+    void WriteInitializationInfo();
+    void WriteLogEntry(Level level, std::string_view message, bool force, bool raw, bool includeNewLine, std::source_location loc);
+    void WriteMemoryUsageInfo();
+    void WriteOSInfo();
+    void WriteSystemMemoryInfo();
+    void WriteTimeInfo();
 
 protected:
     std::string_view GetLoggerClassName() const noexcept final
@@ -61,6 +136,7 @@ protected:
     }
 
 public: // Static methods
+    static std::size_t DeleteOldLogs(const std::filesystem::path& logDir, std::string_view pattern, std::chrono::hours maxAge);
     static TASWFileLog& GetInstance(); // Singleton support for the common static instance
 
 public:
@@ -68,9 +144,19 @@ public:
     ~TASWFileLog();
 
     bool Initialize(const TASWLogConfig& config) override;
-    void Finalize(std::string_view exitMessage = "") override;
+
+    bool Open() override;
+    bool Close() override;
+    bool IsOpen() const noexcept override;
+    bool Flush();
+
+    bool RotateLogFiles(std::string_view reasonTag = "manual");
 
     void Log(Level level, std::string_view message, std::source_location loc = std::source_location::current()) override;
+    void LogRaw(Level level, std::string_view message, std::source_location loc = std::source_location::current()) override;
+
+    void LogForce(Level level, std::string_view message, std::source_location loc = std::source_location::current()) override;
+    void LogForceRaw(Level level, std::string_view message, std::source_location loc = std::source_location::current()) override;
 };
 
 } // namespace ASWLog

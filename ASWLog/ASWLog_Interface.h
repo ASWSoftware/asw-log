@@ -35,7 +35,6 @@ limitations under the License.
 #include "ASWLog_Types.h"
 //---------------------------------------------------------------------------
 
-
 namespace ASWLog
 {
 
@@ -52,14 +51,21 @@ public:
     virtual std::string_view GetVersionStr() const noexcept = 0;
     virtual std::string GetFullVersionStr() const = 0;
 
+    virtual TASWLogConfig& GetConfig() noexcept = 0;
+    virtual const TASWLogConfig& GetConfig() const noexcept = 0;
+
     virtual bool Initialize(const TASWLogConfig& config) = 0;
-    virtual void Finalize(std::string_view exitMessage = "") = 0;
 
-    // Core raw string logging method
-    virtual void Log(
-        Level level, std::string_view message, std::source_location loc = std::source_location::current()) = 0;
+    virtual bool Open() = 0;
+    virtual bool Close() = 0;
+    virtual bool IsOpen() const noexcept = 0;
 
-    // Helper functions for easy Level calling shortcuts
+    virtual void Log(Level level, std::string_view message, std::source_location loc = std::source_location::current()) = 0;
+    virtual void LogRaw(Level level, std::string_view message, std::source_location loc = std::source_location::current()) = 0;
+
+    virtual void LogForce(Level level, std::string_view message, std::source_location loc = std::source_location::current()) = 0;
+    virtual void LogForceRaw(Level level, std::string_view message, std::source_location loc = std::source_location::current()) = 0;
+
     virtual void LogTrace(std::string_view msg, std::source_location loc = std::source_location::current()) = 0;
     virtual void LogDebug(std::string_view msg, std::source_location loc = std::source_location::current()) = 0;
     virtual void LogInfo(std::string_view msg, std::source_location loc = std::source_location::current()) = 0;
@@ -72,6 +78,24 @@ public:
     inline void LogFmt(Level level, std::string_view fmt, Args&&... args)
     {
         Log(level, std::vformat(fmt, std::make_format_args(args ...)));
+    }
+
+    template<typename ... Args>
+    inline void LogRawFmt(Level level, std::string_view fmt, Args&&... args)
+    {
+        LogRaw(level, std::vformat(fmt, std::make_format_args(args ...)));
+    }
+
+    template<typename ... Args>
+    inline void LogForceFmt(Level level, std::string_view fmt, Args&&... args)
+    {
+        LogForce(level, std::vformat(fmt, std::make_format_args(args ...)));
+    }
+
+    template<typename ... Args>
+    inline void LogForceRawFmt(Level level, std::string_view fmt, Args&&... args)
+    {
+        LogForceRaw(level, std::vformat(fmt, std::make_format_args(args ...)));
     }
 
     template<typename ... Args>

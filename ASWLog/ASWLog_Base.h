@@ -62,12 +62,20 @@ public:
 
     std::string GetFullVersionStr() const final
     {
-        // Example output: "TASWFileLog - Version 1.0.0" (Will adapt down the line dynamically)
         return std::format("{} - Base version {}", GetLoggerClassName(), GetVersionStr());
     }
 
+    TASWLogConfig& GetConfig() noexcept final
+    {
+        return m_Config;
+    }
+
+    const TASWLogConfig& GetConfig() const noexcept final
+    {
+        return m_Config;
+    }
+
 public:
-    // Shorthand passthroughs routing down to the core polymorphic virtual Log() method
     void LogTrace(std::string_view msg, std::source_location loc = std::source_location::current()) override;
     void LogDebug(std::string_view msg, std::source_location loc = std::source_location::current()) override;
     void LogInfo(std::string_view msg, std::source_location loc = std::source_location::current()) override;

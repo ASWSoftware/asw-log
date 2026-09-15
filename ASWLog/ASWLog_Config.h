@@ -27,6 +27,7 @@ limitations under the License.
 #ifndef ASWLog_ConfigH
 #define ASWLog_ConfigH
 //---------------------------------------------------------------------------
+#include <chrono>
 #include <cstdint>
 #include <filesystem>
 #include <string>
@@ -40,24 +41,63 @@ namespace ASWLog
 struct TASWLogConfig
 {
     Level MinimumLevel = Level::Info;
-    std::filesystem::path LogFilePath;
-    std::string BannerMessage;
+    LineEnding LogLineEnding = LineEnding::LF;
+    std::filesystem::path LogsFolderPath = "logs";
+    std::filesystem::path LogFilePath = "aswlog.txt";
+    std::string BannerMessage_Init;
+    std::string BannerMessage_Shutdown;
+    bool AutoOpenClosePerWrite = false;
+    bool WriteShutdownLog = true;
 
-    // Layout configuration
-    bool LogUTCDateTime   = true;
+    FlushMode LogFlushMode = FlushMode::EveryWrite;
+    std::chrono::milliseconds FlushInterval{ 1000 };
+
+    // Meta-data configuration for each log entry
+    bool LogAppMem_WorkingSet = false;
+    bool LogAppMem_PeakWorkingSet = false;
     bool LogLevelStr      = true;
-    bool LogProcessId     = true;
-    bool LogThreadId      = true;
-    bool LogSourceLine    = false;
     bool LogMethodName    = false;
+    bool LogProcessId     = true;
+    bool LogSourceLine    = false;
+    bool LogThreadId      = true;
+    bool LogUTCDateTime   = true;
 
-//    bool LogModuleName    = false;
-//    std::string ModuleName = "Global";
+    // Initialize output configuration
+    bool Init_LogApplicationInfo = true;
+    bool Init_LogCommandLine = false;
+    bool Init_LogDriveInfo = true;
+    bool Init_LogMemoryUsage = true;
+    bool Init_LogOSInfo = true;
+    bool Init_LogSysMemInfo = true;
+    bool Init_LogTimeInfo = true;
+
+    // Retry log entry options
+    int OpenRetryCount = 5;
+    std::chrono::milliseconds OpenRetryDelay{ 50 };
 
     // --- Log Rotation and Rolling Options ---
     bool EnableRotation       = false;
     std::uintmax_t MaxFileSizeBytes = 10 * 1024 * 1024; // Default 10MB
     bool EnableDailyRolling   = false; // Rolls file over at midnight
+
+    [[nodiscard]] std::filesystem::path ResolveLogFileDir() const
+    {
+        return ResolveLogFilePath().parent_path();
+    }
+
+    [[nodiscard]] std::filesystem::path ResolveLogFilePath() const
+    {
+        auto candidate = LogFilePath.empty() ? std::filesystem::path("aswlog.txt") : LogFilePath;
+        auto baseFolder = LogsFolderPath.empty() ? std::filesystem::path("logs") : LogsFolderPath;
+
+        if (candidate.is_absolute())
+        {
+            return candidate.lexically_normal();
+        }
+
+        auto resolvedBase = baseFolder.lexically_normal();
+        return (resolvedBase / candidate).lexically_normal();
+    }
 };
 
 } // namespace ASWLog

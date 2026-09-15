@@ -24,6 +24,8 @@ limitations under the License.
 // Module header
 #include "ASWLog_Types.h"
 //---------------------------------------------------------------------------
+#include <algorithm>
+#include <cctype>
 #include <iomanip>
 #include <iostream>
 #include <sstream>
@@ -51,6 +53,25 @@ bool iequals(std::string_view a, std::string_view b) noexcept
 
 //---------------------------------------------------------------------------
 
+//---------------------------------------------------------------------------
+std::optional<FlushMode> FlushMode_FromString(std::string_view str) noexcept
+{
+    if (iequals(str, "EVERY_WRITE") || iequals(str, "EVERYWRITE"))
+        return FlushMode::EveryWrite;
+
+    if (iequals(str, "ON_NEW_LINE") || iequals(str, "ONNEWLINE"))
+        return FlushMode::OnNewLine;
+
+    if (iequals(str, "MANUAL"))
+        return FlushMode::Manual;
+
+    if (iequals(str, "PERIODIC"))
+        return FlushMode::Periodic;
+
+    return std::nullopt;
+}
+
+//---------------------------------------------------------------------------
 std::optional<Level> Level_FromString(std::string_view str) noexcept
 {
     if (iequals(str, "TRACE"))
@@ -70,6 +91,18 @@ std::optional<Level> Level_FromString(std::string_view str) noexcept
 
     if (iequals(str, "CRITICAL") || iequals(str, "FATAL"))
         return Level::Critical;
+
+    return std::nullopt; // Return empty optional if the string is not recognized
+}
+
+//---------------------------------------------------------------------------
+std::optional<LineEnding> LineEnding_FromString(std::string_view str) noexcept
+{
+    if (iequals(str, "LF") || iequals(str, "LINUX"))
+        return LineEnding::LF;
+
+    if (iequals(str, "CRLF") || iequals(str, "WINDOWS"))
+        return LineEnding::CRLF;
 
     return std::nullopt; // Return empty optional if the string is not recognized
 }

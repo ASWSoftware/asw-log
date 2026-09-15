@@ -30,12 +30,28 @@ limitations under the License.
 #define ASWLog_UtilsH
 //---------------------------------------------------------------------------
 #include <chrono>
+#include <cstddef>
+#include <filesystem>
 #include <string>
 #include <string_view>
 //---------------------------------------------------------------------------
 
 namespace ASWLog
 {
+
+struct TMemoryUsage
+{
+    std::size_t WorkingSetBytes = 0;
+    std::size_t PeakWorkingSetBytes = 0;
+};
+
+struct TSystemMemoryUsage
+{
+    std::uintmax_t TotalBytes = 0;
+    std::uintmax_t AvailableBytes = 0;
+};
+
+//---------------------------------------------------------------------------
 
 /*
     GenerateLogFileName
@@ -47,6 +63,19 @@ namespace ASWLog
     returns a string formatted as: YYYYMMDD_HHMMSS_mmm_PID_TID_customPostfix
 */
 [[nodiscard]] std::string GenerateLogFileName(std::string_view customPostfix);
+
+[[nodiscard]] std::string GetApplicationInfoString();
+[[nodiscard]] std::string GetCommandLineString();
+[[nodiscard]] std::string GetDriveInfoString();
+[[nodiscard]] std::filesystem::path GetExecutablePath();
+[[nodiscard]] TMemoryUsage GetMemoryUsage();
+[[nodiscard]] std::string GetMemoryUsageString();
+[[nodiscard]] std::string GetOSInfoString();
+[[nodiscard]] TSystemMemoryUsage GetSystemMemoryUsage();
+[[nodiscard]] std::string GetSystemMemoryUsageString();
+[[nodiscard]] std::string GetTimeInfoString();
+
+[[nodiscard]] bool MatchesWildcard(std::string_view value, std::string_view pattern);
 
 namespace Time
 {
