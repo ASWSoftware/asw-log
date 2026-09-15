@@ -12,6 +12,11 @@ add_executable(ASWUnitTests
     ../src/ASWUnitTests_TestBase.cpp
     ../src/ASWUnitTests_Version.h
     ../src/main.cpp
+    ../tests/Test_ASWLog_Base.cpp
+    ../tests/Test_ASWLog_Config.cpp
+    ../tests/Test_ASWLog_FileLog.cpp
+    ../tests/Test_ASWLog_Types.cpp
+    ../tests/Test_ASWLog_Utils.cpp
     ../tests/Test_ASWTools_Random.cpp
     ../tests/Test_ASWTools_String.cpp
     ../toTest/ASWTools_Common.cpp

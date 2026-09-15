@@ -192,13 +192,33 @@
         <CppCompile Include="..\src\main.cpp">
             <BuildOrder>1</BuildOrder>
         </CppCompile>
+        <CppCompile Include="..\tests\Test_ASWLog_Base.cpp">
+            <DependentOn>..\tests\Test_ASWLog_Base.h</DependentOn>
+            <BuildOrder>8</BuildOrder>
+        </CppCompile>
+        <CppCompile Include="..\tests\Test_ASWLog_Config.cpp">
+            <DependentOn>..\tests\Test_ASWLog_Config.h</DependentOn>
+            <BuildOrder>9</BuildOrder>
+        </CppCompile>
+        <CppCompile Include="..\tests\Test_ASWLog_FileLog.cpp">
+            <DependentOn>..\tests\Test_ASWLog_FileLog.h</DependentOn>
+            <BuildOrder>10</BuildOrder>
+        </CppCompile>
+        <CppCompile Include="..\tests\Test_ASWLog_Types.cpp">
+            <DependentOn>..\tests\Test_ASWLog_Types.h</DependentOn>
+            <BuildOrder>11</BuildOrder>
+        </CppCompile>
+        <CppCompile Include="..\tests\Test_ASWLog_Utils.cpp">
+            <DependentOn>..\tests\Test_ASWLog_Utils.h</DependentOn>
+            <BuildOrder>12</BuildOrder>
+        </CppCompile>
         <CppCompile Include="..\tests\Test_ASWTools_Random.cpp">
             <DependentOn>..\tests\Test_ASWTools_Random.h</DependentOn>
-            <BuildOrder>8</BuildOrder>
+            <BuildOrder>13</BuildOrder>
         </CppCompile>
         <CppCompile Include="..\tests\Test_ASWTools_String.cpp">
             <DependentOn>..\tests\Test_ASWTools_String.h</DependentOn>
-            <BuildOrder>9</BuildOrder>
+            <BuildOrder>14</BuildOrder>
         </CppCompile>
         <CppCompile Include="..\toTest\ASWTools_Random.cpp">
             <DependentOn>..\toTest\ASWTools_Random.h</DependentOn>

@@ -1,0 +1,161 @@
+/* **************************************************************************
+Test_ASWLog_FileLog.cpp
+Author: Anthony S. West - ASW Software
+
+See header for info.
+
+Copyright 2026 Anthony S. West
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    https://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+
+************************************************************************** */
+
+//---------------------------------------------------------------------------
+// Module header
+#include "Test_ASWLog_FileLog.h"
+//---------------------------------------------------------------------------
+#include <chrono>
+#include <filesystem>
+#include <fstream>
+#include <iterator>
+#include <string>
+//---------------------------------------------------------------------------
+#include "ASWLog_FileLog.h"
+//---------------------------------------------------------------------------
+
+namespace ASWUnitTests
+{
+
+namespace
+{
+
+const auto GroupBaseTempDir = std::filesystem::temp_directory_path() / "aswlog_tests";
+const auto TestTempDir = GroupBaseTempDir / "test";
+
+} // namespace
+
+//---------------------------------------------------------------------------
+
+//---------------------------------------------------------------------------
+TTest_ASWLog_FileLog::TTest_ASWLog_FileLog()
+    : inherited("ASWLog_FileLog_Tests")
+{
+    RegisterTest(&TTest_ASWLog_FileLog::Test_DeleteOldLogs_RemovesOldFiles, "DeleteOldLogs_RemovesOldFiles");
+    RegisterTest(&TTest_ASWLog_FileLog::Test_InitializeAndLogInfo_WritesText, "InitializeAndLogInfo_WritesText");
+}
+//---------------------------------------------------------------------------
+TTest_ASWLog_FileLog::~TTest_ASWLog_FileLog()
+{
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_FileLog::SetUp_Group()
+{
+    Log("Setting up temp group folder: " + GroupBaseTempDir.string());
+    std::filesystem::create_directories(GroupBaseTempDir);
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_FileLog::SetUp_Test(ITestCase& testCase)
+{
+    Log("Setting up temp folder for " + testCase.GetName() + ": " + TestTempDir.string());
+    std::filesystem::create_directories(TestTempDir);
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_FileLog::TearDown_Group()
+{
+    Log("Cleaning up temp group folder:" + GroupBaseTempDir.string());
+    std::filesystem::remove_all(GroupBaseTempDir);
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_FileLog::TearDown_Test(ITestCase& testCase)
+{
+    Log("Cleaning up temp folder for " + testCase.GetName() + ": " + TestTempDir.string());
+    std::filesystem::remove_all(TestTempDir);
+}
+//---------------------------------------------------------------------------
+
+// /////// Begin tests after this line ///////////////////////
+
+//---------------------------------------------------------------------------
+void TTest_ASWLog_FileLog::Test_DeleteOldLogs_RemovesOldFiles()
+{
+    // Arrange
+    const auto oldFile = TestTempDir / "old_example.log";
+    {
+        std::ofstream oldStream(oldFile);
+        oldStream << "old";
+    }
+
+    const auto newFile = TestTempDir / "new_example.log";
+    {
+        std::ofstream newStream(newFile);
+        newStream << "new";
+    }
+
+    const auto oldWriteTime = std::chrono::file_clock::now() - std::chrono::hours(2);
+    std::filesystem::last_write_time(oldFile, oldWriteTime);
+    std::filesystem::last_write_time(newFile, std::chrono::file_clock::now());
+
+    // Act
+    const auto deletedCount = ASWLog::TASWFileLog::DeleteOldLogs(TestTempDir, "*example.log", std::chrono::hours(1));
+
+    // Assert
+    CheckEquals(static_cast<size_t>(1), deletedCount, __func__, __LINE__, "DeleteOldLogs should remove the stale matching file");
+    CheckFalse(std::filesystem::exists(oldFile), __func__, __LINE__, "Old log file should be removed");
+    CheckTrue(std::filesystem::exists(newFile), __func__, __LINE__, "Recent log file should remain");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_FileLog::Test_InitializeAndLogInfo_WritesText()
+{
+    // Arrange
+    const auto logFile = TestTempDir / "aswlog_runtime.log";
+
+    ASWLog::TASWLogConfig config;
+    config.LogsFolderPath = TestTempDir;
+    config.LogFilePath = logFile;
+    config.LogUTCDateTime = false;
+    config.LogLevelStr = false;
+    config.LogProcessId = false;
+    config.LogThreadId = false;
+    config.LogAppMem_WorkingSet = false;
+    config.LogAppMem_PeakWorkingSet = false;
+    config.LogMethodName = false;
+    config.LogSourceLine = false;
+    config.Init_LogTimeInfo = false;
+    config.Init_LogOSInfo = false;
+    config.Init_LogDriveInfo = false;
+    config.Init_LogSysMemInfo = false;
+    config.Init_LogApplicationInfo = false;
+    config.Init_LogMemoryUsage = false;
+    config.OpenRetryCount = 1;
+
+    ASWLog::TASWFileLog logger;
+
+    // Act
+    const bool initialized = logger.Initialize(config);
+    logger.LogInfo("unit_test_message");
+    logger.Close();
+
+    std::string contents;
+    {
+        std::ifstream stream(logFile, std::ios::binary);
+        contents.assign((std::istreambuf_iterator<char>(stream)), std::istreambuf_iterator<char>());
+    }
+
+    // Assert
+    CheckTrue(initialized, __func__, __LINE__, "Initialize should succeed");
+    CheckTrue(logger.IsOpen() == false, __func__, __LINE__, "Logger should be closed after explicit close");
+    CheckTrue(contents.find("unit_test_message") != std::string::npos, __func__, __LINE__, "Logged file should contain the test message");
+}
+//---------------------------------------------------------------------------
+
+} // namespace ASWUnitTests

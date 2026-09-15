@@ -34,6 +34,11 @@ limitations under the License.
 #include "ASWUnitTests_Version.h"
 //---------------------------------------------------------------------------
 // Add includes for each "Test_" module here
+#include "Test_ASWLog_Base.h"
+#include "Test_ASWLog_Config.h"
+#include "Test_ASWLog_FileLog.h"
+#include "Test_ASWLog_Types.h"
+#include "Test_ASWLog_Utils.h"
 #include "Test_ASWTools_Random.h"
 #include "Test_ASWTools_String.h"
 //---------------------------------------------------------------------------
@@ -125,6 +130,11 @@ void TTestHandler::RegisterTestGroups()
 
     // ----- Add each class to be tested
 
+//    m_TestGroups.push_back(std::unique_ptr<TTest_ASWLog_Base>(new TTest_ASWLog_Base()));
+    m_TestGroups.push_back(std::unique_ptr<TTest_ASWLog_Config>(new TTest_ASWLog_Config()));
+    m_TestGroups.push_back(std::unique_ptr<TTest_ASWLog_FileLog>(new TTest_ASWLog_FileLog()));
+    m_TestGroups.push_back(std::unique_ptr<TTest_ASWLog_Types>(new TTest_ASWLog_Types()));
+    m_TestGroups.push_back(std::unique_ptr<TTest_ASWLog_Utils>(new TTest_ASWLog_Utils()));
     m_TestGroups.push_back(std::unique_ptr<TTest_ASWTools_String>(new TTest_ASWTools_String()));
     m_TestGroups.push_back(std::unique_ptr<TTest_TMersenneTwisterRandom>(new TTest_TMersenneTwisterRandom()));
 
