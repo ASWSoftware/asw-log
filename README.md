@@ -2,12 +2,16 @@
 
 ASWLog is a thread-safe light-weight C++ logging tool for Windows and Linux projects.
 
-# Features
+## Features
 
-- Log levels
-- Log rotation by size and/or date.
-- Thread safe
-- Various line configuration options, such as UTC date-time, process ID, etc.
+- Portable C++20 logger for Windows and Linux, with CMake and RAD Studio examples.
+- Thread-safe file logging with singleton or independent logger instances.
+- Configurable log levels, metadata, line endings, flushing, file paths, and rotation.
+- Formatted, raw, forced, and force-raw logging APIs with source-location support.
+- Runtime `Open()`, `Close()`, `Flush()`, reconfiguration, and log rotation controls.
+- Optional application and system memory, OS, drive, time, and command-line diagnostics.
+- Retry handling for temporary file access conflicts and Windows reader-sharing support.
+- Wildcard-based cleanup for logs older than a specified age.
 
 # Donations:
 
@@ -25,16 +29,15 @@ Add the source in `ASWLog` to your C++ project.
 
 ## CMake
 
-The `cmake` folder contains a portable CMake project for building the example with CMake, JetBrains CLion,
+The `example/cmake` folder contains a portable CMake project for building the example with CMake, JetBrains CLion,
 Visual Studio, Clang, or MinGW. From the repository root, configure and build it with:
 
 ```
-cmake -S cmake -B build
-cmake --build build --config Release
+cmake -S example/cmake -B example/cmake/build
+cmake --build example/cmake/build --config Release
 ```
 
-The executable is written to `build/bin/Release/ASWLogExample.exe`.
-Example logs are written to `build/bin/Release/logs/`
+The executable is written to `example/build/bin/Release/ASWLogExample.exe`, alongside RAD Studio output.
 
 # Coding Standards
 
