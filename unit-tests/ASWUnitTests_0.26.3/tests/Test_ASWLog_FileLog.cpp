@@ -29,6 +29,8 @@ limitations under the License.
 #include <fstream>
 #include <iterator>
 #include <string>
+#include <thread>
+#include <vector>
 //---------------------------------------------------------------------------
 #include "ASWLog_FileLog.h"
 //---------------------------------------------------------------------------
@@ -65,6 +67,8 @@ TTest_ASWLog_FileLog::TTest_ASWLog_FileLog()
     RegisterTest(&TTest_ASWLog_FileLog::Test_LogLineMetadata_Options, "LogLineMetadata_Options");
     RegisterTest(&TTest_ASWLog_FileLog::Test_LogNewLineAndForceOptions, "LogNewLineAndForceOptions");
     RegisterTest(&TTest_ASWLog_FileLog::Test_LogRawOptions, "LogRawOptions");
+    RegisterTest(&TTest_ASWLog_FileLog::Test_MultiThreadedStress_WritesAllMessagesToDisk, "MultiThreadedStress_WritesAllMessagesToDisk");
+    RegisterTest(&TTest_ASWLog_FileLog::Test_MultiThreadedStress_WritesAllMessagesToDisk_OpenClose, "MultiThreadedStress_WritesAllMessagesToDisk_OpenClose");
 }
 //---------------------------------------------------------------------------
 TTest_ASWLog_FileLog::~TTest_ASWLog_FileLog()
@@ -79,7 +83,7 @@ void TTest_ASWLog_FileLog::SetUp_Group()
 //---------------------------------------------------------------------------
 void TTest_ASWLog_FileLog::SetUp_Test(ITestCase& testCase)
 {
-    Log("Setting up temp folder for " + testCase.GetName() + ": " + TestTempDir.string());
+    Log("  Setting up temp folder for " + testCase.GetName() + ": " + TestTempDir.string());
     std::filesystem::create_directories(TestTempDir);
 }
 //---------------------------------------------------------------------------
@@ -91,7 +95,7 @@ void TTest_ASWLog_FileLog::TearDown_Group()
 //---------------------------------------------------------------------------
 void TTest_ASWLog_FileLog::TearDown_Test(ITestCase& testCase)
 {
-    Log("Cleaning up temp folder for " + testCase.GetName() + ": " + TestTempDir.string());
+    Log("  Cleaning up temp folder for " + testCase.GetName() + ": " + TestTempDir.string());
     std::filesystem::remove_all(TestTempDir);
 }
 //---------------------------------------------------------------------------
@@ -310,6 +314,140 @@ void TTest_ASWLog_FileLog::Test_LogRawOptions()
     CheckTrue(contents.find("raw_force_message") != std::string::npos, __func__, __LINE__, "LogForceRaw should write the raw message even when filtered");
     CheckTrue(contents.find("raw_message\n") == std::string::npos, __func__, __LINE__, "LogRaw should not append a newline by default");
     CheckTrue(contents.find("raw_force_message\n") == std::string::npos, __func__, __LINE__, "LogForceRaw should not append a trailing newline");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_FileLog::Test_MultiThreadedStress_WritesAllMessagesToDisk()
+{
+    // Arrange
+    const auto logFile = TestTempDir / "stress.log";
+    constexpr int threadCount = 4;
+    constexpr int messagesPerThread = 100;
+
+    ASWLog::TASWLogConfig config;
+    config.LogsFolderPath = TestTempDir;
+    config.LogFilePath = logFile;
+    config.MinimumLevel = ASWLog::Level::Trace;
+    config.LogUTCDateTime = false;
+    config.LogLevelStr = false;
+    config.LogProcessId = false;
+    config.LogThreadId = false;
+    config.LogMethodName = false;
+    config.LogSourceLine = false;
+    config.OpenRetryCount = 1;
+
+    std::vector<std::string> expectedMessages;
+    expectedMessages.reserve(threadCount * messagesPerThread);
+    for (int threadIndex = 0; threadIndex < threadCount; ++threadIndex)
+    {
+        for (int messageIndex = 0; messageIndex < messagesPerThread; ++messageIndex)
+        {
+            expectedMessages.push_back("stress_t" + std::to_string(threadIndex) + "_m" + std::to_string(messageIndex));
+        }
+    }
+
+    ASWLog::TASWFileLog logger;
+
+    // Act
+    const bool initialized = logger.Initialize(config);
+    std::vector<std::thread> threads;
+    threads.reserve(threadCount);
+
+    for (int threadIndex = 0; threadIndex < threadCount; ++threadIndex)
+    {
+        threads.emplace_back([&logger, threadIndex]()
+            {
+                for (int messageIndex = 0; messageIndex < messagesPerThread; ++messageIndex)
+                {
+                    logger.LogInfo("stress_t" + std::to_string(threadIndex) + "_m" + std::to_string(messageIndex));
+                }
+            });
+    }
+
+    for (auto& thread : threads)
+        thread.join();
+
+    logger.Flush();
+    logger.Close();
+
+    const auto contents = ReadFileText(logFile);
+
+    // Assert
+    CheckTrue(initialized, __func__, __LINE__, "Initialize should succeed");
+    CheckTrue(!contents.empty(), __func__, __LINE__, "Stress log file should contain at least one entry");
+    for (const auto& message : expectedMessages)
+    {
+        CheckTrue(contents.find(message) != std::string::npos,
+            __func__, __LINE__,
+            "Multi-threaded stress log should persist every expected message to disk: " + message);
+    }
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_FileLog::Test_MultiThreadedStress_WritesAllMessagesToDisk_OpenClose()
+{
+    // Arrange
+    const auto logFile = TestTempDir / "stress.log";
+    constexpr int threadCount = 4;
+    constexpr int messagesPerThread = 200;
+
+    ASWLog::TASWLogConfig config;
+    config.LogsFolderPath = TestTempDir;
+    config.LogFilePath = logFile;
+    config.MinimumLevel = ASWLog::Level::Trace;
+    config.LogUTCDateTime = false;
+    config.LogLevelStr = false;
+    config.LogProcessId = false;
+    config.LogThreadId = false;
+    config.LogMethodName = false;
+    config.LogSourceLine = false;
+    config.OpenRetryCount = 1;
+    config.AutoOpenClosePerWrite = true;
+
+    std::vector<std::string> expectedMessages;
+    expectedMessages.reserve(threadCount * messagesPerThread);
+    for (int threadIndex = 0; threadIndex < threadCount; ++threadIndex)
+    {
+        for (int messageIndex = 0; messageIndex < messagesPerThread; ++messageIndex)
+        {
+            expectedMessages.push_back("stress_t" + std::to_string(threadIndex) + "_m" + std::to_string(messageIndex));
+        }
+    }
+
+    ASWLog::TASWFileLog logger;
+
+    // Act
+    const bool initialized = logger.Initialize(config);
+    std::vector<std::thread> threads;
+    threads.reserve(threadCount);
+
+    for (int threadIndex = 0; threadIndex < threadCount; ++threadIndex)
+    {
+        Log("    starting stress test thread: " + std::to_string(threadIndex));
+        threads.emplace_back([&logger, threadIndex]()
+            {
+                for (int messageIndex = 0; messageIndex < messagesPerThread; ++messageIndex)
+                {
+                    logger.LogInfo("stress_t" + std::to_string(threadIndex) + "_m" + std::to_string(messageIndex));
+                }
+            });
+    }
+
+    for (auto& thread : threads)
+        thread.join();
+
+    logger.Flush();
+    logger.Close();
+
+    const auto contents = ReadFileText(logFile);
+
+    // Assert
+    CheckTrue(initialized, __func__, __LINE__, "Initialize should succeed");
+    CheckTrue(!contents.empty(), __func__, __LINE__, "Stress log file should contain at least one entry");
+    for (const auto& message : expectedMessages)
+    {
+        CheckTrue(contents.find(message) != std::string::npos,
+            __func__, __LINE__,
+            "Multi-threaded stress log should persist every expected message to disk: " + message);
+    }
 }
 //---------------------------------------------------------------------------
 
