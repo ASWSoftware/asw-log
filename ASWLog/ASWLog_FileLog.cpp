@@ -37,6 +37,8 @@ limitations under the License.
 #if defined(_WIN32)
 #include <share.h>
 #include <windows.h>
+#undef min
+#undef max
 #else
 #include <unistd.h>
 #endif
@@ -230,7 +232,7 @@ std::size_t TASWFileLog::DeleteOldLogs(
     if (logDir.native().length() <= 3)
         return 0;
 
-    const auto cutoff = std::chrono::system_clock::now() - maxAge;
+    const auto cutoff = std::filesystem::file_time_type::clock::now() - maxAge;
     std::size_t deletedCount = 0;
 
     for (const auto& entry : std::filesystem::directory_iterator(logDir))
@@ -244,8 +246,7 @@ std::size_t TASWFileLog::DeleteOldLogs(
             continue;
 
         const auto lastWrite = std::filesystem::last_write_time(entry.path());
-        const auto lastWriteTime = std::chrono::file_clock::to_sys(lastWrite);
-        if (lastWriteTime < cutoff)
+        if (lastWrite < cutoff)
         {
             std::error_code errorCode;
             if (std::filesystem::remove(entry.path(), errorCode) && !errorCode)
@@ -488,7 +489,7 @@ bool TASWFileLog::OpenUnlocked()
         std::filesystem::create_directories(effectivePath.parent_path(), errorCode);
     }
 
-    const auto retryCount = std::max(1, m_Config.OpenRetryCount);
+    const auto retryCount = std::max<int>(1, m_Config.OpenRetryCount);
     for (int attempt = 0; attempt < retryCount; ++attempt)
     {
         m_FileStream.clear();
