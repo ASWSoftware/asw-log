@@ -245,7 +245,58 @@ std::string GetOSInfoString()
                 break;
         }
 
-        return std::format("Windows {}.{} (build {}), arch={}", major, minor, build, arch);
+        DWORD editionId = 0;
+        std::string edition = "Unknown";
+
+        if (GetProductInfo(major, minor, 0, 0, &editionId))
+        {
+#if defined(PRODUCT_ULTIMATE)
+            if (editionId == PRODUCT_ULTIMATE)
+                edition = "Ultimate";
+#endif
+#if defined(PRODUCT_HOME_BASIC)
+            if (editionId == PRODUCT_HOME_BASIC)
+                edition = "Home";
+#endif
+#if defined(PRODUCT_HOME_PREMIUM)
+            if (editionId == PRODUCT_HOME_PREMIUM)
+                edition = "Home";
+#endif
+#if defined(PRODUCT_PROFESSIONAL)
+            if (editionId == PRODUCT_PROFESSIONAL)
+                edition = "Pro";
+#endif
+#if defined(PRODUCT_PROFESSIONAL_N)
+            if (editionId == PRODUCT_PROFESSIONAL_N)
+                edition = "Pro N";
+#endif
+#if defined(PRODUCT_ENTERPRISE)
+            if (editionId == PRODUCT_ENTERPRISE)
+                edition = "Enterprise";
+#endif
+#if defined(PRODUCT_ENTERPRISE_N)
+            if (editionId == PRODUCT_ENTERPRISE_N)
+                edition = "Enterprise N";
+#endif
+#if defined(PRODUCT_EDUCATION)
+            if (editionId == PRODUCT_EDUCATION)
+                edition = "Education";
+#endif
+#if defined(PRODUCT_EDUCATION_N)
+            if (editionId == PRODUCT_EDUCATION_N)
+                edition = "Education N";
+#endif
+#if defined(PRODUCT_SERVER)
+            if (editionId == PRODUCT_SERVER)
+                edition = "Server";
+#endif
+#if defined(PRODUCT_SERVER_CORE)
+            if (editionId == PRODUCT_SERVER_CORE)
+                edition = "Server Core";
+#endif
+        }
+
+        return std::format("Windows {}.{} {} (build {}), arch={}", major, minor, edition, build, arch);
     }
 
     return "Windows OS information unavailable";

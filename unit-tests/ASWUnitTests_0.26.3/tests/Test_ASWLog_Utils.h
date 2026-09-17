@@ -37,6 +37,7 @@ private:
 
 private: // Test methods
     void Test_GenerateLogFileName_ContainsExpectedFields();
+    void Test_GetOSInfoString_ContainsEdition();
     void Test_MatchesWildcard_Patterns();
     void Test_Time_ToDateString();
     void Test_Time_ToISO8601String();

@@ -38,6 +38,7 @@ TTest_ASWLog_Utils::TTest_ASWLog_Utils()
     : inherited("ASWLog_Utils_Tests")
 {
     RegisterTest(&TTest_ASWLog_Utils::Test_GenerateLogFileName_ContainsExpectedFields, "GenerateLogFileName_ContainsExpectedFields");
+    RegisterTest(&TTest_ASWLog_Utils::Test_GetOSInfoString_ContainsEdition, "GetOSInfoString_ContainsEdition");
     RegisterTest(&TTest_ASWLog_Utils::Test_MatchesWildcard_Patterns, "MatchesWildcard_Patterns");
     RegisterTest(&TTest_ASWLog_Utils::Test_Time_ToDateString, "Time_ToDateString");
     RegisterTest(&TTest_ASWLog_Utils::Test_Time_ToISO8601String, "Time_ToISO8601String");
@@ -78,6 +79,28 @@ void TTest_ASWLog_Utils::Test_GenerateLogFileName_ContainsExpectedFields()
     CheckTrue(logName.find("_PID") != std::string::npos, __func__, __LINE__, "Generated file name should include process id");
     CheckTrue(logName.find("_TID") != std::string::npos, __func__, __LINE__, "Generated file name should include thread id");
     CheckTrue(logName.find("ExampleLog.txt") != std::string::npos, __func__, __LINE__, "Generated file name should include the custom postfix");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_Utils::Test_GetOSInfoString_ContainsEdition()
+{
+    // Arrange
+    const std::string osInfo = ASWLog::GetOSInfoString();
+
+    // Act & Assert
+#if defined(_WIN32)
+    const bool hasEdition = osInfo.find("Home") != std::string::npos ||
+        osInfo.find("Pro") != std::string::npos ||
+        osInfo.find("Enterprise") != std::string::npos ||
+        osInfo.find("Education") != std::string::npos ||
+        osInfo.find("Business") != std::string::npos ||
+        osInfo.find("Server") != std::string::npos ||
+        osInfo.find("Ultimate") != std::string::npos;
+
+    CheckTrue(!osInfo.empty(), __func__, __LINE__, "OS info string should not be empty");
+    CheckTrue(hasEdition, __func__, __LINE__, "Windows OS info should include the edition name (Home, Pro, Enterprise, etc.)");
+#else
+    CheckTrue(!osInfo.empty(), __func__, __LINE__, "OS info string should not be empty");
+#endif
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_Utils::Test_MatchesWildcard_Patterns()
