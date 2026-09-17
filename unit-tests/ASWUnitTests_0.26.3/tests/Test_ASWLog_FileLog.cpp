@@ -42,6 +42,15 @@ namespace
 const auto GroupBaseTempDir = std::filesystem::temp_directory_path() / "aswlog_tests";
 const auto TestTempDir = GroupBaseTempDir / "test";
 
+std::string ReadFileText(const std::filesystem::path& path)
+{
+    std::ifstream stream(path, std::ios::binary);
+    if (!stream)
+        return {};
+
+    return std::string((std::istreambuf_iterator<char>(stream)), std::istreambuf_iterator<char>());
+}
+
 } // namespace
 
 //---------------------------------------------------------------------------
@@ -52,6 +61,10 @@ TTest_ASWLog_FileLog::TTest_ASWLog_FileLog()
 {
     RegisterTest(&TTest_ASWLog_FileLog::Test_DeleteOldLogs_RemovesOldFiles, "DeleteOldLogs_RemovesOldFiles");
     RegisterTest(&TTest_ASWLog_FileLog::Test_InitializeAndLogInfo_WritesText, "InitializeAndLogInfo_WritesText");
+    RegisterTest(&TTest_ASWLog_FileLog::Test_LogFormatMethods_FormatsMessage, "LogFormatMethods_FormatsMessage");
+    RegisterTest(&TTest_ASWLog_FileLog::Test_LogLineMetadata_Options, "LogLineMetadata_Options");
+    RegisterTest(&TTest_ASWLog_FileLog::Test_LogNewLineAndForceOptions, "LogNewLineAndForceOptions");
+    RegisterTest(&TTest_ASWLog_FileLog::Test_LogRawOptions, "LogRawOptions");
 }
 //---------------------------------------------------------------------------
 TTest_ASWLog_FileLog::~TTest_ASWLog_FileLog()
@@ -145,16 +158,158 @@ void TTest_ASWLog_FileLog::Test_InitializeAndLogInfo_WritesText()
     logger.LogInfo("unit_test_message");
     logger.Close();
 
-    std::string contents;
-    {
-        std::ifstream stream(logFile, std::ios::binary);
-        contents.assign((std::istreambuf_iterator<char>(stream)), std::istreambuf_iterator<char>());
-    }
+    const auto contents = ReadFileText(logFile);
 
     // Assert
     CheckTrue(initialized, __func__, __LINE__, "Initialize should succeed");
     CheckTrue(logger.IsOpen() == false, __func__, __LINE__, "Logger should be closed after explicit close");
     CheckTrue(contents.find("unit_test_message") != std::string::npos, __func__, __LINE__, "Logged file should contain the test message");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_FileLog::Test_LogFormatMethods_FormatsMessage()
+{
+    // Arrange
+    const auto logFile = TestTempDir / "format_message.log";
+
+    ASWLog::TASWLogConfig config;
+    config.LogsFolderPath = TestTempDir;
+    config.LogFilePath = logFile;
+    config.MinimumLevel = ASWLog::Level::Trace;
+    config.LogUTCDateTime = false;
+    config.LogLevelStr = false;
+    config.LogProcessId = false;
+    config.LogThreadId = false;
+    config.LogMethodName = false;
+    config.LogSourceLine = false;
+    config.OpenRetryCount = 1;
+
+    ASWLog::TASWFileLog logger;
+
+    // Act
+    const bool initialized = logger.Initialize(config);
+    logger.LogInfoFmt("value={}, suffix={}", 42, "done");
+    logger.LogTraceFmt("trace {}", "ok");
+    logger.LogForceFmt(ASWLog::Level::Warn, "forced {}", "value");
+    logger.Close();
+
+    const auto contents = ReadFileText(logFile);
+
+    // Assert
+    CheckTrue(initialized, __func__, __LINE__, "Initialize should succeed");
+    CheckTrue(contents.find("value=42, suffix=done") != std::string::npos, __func__, __LINE__, "LogInfoFmt should format the message");
+    CheckTrue(contents.find("trace ok") != std::string::npos, __func__, __LINE__, "LogTraceFmt should format the message");
+    CheckTrue(contents.find("forced value") != std::string::npos, __func__, __LINE__, "LogForceFmt should bypass filter and format the message");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_FileLog::Test_LogLineMetadata_Options()
+{
+    // Arrange
+    const auto logFile = TestTempDir / "metadata_line.log";
+
+    ASWLog::TASWLogConfig config;
+    config.LogsFolderPath = TestTempDir;
+    config.LogFilePath = logFile;
+    config.MinimumLevel = ASWLog::Level::Trace;
+    config.LogUTCDateTime = true;
+    config.LogLevelStr = true;
+    config.LogProcessId = true;
+    config.LogThreadId = true;
+    config.LogAppMem_WorkingSet = true;
+    config.LogAppMem_PeakWorkingSet = true;
+    config.LogMethodName = true;
+    config.LogSourceLine = true;
+    config.OpenRetryCount = 1;
+
+    ASWLog::TASWFileLog logger;
+
+    // Act
+    const bool initialized = logger.Initialize(config);
+    logger.LogInfo("metadata_message");
+    logger.Close();
+
+    const auto contents = ReadFileText(logFile);
+
+    // Assert
+    CheckTrue(initialized, __func__, __LINE__, "Initialize should succeed");
+    CheckTrue(contents.find("Z") != std::string::npos, __func__, __LINE__, "LogUTCDateTime should add a UTC timestamp");
+    CheckTrue(contents.find("INFO") != std::string::npos, __func__, __LINE__, "LogLevelStr should include the log level");
+    CheckTrue(contents.find("[P:") != std::string::npos, __func__, __LINE__, "LogProcessId should include the process id");
+    CheckTrue(contents.find("[T:") != std::string::npos, __func__, __LINE__, "LogThreadId should include the thread id");
+    CheckTrue(contents.find("[WS:") != std::string::npos, __func__, __LINE__, "LogAppMem_WorkingSet should include working set memory");
+    CheckTrue(contents.find("[PWS:") != std::string::npos, __func__, __LINE__, "LogAppMem_PeakWorkingSet should include peak working set memory");
+    CheckTrue(contents.find("Test_LogLineMetadata_Options") != std::string::npos, __func__, __LINE__, "LogMethodName should include the calling method name");
+    CheckTrue(contents.find("metadata_message") != std::string::npos, __func__, __LINE__, "Metadata log line should still contain the message");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_FileLog::Test_LogNewLineAndForceOptions()
+{
+    // Arrange
+    const auto logFile = TestTempDir / "newline_force.log";
+
+    ASWLog::TASWLogConfig config;
+    config.LogsFolderPath = TestTempDir;
+    config.LogFilePath = logFile;
+    config.MinimumLevel = ASWLog::Level::Error;
+    config.LogUTCDateTime = false;
+    config.LogLevelStr = false;
+    config.LogProcessId = false;
+    config.LogThreadId = false;
+    config.LogMethodName = false;
+    config.LogSourceLine = false;
+    config.OpenRetryCount = 1;
+
+    ASWLog::TASWFileLog logger;
+
+    // Act
+    const bool initialized = logger.Initialize(config);
+    logger.LogWarn("filtered_message");
+    logger.LogForce(ASWLog::Level::Warn, "forced_message");
+    logger.LogInfo("ignored_message");
+    logger.Close();
+
+    const auto contents = ReadFileText(logFile);
+
+    // Assert
+    CheckTrue(initialized, __func__, __LINE__, "Initialize should succeed");
+    CheckTrue(contents.find("filtered_message") == std::string::npos, __func__, __LINE__, "Log should respect the minimum level unless forced");
+    CheckTrue(contents.find("forced_message") != std::string::npos, __func__, __LINE__, "LogForce should bypass the minimum level");
+    CheckTrue(contents.find("forced_message\n") != std::string::npos, __func__, __LINE__, "LogForce should append a newline by default");
+    CheckTrue(contents.find("ignored_message") == std::string::npos, __func__, __LINE__, "Log should not write a message below the configured minimum level");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_FileLog::Test_LogRawOptions()
+{
+    // Arrange
+    const auto logFile = TestTempDir / "raw.log";
+
+    ASWLog::TASWLogConfig config;
+    config.LogsFolderPath = TestTempDir;
+    config.LogFilePath = logFile;
+    config.MinimumLevel = ASWLog::Level::Trace;
+    config.LogUTCDateTime = false;
+    config.LogLevelStr = false;
+    config.LogProcessId = false;
+    config.LogThreadId = false;
+    config.LogMethodName = false;
+    config.LogSourceLine = false;
+    config.OpenRetryCount = 1;
+
+    ASWLog::TASWFileLog logger;
+
+    // Act
+    const bool initialized = logger.Initialize(config);
+    logger.LogRaw(ASWLog::Level::Info, "raw_message");
+    logger.LogForceRaw(ASWLog::Level::Warn, "raw_force_message");
+    logger.Close();
+
+    const auto contents = ReadFileText(logFile);
+
+    // Assert
+    CheckTrue(initialized, __func__, __LINE__, "Initialize should succeed");
+    CheckTrue(contents.find("raw_message") != std::string::npos, __func__, __LINE__, "LogRaw should write the raw message");
+    CheckTrue(contents.find("raw_force_message") != std::string::npos, __func__, __LINE__, "LogForceRaw should write the raw message even when filtered");
+    CheckTrue(contents.find("raw_message\n") == std::string::npos, __func__, __LINE__, "LogRaw should not append a newline by default");
+    CheckTrue(contents.find("raw_force_message\n") == std::string::npos, __func__, __LINE__, "LogForceRaw should not append a trailing newline");
 }
 //---------------------------------------------------------------------------
 
