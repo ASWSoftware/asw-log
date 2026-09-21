@@ -36,7 +36,7 @@ private:
     typedef TTestGroupBase inherited;
 
 private: // Test methods
-    void Test_GetConfig_Defaults();
+    void Test_GetConfig_ReturnsLiveMutableReference();
     void Test_GetFullVersionStr_ContainsVersion();
     void Test_LogLevelConvenienceMethods();
     void Test_SetGetMinimumLevel_RoundTrips();

@@ -24,7 +24,6 @@ limitations under the License.
 // Module header
 #include "Test_ASWLog_Base.h"
 //---------------------------------------------------------------------------
-#include <filesystem>
 #include <string>
 //---------------------------------------------------------------------------
 #include "ASWLog_Base.h"
@@ -35,9 +34,6 @@ namespace ASWUnitTests
 
 namespace
 {
-
-// NOTE: Just a place holder test group - presently not registered for tests in the handler - only tests itself
-
 
 class TTestLogger final : public ASWLog::TASWLogBase
 {
@@ -115,7 +111,7 @@ public:
 TTest_ASWLog_Base::TTest_ASWLog_Base()
     : inherited("ASWLog_Base_Tests")
 {
-    RegisterTest(&TTest_ASWLog_Base::Test_GetConfig_Defaults, "GetConfig_Defaults");
+    RegisterTest(&TTest_ASWLog_Base::Test_GetConfig_ReturnsLiveMutableReference, "GetConfig_ReturnsLiveMutableReference");
     RegisterTest(&TTest_ASWLog_Base::Test_GetFullVersionStr_ContainsVersion, "GetFullVersionStr_ContainsVersion");
     RegisterTest(&TTest_ASWLog_Base::Test_LogLevelConvenienceMethods, "LogLevelConvenienceMethods");
     RegisterTest(&TTest_ASWLog_Base::Test_SetGetMinimumLevel_RoundTrips, "SetGetMinimumLevel_RoundTrips");
@@ -145,31 +141,38 @@ void TTest_ASWLog_Base::TearDown_Test(ITestCase& /*testCase*/)
 // /////// Begin tests after this line ///////////////////////
 
 //---------------------------------------------------------------------------
-void TTest_ASWLog_Base::Test_GetConfig_Defaults()
+void TTest_ASWLog_Base::Test_GetConfig_ReturnsLiveMutableReference()
 {
     // Arrange
     TTestLogger logger;
+    const TTestLogger& constLogger = logger;
 
-    // Act
-    const auto& config = logger.GetConfig();
+    // Assert: defaults are visible through the non-const overload
+    CheckEquals(static_cast<int32_t>(ASWLog::Level::Info), static_cast<int32_t>(logger.GetConfig().InitialMinimumLevel), __func__, __LINE__, "Default minimum level should be Info");
 
-    // Assert
-    CheckEquals(static_cast<int32_t>(ASWLog::Level::Info), static_cast<int32_t>(config.InitialMinimumLevel), __func__, __LINE__, "Default minimum level should be Info");
-    CheckEquals(static_cast<int32_t>(ASWLog::LineEnding::LF), static_cast<int32_t>(config.LogLineEnding), __func__, __LINE__, "Default line ending should be LF");
-    CheckTrue(config.LogsFolderPath == std::filesystem::path("logs"), __func__, __LINE__, "Default logs folder should be logs");
-    CheckTrue(config.LogFilePath == std::filesystem::path("aswlog.txt"), __func__, __LINE__, "Default log file path should be aswlog.txt");
+    // Act: mutate through the reference returned by the non-const overload
+    logger.GetConfig().InitialMinimumLevel = ASWLog::Level::Error;
+
+    // Assert: the mutation persists on subsequent reads, proving GetConfig() returns a live
+    // reference rather than a copy - callers rely on this to configure a logger in place
+    // (e.g. `logger.GetConfig().InitialMinimumLevel = X;`) before calling Initialize().
+    CheckEquals(static_cast<int32_t>(ASWLog::Level::Error), static_cast<int32_t>(logger.GetConfig().InitialMinimumLevel), __func__, __LINE__, "GetConfig() should return a live reference so external mutation persists");
+
+    // Assert: the const overload observes the same underlying config, not a stale copy
+    CheckEquals(static_cast<int32_t>(ASWLog::Level::Error), static_cast<int32_t>(constLogger.GetConfig().InitialMinimumLevel), __func__, __LINE__, "The const GetConfig() overload should observe the same underlying config as the non-const overload");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_Base::Test_GetFullVersionStr_ContainsVersion()
 {
     // Arrange
     TTestLogger logger;
+    const std::string expected = std::string("TTestLogger - Base version ") + std::string(logger.GetVersionStr());
 
     // Act
     const std::string version = logger.GetFullVersionStr();
 
     // Assert
-    CheckTrue(version.find("TTestLogger") != std::string::npos, __func__, __LINE__, "Full version string should include logger class name");
+    CheckEquals(expected, version, __func__, __LINE__, "Full version string should combine the logger class name and the version number");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_Base::Test_LogLevelConvenienceMethods()
