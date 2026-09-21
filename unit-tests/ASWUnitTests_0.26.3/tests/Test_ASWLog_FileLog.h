@@ -38,6 +38,7 @@ private:
 private: // Test methods
     void Test_DeleteOldLogs_RemovesOldFiles();
     void Test_InitializeAndLogInfo_WritesText();
+    void Test_Initialize_SuppressesInfoBannersBelowMinimumLevel();
     void Test_LogFormatMethods_FormatsMessage();
     void Test_LogLineMetadata_Options();
     void Test_LogNewLineAndForceOptions();

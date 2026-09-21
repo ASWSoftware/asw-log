@@ -63,6 +63,7 @@ TTest_ASWLog_FileLog::TTest_ASWLog_FileLog()
 {
     RegisterTest(&TTest_ASWLog_FileLog::Test_DeleteOldLogs_RemovesOldFiles, "DeleteOldLogs_RemovesOldFiles");
     RegisterTest(&TTest_ASWLog_FileLog::Test_InitializeAndLogInfo_WritesText, "InitializeAndLogInfo_WritesText");
+    RegisterTest(&TTest_ASWLog_FileLog::Test_Initialize_SuppressesInfoBannersBelowMinimumLevel, "Initialize_SuppressesInfoBannersBelowMinimumLevel");
     RegisterTest(&TTest_ASWLog_FileLog::Test_LogFormatMethods_FormatsMessage, "LogFormatMethods_FormatsMessage");
     RegisterTest(&TTest_ASWLog_FileLog::Test_LogLineMetadata_Options, "LogLineMetadata_Options");
     RegisterTest(&TTest_ASWLog_FileLog::Test_LogNewLineAndForceOptions, "LogNewLineAndForceOptions");
@@ -172,6 +173,41 @@ void TTest_ASWLog_FileLog::Test_InitializeAndLogInfo_WritesText()
     CheckTrue(initialized, __func__, __LINE__, "Initialize should succeed");
     CheckTrue(logger.IsOpen() == false, __func__, __LINE__, "Logger should be closed after explicit close");
     CheckTrue(contents.find("unit_test_message") != std::string::npos, __func__, __LINE__, "Logged file should contain the test message");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_FileLog::Test_Initialize_SuppressesInfoBannersBelowMinimumLevel()
+{
+    // Arrange
+    const auto logFile = TestTempDir / "suppressed_banners.log";
+
+    ASWLog::TASWLogConfig config;
+    config.LogsFolderPath = TestTempDir;
+    config.LogFilePath = logFile;
+    config.InitialMinimumLevel = ASWLog::Level::Warn;
+    config.BannerMessage_Init = "should_not_appear_banner";
+    config.OpenRetryCount = 1;
+    // Init_Log* toggles are left at their defaults (all true) so this test exercises
+    // every internal Info-level banner writer, not just a subset.
+
+    ASWLog::TASWFileLog logger;
+
+    // Act
+    const bool initialized = logger.Initialize(config);
+    logger.LogError("this_error_should_appear");
+    logger.Close();
+
+    const auto contents = ReadFileText(logFile);
+
+    // Assert
+    CheckTrue(initialized, __func__, __LINE__, "Initialize should succeed");
+    CheckTrue(contents.find("should_not_appear_banner") == std::string::npos, __func__, __LINE__, "BannerMessage_Init (Info level) should be suppressed when InitialMinimumLevel is Error");
+    CheckTrue(contents.find("Time:") == std::string::npos, __func__, __LINE__, "Init time info (Info level) should be suppressed when InitialMinimumLevel is Error");
+    CheckTrue(contents.find("OS:") == std::string::npos, __func__, __LINE__, "Init OS info (Info level) should be suppressed when InitialMinimumLevel is Error");
+    CheckTrue(contents.find("Drive:") == std::string::npos, __func__, __LINE__, "Init drive info (Info level) should be suppressed when InitialMinimumLevel is Error");
+    CheckTrue(contents.find("System memory:") == std::string::npos, __func__, __LINE__, "Init system memory info (Info level) should be suppressed when InitialMinimumLevel is Error");
+    CheckTrue(contents.find("App:") == std::string::npos, __func__, __LINE__, "Init application info (Info level) should be suppressed when InitialMinimumLevel is Error");
+    CheckTrue(contents.find("App Memory:") == std::string::npos, __func__, __LINE__, "Init app memory info (Info level) should be suppressed when InitialMinimumLevel is Error");
+    CheckTrue(contents.find("this_error_should_appear") != std::string::npos, __func__, __LINE__, "Messages at or above InitialMinimumLevel should still be written");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_FileLog::Test_LogFormatMethods_FormatsMessage()
