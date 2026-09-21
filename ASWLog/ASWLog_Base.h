@@ -57,7 +57,7 @@ protected:
 public:
     std::string_view GetVersionStr() const noexcept final
     {
-        return "0.26.4"; // Semantic Versioning
+        return "0.26.5"; // Semantic Versioning
     }
 
     std::string GetFullVersionStr() const final
