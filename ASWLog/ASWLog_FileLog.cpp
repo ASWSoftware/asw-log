@@ -355,70 +355,88 @@ void TASWFileLog::Log(Level level, std::string_view message, std::source_locatio
     if (level < GetMinimumLevel())
         return;
 
-    std::lock_guard<std::mutex> lock(m_FileMutex);
-    if (!m_IsInitialized.load(std::memory_order_acquire) || !m_FileStream.IsOpen())
+    std::string writtenLine;
     {
-        if (m_Config.AutoOpenClosePerWrite)
+        std::lock_guard<std::mutex> lock(m_FileMutex);
+        if (!m_IsInitialized.load(std::memory_order_acquire) || !m_FileStream.IsOpen())
         {
-            if (!OpenUnlocked())
+            if (m_Config.AutoOpenClosePerWrite)
+            {
+                if (!OpenUnlocked())
+                    return;
+            }
+            else
+            {
                 return;
+            }
         }
-        else
-        {
-            return;
-        }
+
+        writtenLine = WriteLogEntry(level, message, false, false, true, loc);
+
+        if (m_Config.AutoOpenClosePerWrite)
+            CloseUnlocked();
     }
 
-    WriteLogEntry(level, message, false, false, true, loc);
-
-    if (m_Config.AutoOpenClosePerWrite)
-        CloseUnlocked();
+    if (!writtenLine.empty())
+        DispatchLogCallback(level, writtenLine);
 }
 
 //---------------------------------------------------------------------------
 void TASWFileLog::LogForce(Level level, std::string_view message, std::source_location loc)
 {
-    std::lock_guard<std::mutex> lock(m_FileMutex);
-    if (!m_IsInitialized.load(std::memory_order_acquire) || !m_FileStream.IsOpen())
+    std::string writtenLine;
     {
-        if (m_Config.AutoOpenClosePerWrite)
+        std::lock_guard<std::mutex> lock(m_FileMutex);
+        if (!m_IsInitialized.load(std::memory_order_acquire) || !m_FileStream.IsOpen())
         {
-            if (!OpenUnlocked())
+            if (m_Config.AutoOpenClosePerWrite)
+            {
+                if (!OpenUnlocked())
+                    return;
+            }
+            else
+            {
                 return;
+            }
         }
-        else
-        {
-            return;
-        }
+
+        writtenLine = WriteLogEntry(level, message, true, false, true, loc);
+
+        if (m_Config.AutoOpenClosePerWrite)
+            CloseUnlocked();
     }
 
-    WriteLogEntry(level, message, true, false, true, loc);
-
-    if (m_Config.AutoOpenClosePerWrite)
-        CloseUnlocked();
+    if (!writtenLine.empty())
+        DispatchLogCallback(level, writtenLine);
 }
 
 //---------------------------------------------------------------------------
 void TASWFileLog::LogForceRaw(Level level, std::string_view message, std::source_location loc)
 {
-    std::lock_guard<std::mutex> lock(m_FileMutex);
-    if (!m_IsInitialized.load(std::memory_order_acquire) || !m_FileStream.IsOpen())
+    std::string writtenLine;
     {
-        if (m_Config.AutoOpenClosePerWrite)
+        std::lock_guard<std::mutex> lock(m_FileMutex);
+        if (!m_IsInitialized.load(std::memory_order_acquire) || !m_FileStream.IsOpen())
         {
-            if (!OpenUnlocked())
+            if (m_Config.AutoOpenClosePerWrite)
+            {
+                if (!OpenUnlocked())
+                    return;
+            }
+            else
+            {
                 return;
+            }
         }
-        else
-        {
-            return;
-        }
+
+        writtenLine = WriteLogEntry(level, message, true, true, false, loc);
+
+        if (m_Config.AutoOpenClosePerWrite)
+            CloseUnlocked();
     }
 
-    WriteLogEntry(level, message, true, true, false, loc);
-
-    if (m_Config.AutoOpenClosePerWrite)
-        CloseUnlocked();
+    if (!writtenLine.empty())
+        DispatchLogCallback(level, writtenLine);
 }
 
 //---------------------------------------------------------------------------
@@ -427,25 +445,30 @@ void TASWFileLog::LogRaw(Level level, std::string_view message, std::source_loca
     if (level < GetMinimumLevel())
         return;
 
-    std::lock_guard<std::mutex> lock(m_FileMutex);
-
-    if (!m_IsInitialized.load(std::memory_order_acquire) || !m_FileStream.IsOpen())
+    std::string writtenLine;
     {
-        if (m_Config.AutoOpenClosePerWrite)
+        std::lock_guard<std::mutex> lock(m_FileMutex);
+        if (!m_IsInitialized.load(std::memory_order_acquire) || !m_FileStream.IsOpen())
         {
-            if (!OpenUnlocked())
+            if (m_Config.AutoOpenClosePerWrite)
+            {
+                if (!OpenUnlocked())
+                    return;
+            }
+            else
+            {
                 return;
+            }
         }
-        else
-        {
-            return;
-        }
+
+        writtenLine = WriteLogEntry(level, message, false, true, false, loc);
+
+        if (m_Config.AutoOpenClosePerWrite)
+            CloseUnlocked();
     }
 
-    WriteLogEntry(level, message, false, true, false, loc);
-
-    if (m_Config.AutoOpenClosePerWrite)
-        CloseUnlocked();
+    if (!writtenLine.empty())
+        DispatchLogCallback(level, writtenLine);
 }
 
 //---------------------------------------------------------------------------
@@ -625,11 +648,11 @@ void TASWFileLog::WriteInitializationInfo()
 }
 
 //---------------------------------------------------------------------------
-void TASWFileLog::WriteLogEntry(
+std::string TASWFileLog::WriteLogEntry(
     Level level, std::string_view message, bool force, bool raw, bool includeNewLine, std::source_location loc)
 {
     if (!force && level < GetMinimumLevel())
-        return;
+        return {};
 
     auto now = std::chrono::system_clock::now();
 
@@ -654,7 +677,7 @@ void TASWFileLog::WriteLogEntry(
     }
 
     if (!m_FileStream.IsOpen())
-        return;
+        return {};
 
     std::string line;
     line.reserve(message.size() + 256);
@@ -666,7 +689,7 @@ void TASWFileLog::WriteLogEntry(
             AppendLineEnding(line);
         m_FileStream.Write(line);
         MaybeFlush(includeNewLine);
-        return;
+        return line;
     }
 
     if (m_Config.LogUTCDateTime)
@@ -717,6 +740,7 @@ void TASWFileLog::WriteLogEntry(
     m_FileStream.Write(line);
 
     MaybeFlush(includeNewLine);
+    return line;
 }
 
 //---------------------------------------------------------------------------

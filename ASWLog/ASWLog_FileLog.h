@@ -123,7 +123,7 @@ private:
     void WriteApplicationInfo();
     void WriteDriveInfo();
     void WriteInitializationInfo();
-    void WriteLogEntry(Level level, std::string_view message, bool force, bool raw, bool includeNewLine, std::source_location loc);
+    std::string WriteLogEntry(Level level, std::string_view message, bool force, bool raw, bool includeNewLine, std::source_location loc);
     void WriteMemoryUsageInfo();
     void WriteOSInfo();
     void WriteSystemMemoryInfo();

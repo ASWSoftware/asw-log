@@ -69,6 +69,8 @@ TTest_ASWLog_FileLog::TTest_ASWLog_FileLog()
     RegisterTest(&TTest_ASWLog_FileLog::Test_LogRawOptions, "LogRawOptions");
     RegisterTest(&TTest_ASWLog_FileLog::Test_MultiThreadedStress_WritesAllMessagesToDisk, "MultiThreadedStress_WritesAllMessagesToDisk");
     RegisterTest(&TTest_ASWLog_FileLog::Test_MultiThreadedStress_WritesAllMessagesToDisk_OpenClose, "MultiThreadedStress_WritesAllMessagesToDisk_OpenClose");
+    RegisterTest(&TTest_ASWLog_FileLog::Test_OnLogEntry_FiresForQualifyingLevelsOnly, "OnLogEntry_FiresForQualifyingLevelsOnly");
+    RegisterTest(&TTest_ASWLog_FileLog::Test_OnLogEntry_ReentrantCallbackDoesNotDeadlock, "OnLogEntry_ReentrantCallbackDoesNotDeadlock");
     RegisterTest(&TTest_ASWLog_FileLog::Test_RetentionMaxAge_DefaultDisabledPreservesOldBackups, "RetentionMaxAge_DefaultDisabledPreservesOldBackups");
     RegisterTest(&TTest_ASWLog_FileLog::Test_RetentionMaxAge_DeletesExpiredBackupsAfterRotation, "RetentionMaxAge_DeletesExpiredBackupsAfterRotation");
 }
@@ -450,6 +452,100 @@ void TTest_ASWLog_FileLog::Test_MultiThreadedStress_WritesAllMessagesToDisk_Open
             __func__, __LINE__,
             "Multi-threaded stress log should persist every expected message to disk: " + message);
     }
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_FileLog::Test_OnLogEntry_FiresForQualifyingLevelsOnly()
+{
+    // Arrange
+    const auto logFile = TestTempDir / "callback.log";
+
+    ASWLog::TASWLogConfig config;
+    config.LogsFolderPath = TestTempDir;
+    config.LogFilePath = logFile;
+    config.InitialMinimumLevel = ASWLog::Level::Trace;
+    config.LogUTCDateTime = false;
+    config.LogLevelStr = false;
+    config.LogProcessId = false;
+    config.LogThreadId = false;
+    config.LogMethodName = false;
+    config.LogSourceLine = false;
+    config.OpenRetryCount = 1;
+    config.CallbackMinimumLevel = ASWLog::Level::Error;
+
+    std::vector<ASWLog::Level> callbackLevels;
+    std::vector<std::string> callbackMessages;
+    config.OnLogEntry = [&callbackLevels, &callbackMessages](ASWLog::Level level, std::string_view line)
+        {
+            callbackLevels.push_back(level);
+            callbackMessages.emplace_back(line);
+        };
+
+    ASWLog::TASWFileLog logger;
+
+    // Act
+    const bool initialized = logger.Initialize(config);
+    logger.LogInfo("below_threshold");
+    logger.LogError("at_threshold");
+    logger.LogCritical("above_threshold");
+    logger.Close();
+
+    const auto contents = ReadFileText(logFile);
+
+    // Assert
+    CheckTrue(initialized, __func__, __LINE__, "Initialize should succeed");
+    CheckTrue(contents.find("below_threshold") != std::string::npos, __func__, __LINE__, "Entries below CallbackMinimumLevel should still be written to the file");
+    CheckEquals(static_cast<size_t>(2), callbackMessages.size(), __func__, __LINE__, "OnLogEntry should only fire for entries at or above CallbackMinimumLevel");
+    if (callbackMessages.size() == 2)
+    {
+        CheckEquals(static_cast<int32_t>(ASWLog::Level::Error), static_cast<int32_t>(callbackLevels[0]), __func__, __LINE__, "First callback should report the Error entry's level");
+        CheckTrue(callbackMessages[0].find("at_threshold") != std::string::npos, __func__, __LINE__, "Callback should receive the same formatted line written to disk");
+        CheckEquals(static_cast<int32_t>(ASWLog::Level::Critical), static_cast<int32_t>(callbackLevels[1]), __func__, __LINE__, "Second callback should report the Critical entry's level");
+        CheckTrue(callbackMessages[1].find("above_threshold") != std::string::npos, __func__, __LINE__, "Callback should receive the same formatted line written to disk");
+    }
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_FileLog::Test_OnLogEntry_ReentrantCallbackDoesNotDeadlock()
+{
+    // Arrange
+    const auto logFile = TestTempDir / "reentrant.log";
+
+    ASWLog::TASWLogConfig config;
+    config.LogsFolderPath = TestTempDir;
+    config.LogFilePath = logFile;
+    config.InitialMinimumLevel = ASWLog::Level::Trace;
+    config.LogUTCDateTime = false;
+    config.LogLevelStr = false;
+    config.LogProcessId = false;
+    config.LogThreadId = false;
+    config.LogMethodName = false;
+    config.LogSourceLine = false;
+    config.OpenRetryCount = 1;
+    config.CallbackMinimumLevel = ASWLog::Level::Error;
+
+    ASWLog::TASWFileLog logger;
+    bool reentered = false;
+    config.OnLogEntry = [&logger, &reentered](ASWLog::Level, std::string_view)
+        {
+            // A callback that logs again must not deadlock: DispatchLogCallback is
+            // invoked only after the sink's internal mutex has been released.
+            if (!reentered)
+            {
+                reentered = true;
+                logger.LogInfo("reentrant_message");
+            }
+        };
+
+    // Act
+    const bool initialized = logger.Initialize(config);
+    logger.LogError("trigger_message");
+    logger.Close();
+
+    const auto contents = ReadFileText(logFile);
+
+    // Assert
+    CheckTrue(initialized, __func__, __LINE__, "Initialize should succeed");
+    CheckTrue(reentered, __func__, __LINE__, "Callback should have fired and re-entered the logger");
+    CheckTrue(contents.find("reentrant_message") != std::string::npos, __func__, __LINE__, "Re-entrant Log call from the callback should complete and be written");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_FileLog::Test_RetentionMaxAge_DefaultDisabledPreservesOldBackups()
