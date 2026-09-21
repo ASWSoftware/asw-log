@@ -30,7 +30,9 @@ limitations under the License.
 #include <chrono>
 #include <cstdint>
 #include <filesystem>
+#include <functional>
 #include <string>
+#include <string_view>
 //---------------------------------------------------------------------------
 #include "ASWLog_Types.h"
 //---------------------------------------------------------------------------
@@ -82,6 +84,11 @@ struct TASWLogConfig
 
     // --- Log Retention Options (applied automatically after a successful rotation) ---
     std::chrono::hours RetentionMaxAge{ 0 }; // 0 = disabled. When > 0, backups for this log older than this age are deleted after each rotation.
+
+    // --- Log Entry Callback Options ---
+    using LogCallback = std::function<void (Level level, std::string_view formattedLine)>;
+    LogCallback OnLogEntry; // Optional hook invoked after a successful write (e.g. alerting/crash-reporting). Invoked outside the sink's internal lock; exceptions are swallowed.
+    Level CallbackMinimumLevel = Level::Error; // Independent threshold gating OnLogEntry; unrelated to InitialMinimumLevel or the Force* APIs.
 
     [[nodiscard]] std::filesystem::path ResolveLogFileDir() const
     {
