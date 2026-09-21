@@ -556,6 +556,12 @@ bool TASWFileLog::RotateLogFilesUnlocked(std::string_view reasonTag)
         return false;
     }
 
+    if (m_Config.RetentionMaxAge.count() > 0)
+    {
+        DeleteOldLogs(m_Config.ResolveLogFileDir(),
+            std::format("{}.*.bak", m_Config.ResolveLogFilePath().stem().string()), m_Config.RetentionMaxAge);
+    }
+
     if (wasOpen)
         return OpenUnlocked();
 

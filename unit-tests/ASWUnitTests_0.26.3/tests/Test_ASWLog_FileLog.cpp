@@ -69,6 +69,8 @@ TTest_ASWLog_FileLog::TTest_ASWLog_FileLog()
     RegisterTest(&TTest_ASWLog_FileLog::Test_LogRawOptions, "LogRawOptions");
     RegisterTest(&TTest_ASWLog_FileLog::Test_MultiThreadedStress_WritesAllMessagesToDisk, "MultiThreadedStress_WritesAllMessagesToDisk");
     RegisterTest(&TTest_ASWLog_FileLog::Test_MultiThreadedStress_WritesAllMessagesToDisk_OpenClose, "MultiThreadedStress_WritesAllMessagesToDisk_OpenClose");
+    RegisterTest(&TTest_ASWLog_FileLog::Test_RetentionMaxAge_DefaultDisabledPreservesOldBackups, "RetentionMaxAge_DefaultDisabledPreservesOldBackups");
+    RegisterTest(&TTest_ASWLog_FileLog::Test_RetentionMaxAge_DeletesExpiredBackupsAfterRotation, "RetentionMaxAge_DeletesExpiredBackupsAfterRotation");
 }
 //---------------------------------------------------------------------------
 TTest_ASWLog_FileLog::~TTest_ASWLog_FileLog()
@@ -448,6 +450,89 @@ void TTest_ASWLog_FileLog::Test_MultiThreadedStress_WritesAllMessagesToDisk_Open
             __func__, __LINE__,
             "Multi-threaded stress log should persist every expected message to disk: " + message);
     }
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_FileLog::Test_RetentionMaxAge_DefaultDisabledPreservesOldBackups()
+{
+    // Arrange
+    const auto logFile = TestTempDir / "retention_disabled.log";
+
+    ASWLog::TASWLogConfig config;
+    config.LogsFolderPath = TestTempDir;
+    config.LogFilePath = logFile;
+    config.InitialMinimumLevel = ASWLog::Level::Trace;
+    config.LogUTCDateTime = false;
+    config.LogLevelStr = false;
+    config.LogProcessId = false;
+    config.LogThreadId = false;
+    config.LogMethodName = false;
+    config.LogSourceLine = false;
+    config.OpenRetryCount = 1;
+    // config.RetentionMaxAge left at its default (0 = disabled)
+
+    ASWLog::TASWFileLog logger;
+
+    // Act
+    const bool initialized = logger.Initialize(config);
+    logger.LogInfo("seed_message");
+
+    // Simulate a stale backup left over from an earlier rotation
+    const auto staleBackup = TestTempDir / "retention_disabled.stale.2020-01-01.bak";
+    {
+        std::ofstream staleStream(staleBackup);
+        staleStream << "stale";
+    }
+    std::filesystem::last_write_time(staleBackup, std::chrono::file_clock::now() - std::chrono::hours(2));
+
+    const bool rotated = logger.RotateLogFiles("manual");
+    logger.Close();
+
+    // Assert
+    CheckTrue(initialized, __func__, __LINE__, "Initialize should succeed");
+    CheckTrue(rotated, __func__, __LINE__, "RotateLogFiles should succeed");
+    CheckTrue(std::filesystem::exists(staleBackup), __func__, __LINE__, "RetentionMaxAge left at its default (disabled) should not delete old backups after rotation");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_FileLog::Test_RetentionMaxAge_DeletesExpiredBackupsAfterRotation()
+{
+    // Arrange
+    const auto logFile = TestTempDir / "retention.log";
+
+    ASWLog::TASWLogConfig config;
+    config.LogsFolderPath = TestTempDir;
+    config.LogFilePath = logFile;
+    config.InitialMinimumLevel = ASWLog::Level::Trace;
+    config.LogUTCDateTime = false;
+    config.LogLevelStr = false;
+    config.LogProcessId = false;
+    config.LogThreadId = false;
+    config.LogMethodName = false;
+    config.LogSourceLine = false;
+    config.OpenRetryCount = 1;
+    config.RetentionMaxAge = std::chrono::hours(1);
+
+    ASWLog::TASWFileLog logger;
+
+    // Act
+    const bool initialized = logger.Initialize(config);
+    logger.LogInfo("seed_message");
+
+    // Simulate a stale backup left over from an earlier rotation
+    const auto staleBackup = TestTempDir / "retention.stale.2020-01-01.bak";
+    {
+        std::ofstream staleStream(staleBackup);
+        staleStream << "stale";
+    }
+    std::filesystem::last_write_time(staleBackup, std::chrono::file_clock::now() - std::chrono::hours(2));
+
+    const bool rotated = logger.RotateLogFiles("manual");
+    logger.Close();
+
+    // Assert
+    CheckTrue(initialized, __func__, __LINE__, "Initialize should succeed");
+    CheckTrue(rotated, __func__, __LINE__, "RotateLogFiles should succeed");
+    CheckFalse(std::filesystem::exists(staleBackup), __func__, __LINE__, "Stale backup older than RetentionMaxAge should be deleted automatically after rotation");
+    CheckTrue(std::filesystem::exists(logFile), __func__, __LINE__, "Log file should be recreated after rotation");
 }
 //---------------------------------------------------------------------------
 
