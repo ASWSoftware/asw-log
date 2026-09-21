@@ -39,6 +39,7 @@ private: // Test methods
     void Test_GetConfig_Defaults();
     void Test_GetFullVersionStr_ContainsVersion();
     void Test_LogLevelConvenienceMethods();
+    void Test_SetGetMinimumLevel_RoundTrips();
 
 public:
     TTest_ASWLog_Base();

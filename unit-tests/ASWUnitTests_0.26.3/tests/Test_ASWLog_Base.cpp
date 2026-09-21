@@ -58,6 +58,7 @@ public:
     bool Initialize(const ASWLog::TASWLogConfig& config) override
     {
         m_Config = config;
+        m_MinimumLevel.store(m_Config.InitialMinimumLevel, std::memory_order_release);
         m_IsInitialized.store(true, std::memory_order_release);
         return true;
     }
@@ -117,6 +118,7 @@ TTest_ASWLog_Base::TTest_ASWLog_Base()
     RegisterTest(&TTest_ASWLog_Base::Test_GetConfig_Defaults, "GetConfig_Defaults");
     RegisterTest(&TTest_ASWLog_Base::Test_GetFullVersionStr_ContainsVersion, "GetFullVersionStr_ContainsVersion");
     RegisterTest(&TTest_ASWLog_Base::Test_LogLevelConvenienceMethods, "LogLevelConvenienceMethods");
+    RegisterTest(&TTest_ASWLog_Base::Test_SetGetMinimumLevel_RoundTrips, "SetGetMinimumLevel_RoundTrips");
 }
 //---------------------------------------------------------------------------
 TTest_ASWLog_Base::~TTest_ASWLog_Base()
@@ -152,7 +154,7 @@ void TTest_ASWLog_Base::Test_GetConfig_Defaults()
     const auto& config = logger.GetConfig();
 
     // Assert
-    CheckEquals(static_cast<int32_t>(ASWLog::Level::Info), static_cast<int32_t>(config.MinimumLevel), __func__, __LINE__, "Default minimum level should be Info");
+    CheckEquals(static_cast<int32_t>(ASWLog::Level::Info), static_cast<int32_t>(config.InitialMinimumLevel), __func__, __LINE__, "Default minimum level should be Info");
     CheckEquals(static_cast<int32_t>(ASWLog::LineEnding::LF), static_cast<int32_t>(config.LogLineEnding), __func__, __LINE__, "Default line ending should be LF");
     CheckTrue(config.LogsFolderPath == std::filesystem::path("logs"), __func__, __LINE__, "Default logs folder should be logs");
     CheckTrue(config.LogFilePath == std::filesystem::path("aswlog.txt"), __func__, __LINE__, "Default log file path should be aswlog.txt");
@@ -216,6 +218,26 @@ void TTest_ASWLog_Base::Test_LogLevelConvenienceMethods()
     // Assert
     CheckEquals(static_cast<int32_t>(ASWLog::Level::Critical), static_cast<int32_t>(logger.LastLevel), __func__, __LINE__, "LogCritical should set Critical level");
     CheckEquals(std::string("critical"), logger.LastMessage, __func__, __LINE__, "LogCritical should store the message");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_Base::Test_SetGetMinimumLevel_RoundTrips()
+{
+    // Arrange
+    TTestLogger logger;
+    ASWLog::TASWLogConfig config;
+    config.InitialMinimumLevel = ASWLog::Level::Warn;
+
+    // Act
+    logger.Initialize(config);
+
+    // Assert
+    CheckEquals(static_cast<int32_t>(ASWLog::Level::Warn), static_cast<int32_t>(logger.GetMinimumLevel()), __func__, __LINE__, "GetMinimumLevel should be seeded from the config's InitialMinimumLevel at Initialize() time");
+
+    // Act
+    logger.SetMinimumLevel(ASWLog::Level::Trace);
+
+    // Assert
+    CheckEquals(static_cast<int32_t>(ASWLog::Level::Trace), static_cast<int32_t>(logger.GetMinimumLevel()), __func__, __LINE__, "SetMinimumLevel should update the value returned by GetMinimumLevel immediately");
 }
 //---------------------------------------------------------------------------
 

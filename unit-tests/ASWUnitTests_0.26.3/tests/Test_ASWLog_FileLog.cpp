@@ -178,7 +178,7 @@ void TTest_ASWLog_FileLog::Test_LogFormatMethods_FormatsMessage()
     ASWLog::TASWLogConfig config;
     config.LogsFolderPath = TestTempDir;
     config.LogFilePath = logFile;
-    config.MinimumLevel = ASWLog::Level::Trace;
+    config.InitialMinimumLevel = ASWLog::Level::Trace;
     config.LogUTCDateTime = false;
     config.LogLevelStr = false;
     config.LogProcessId = false;
@@ -213,7 +213,7 @@ void TTest_ASWLog_FileLog::Test_LogLineMetadata_Options()
     ASWLog::TASWLogConfig config;
     config.LogsFolderPath = TestTempDir;
     config.LogFilePath = logFile;
-    config.MinimumLevel = ASWLog::Level::Trace;
+    config.InitialMinimumLevel = ASWLog::Level::Trace;
     config.LogUTCDateTime = true;
     config.LogLevelStr = true;
     config.LogProcessId = true;
@@ -253,7 +253,7 @@ void TTest_ASWLog_FileLog::Test_LogNewLineAndForceOptions()
     ASWLog::TASWLogConfig config;
     config.LogsFolderPath = TestTempDir;
     config.LogFilePath = logFile;
-    config.MinimumLevel = ASWLog::Level::Error;
+    config.InitialMinimumLevel = ASWLog::Level::Error;
     config.LogUTCDateTime = false;
     config.LogLevelStr = false;
     config.LogProcessId = false;
@@ -289,7 +289,7 @@ void TTest_ASWLog_FileLog::Test_LogRawOptions()
     ASWLog::TASWLogConfig config;
     config.LogsFolderPath = TestTempDir;
     config.LogFilePath = logFile;
-    config.MinimumLevel = ASWLog::Level::Trace;
+    config.InitialMinimumLevel = ASWLog::Level::Trace;
     config.LogUTCDateTime = false;
     config.LogLevelStr = false;
     config.LogProcessId = false;
@@ -326,7 +326,7 @@ void TTest_ASWLog_FileLog::Test_MultiThreadedStress_WritesAllMessagesToDisk()
     ASWLog::TASWLogConfig config;
     config.LogsFolderPath = TestTempDir;
     config.LogFilePath = logFile;
-    config.MinimumLevel = ASWLog::Level::Trace;
+    config.InitialMinimumLevel = ASWLog::Level::Trace;
     config.LogUTCDateTime = false;
     config.LogLevelStr = false;
     config.LogProcessId = false;
@@ -392,7 +392,7 @@ void TTest_ASWLog_FileLog::Test_MultiThreadedStress_WritesAllMessagesToDisk_Open
     ASWLog::TASWLogConfig config;
     config.LogsFolderPath = TestTempDir;
     config.LogFilePath = logFile;
-    config.MinimumLevel = ASWLog::Level::Trace;
+    config.InitialMinimumLevel = ASWLog::Level::Trace;
     config.LogUTCDateTime = false;
     config.LogLevelStr = false;
     config.LogProcessId = false;

@@ -42,7 +42,10 @@ namespace ASWLog
 
 struct TASWLogConfig
 {
-    Level MinimumLevel = Level::Info;
+    // Seeds a logger's lock-free runtime level gate at Initialize() time only.
+    // Use the logger's SetMinimumLevel()/GetMinimumLevel() to read or change the
+    // effective level afterward; this field does not track later changes.
+    Level InitialMinimumLevel = Level::Info;
     LineEnding LogLineEnding = LineEnding::LF;
     std::filesystem::path LogsFolderPath = "logs";
     std::filesystem::path LogFilePath = "aswlog.txt";

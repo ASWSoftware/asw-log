@@ -321,7 +321,7 @@ bool TASWFileLog::Initialize(const TASWLogConfig& config)
     }
 
     m_Config = config;
-    m_MinimumLevel.store(m_Config.MinimumLevel, std::memory_order_release);
+    m_MinimumLevel.store(m_Config.InitialMinimumLevel, std::memory_order_release);
 
     if (!OpenUnlocked())
     {
@@ -352,10 +352,10 @@ bool TASWFileLog::IsOpen() const noexcept
 //---------------------------------------------------------------------------
 void TASWFileLog::Log(Level level, std::string_view message, std::source_location loc)
 {
-    std::lock_guard<std::mutex> lock(m_FileMutex);
-    if (level < m_Config.MinimumLevel)
+    if (level < GetMinimumLevel())
         return;
 
+    std::lock_guard<std::mutex> lock(m_FileMutex);
     if (!m_IsInitialized.load(std::memory_order_acquire) || !m_FileStream.IsOpen())
     {
         if (m_Config.AutoOpenClosePerWrite)
@@ -424,9 +424,10 @@ void TASWFileLog::LogForceRaw(Level level, std::string_view message, std::source
 //---------------------------------------------------------------------------
 void TASWFileLog::LogRaw(Level level, std::string_view message, std::source_location loc)
 {
-    std::lock_guard<std::mutex> lock(m_FileMutex);
-    if (level < m_Config.MinimumLevel)
+    if (level < GetMinimumLevel())
         return;
+
+    std::lock_guard<std::mutex> lock(m_FileMutex);
 
     if (!m_IsInitialized.load(std::memory_order_acquire) || !m_FileStream.IsOpen())
     {
@@ -621,7 +622,7 @@ void TASWFileLog::WriteInitializationInfo()
 void TASWFileLog::WriteLogEntry(
     Level level, std::string_view message, bool force, bool raw, bool includeNewLine, std::source_location loc)
 {
-    if (!force && level < m_Config.MinimumLevel)
+    if (!force && level < GetMinimumLevel())
         return;
 
     auto now = std::chrono::system_clock::now();

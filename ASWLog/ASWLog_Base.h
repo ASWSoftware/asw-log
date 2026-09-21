@@ -75,6 +75,19 @@ public:
         return m_Config;
     }
 
+    // Lock-free runtime level gate. Initialize() seeds this from m_Config.InitialMinimumLevel;
+    // afterward this atomic (not m_Config.InitialMinimumLevel) is the authoritative value
+    // used by Log()/LogRaw() to skip locking entirely for filtered entries.
+    Level GetMinimumLevel() const noexcept
+    {
+        return m_MinimumLevel.load(std::memory_order_relaxed);
+    }
+
+    void SetMinimumLevel(Level level) noexcept
+    {
+        m_MinimumLevel.store(level, std::memory_order_relaxed);
+    }
+
 protected:
     // Invoked by sinks after their internal mutex has been released, so a callback that logs again does not
     // deadlock. The config's OnLogEntry is called if set and 'level' meets 'CallbackMinimumLevel'.
