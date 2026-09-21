@@ -63,7 +63,7 @@ int main(int argc, char* argv[])
     std::cout << "Starting execution for ASWLog...\n";
 
     // Generate unique file name
-    std::string generatedName = ASWLog::GenerateLogFileName("ExampleLog.txt");
+    std::string generatedName = ASWLog::GenerateLogFileName("ASWLogExample", "ExampleLog.txt");
     std::cout << "Generated Log Filename: " << generatedName << "\n";
 
     // Configure global singleton instance options
