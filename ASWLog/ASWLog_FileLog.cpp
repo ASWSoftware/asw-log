@@ -609,7 +609,7 @@ void TASWFileLog::WriteApplicationInfo()
 #elif defined(__APPLE__)
     applicationInfo += "MacOSX";
 #else
-    applicationInfo += "Johnny5"; // Shouldn't get here
+#error "ASWLog: Unrecognized target platform in WriteApplicationInfo()
 #endif
 
     if (m_Config.Init_LogCommandLine)
