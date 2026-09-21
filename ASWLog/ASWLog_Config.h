@@ -80,6 +80,9 @@ struct TASWLogConfig
     std::uintmax_t MaxFileSizeBytes = 10 * 1024 * 1024; // Default 10MB
     bool EnableDailyRolling   = false; // Rolls file over at midnight
 
+    // --- Log Retention Options (applied automatically after a successful rotation) ---
+    std::chrono::hours RetentionMaxAge{ 0 }; // 0 = disabled. When > 0, backups for this log older than this age are deleted after each rotation.
+
     [[nodiscard]] std::filesystem::path ResolveLogFileDir() const
     {
         return ResolveLogFilePath().parent_path();
