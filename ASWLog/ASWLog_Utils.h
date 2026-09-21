@@ -56,13 +56,18 @@ struct TSystemMemoryUsage
 /*
     GenerateLogFileName
 
-    Generates a structured filename prefix using system metrics.
+    Generates a structured filename using system metrics.
 
+    Param 'prefix': A user supplied string attached to the front (e.g., an app or module
+        name), so files sharing the same prefix sort/group together alphabetically in a
+        directory listing. Pass an empty string_view to omit it.
     Param 'customPostfix': A user supplied string attached to the end (e.g., "TraceLog.txt").
+        Pass an empty string_view to omit it.
 
-    returns a string formatted as: YYYYMMDD_HHMMSS_mmm_PID_TID_customPostfix
+    returns a string formatted as: [prefix_]YYYYMMDD_HHMMSS_mmm_PID_TID[_customPostfix]
+    (each bracketed segment, and its separating underscore, is left out entirely when empty)
 */
-[[nodiscard]] std::string GenerateLogFileName(std::string_view customPostfix);
+[[nodiscard]] std::string GenerateLogFileName(std::string_view prefix, std::string_view customPostfix);
 
 [[nodiscard]] std::string GetApplicationInfoString();
 [[nodiscard]] std::string GetCommandLineString();

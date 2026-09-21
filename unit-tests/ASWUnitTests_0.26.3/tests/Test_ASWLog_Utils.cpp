@@ -38,6 +38,7 @@ TTest_ASWLog_Utils::TTest_ASWLog_Utils()
     : inherited("ASWLog_Utils_Tests")
 {
     RegisterTest(&TTest_ASWLog_Utils::Test_GenerateLogFileName_ContainsExpectedFields, "GenerateLogFileName_ContainsExpectedFields");
+    RegisterTest(&TTest_ASWLog_Utils::Test_GenerateLogFileName_PrefixAndPostfixAreOptional, "GenerateLogFileName_PrefixAndPostfixAreOptional");
     RegisterTest(&TTest_ASWLog_Utils::Test_GetOSInfoString_ContainsEdition, "GetOSInfoString_ContainsEdition");
     RegisterTest(&TTest_ASWLog_Utils::Test_MatchesWildcard_Patterns, "MatchesWildcard_Patterns");
     RegisterTest(&TTest_ASWLog_Utils::Test_Time_ToDateString, "Time_ToDateString");
@@ -71,7 +72,7 @@ void TTest_ASWLog_Utils::TearDown_Test(ITestCase& /*testCase*/)
 void TTest_ASWLog_Utils::Test_GenerateLogFileName_ContainsExpectedFields()
 {
     // Arrange
-    const std::string logName = ASWLog::GenerateLogFileName("ExampleLog.txt");
+    const std::string logName = ASWLog::GenerateLogFileName("", "ExampleLog.txt");
 
     // Act & Assert
     AssertTrue(!logName.empty(), __func__, __LINE__, "Generated log file name should not be empty");
@@ -79,6 +80,30 @@ void TTest_ASWLog_Utils::Test_GenerateLogFileName_ContainsExpectedFields()
     CheckTrue(logName.find("_PID") != std::string::npos, __func__, __LINE__, "Generated file name should include process id");
     CheckTrue(logName.find("_TID") != std::string::npos, __func__, __LINE__, "Generated file name should include thread id");
     CheckTrue(logName.find("ExampleLog.txt") != std::string::npos, __func__, __LINE__, "Generated file name should include the custom postfix");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_Utils::Test_GenerateLogFileName_PrefixAndPostfixAreOptional()
+{
+    // Arrange & Act
+    const std::string withBoth = ASWLog::GenerateLogFileName("MyApp", "ExampleLog.txt");
+    const std::string prefixOnly = ASWLog::GenerateLogFileName("MyApp", "");
+    const std::string postfixOnly = ASWLog::GenerateLogFileName("", "ExampleLog.txt");
+    const std::string neither = ASWLog::GenerateLogFileName("", "");
+
+    // Assert
+    CheckTrue(withBoth.starts_with("MyApp_"), __func__, __LINE__, "A non-empty prefix should appear at the very start of the name");
+    CheckTrue(withBoth.find("ExampleLog.txt") != std::string::npos, __func__, __LINE__, "The postfix should still be included alongside a prefix");
+    CheckTrue(withBoth.find("__") == std::string::npos, __func__, __LINE__, "Prefix and postfix should not introduce a doubled separator");
+
+    CheckTrue(prefixOnly.starts_with("MyApp_"), __func__, __LINE__, "The prefix should appear even when the postfix is empty");
+    CheckFalse(prefixOnly.ends_with("_"), __func__, __LINE__, "An empty postfix should not leave a trailing separator");
+
+    CheckFalse(postfixOnly.starts_with("_"), __func__, __LINE__, "An empty prefix should not leave a leading separator");
+    CheckTrue(postfixOnly.find("ExampleLog.txt") != std::string::npos, __func__, __LINE__, "The postfix should still be included when the prefix is empty");
+
+    CheckFalse(neither.empty(), __func__, __LINE__, "The name should still contain the timestamp/PID/TID segments when both are empty");
+    CheckFalse(neither.starts_with("_"), __func__, __LINE__, "An empty prefix should not leave a leading separator when the postfix is also empty");
+    CheckFalse(neither.ends_with("_"), __func__, __LINE__, "An empty postfix should not leave a trailing separator when the prefix is also empty");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_Utils::Test_GetOSInfoString_ContainsEdition()

@@ -23,7 +23,9 @@ limitations under the License.
 //---------------------------------------------------------------------------
 #include <iostream>
 //---------------------------------------------------------------------------
+#include "ASWLog_ConsoleLog.h"
 #include "ASWLog_FileLog.h"
+#include "ASWLog_MultiLog.h"
 #include "ASWLog_Utils.h"
 //---------------------------------------------------------------------------
 
@@ -61,13 +63,13 @@ int main(int argc, char* argv[])
     std::cout << "Starting execution for ASWLog...\n";
 
     // Generate unique file name
-    std::string generatedName = ASWLog::GenerateLogFileName("ExampleLog.txt");
+    std::string generatedName = ASWLog::GenerateLogFileName("ASWLogExample", "ExampleLog.txt");
     std::cout << "Generated Log Filename: " << generatedName << "\n";
 
     // Configure global singleton instance options
     ASWLog::TASWLogConfig globalConfig;
-    globalConfig.MinimumLevel  = ASWLog::Level::Trace; // Trap all logging thresholds
-    globalConfig.LogFilePath   = generatedName;
+    globalConfig.InitialMinimumLevel = ASWLog::Level::Trace; // Trap all logging thresholds
+    globalConfig.LogFilePath         = generatedName;
     globalConfig.BannerMessage_Init = "--- WELCOME TO ASWLogExample - GLOBAL CONFIG ---";
     globalConfig.BannerMessage_Shutdown = "GLOBAL LOGGER - I'm outta here";
 
@@ -109,7 +111,7 @@ int main(int argc, char* argv[])
     // Example of independent standalone/local logger instance
     std::cout << "Testing independent local stack instance execution...\n";
     ASWLog::TASWLogConfig localConfig;
-    localConfig.MinimumLevel   = ASWLog::Level::Warn; // Skips trace/debug/info
+    localConfig.InitialMinimumLevel = ASWLog::Level::Warn; // Skips trace/debug/info
     localConfig.BannerMessage_Init = "Local logger - howdy";
     localConfig.BannerMessage_Shutdown = "Local logger - cya";
     localConfig.LogFilePath    = "local_standalone_errors.txt";
@@ -131,6 +133,42 @@ int main(int argc, char* argv[])
     {
         std::cout << "Local logger failed to initialize!\n";
     }
+
+    // Example of console logging with level-based color and stream routing
+    std::cout << "Testing console logger with color-coded output...\n";
+    ASWLog::TASWLogConfig consoleConfig;
+    consoleConfig.InitialMinimumLevel = ASWLog::Level::Trace;
+    consoleConfig.LogUTCDateTime = false; // Keep console lines short and readable
+    consoleConfig.LogProcessId = false;
+    consoleConfig.LogThreadId = false;
+    consoleConfig.WriteShutdownLog = false;
+
+    ASWLog::TASWConsoleLog consoleLogger;
+    // consoleLogger.SetUseColor(false); // Uncomment on a terminal without ANSI support
+    if (consoleLogger.Initialize(consoleConfig))
+    {
+        consoleLogger.LogInfo("Console logger initialized - Info and below print to stdout.");
+        consoleLogger.LogWarn("Warn and above print to stderr and are color-coded when supported.");
+        consoleLogger.LogError("Example error message, shown in red.");
+    }
+    else
+    {
+        std::cout << "Console logger failed to initialize!\n";
+    }
+
+    // Example of fanning a single call out to multiple sinks at once
+    std::cout << "Testing multi-sink logger (file + console fan-out)...\n";
+    ASWLog::TASWMultiLog multiLogger;
+    multiLogger.AddLogger(globalLogger);  // Reuses the already-initialized file singleton
+    multiLogger.AddLogger(consoleLogger); // Reuses the already-initialized console logger
+
+    // One call reaches every registered sink; each sink still applies its own level and formatting
+    multiLogger.LogInfo("This single call is written to both the log file and the console.");
+
+    // The composite's own level is an optional pre-filter, independent of each sink's own level
+    multiLogger.SetMinimumLevel(ASWLog::Level::Error);
+    multiLogger.LogWarn("This Warn is suppressed by the composite gate before reaching either sink.");
+    multiLogger.LogError("This Error clears the composite gate and reaches both sinks.");
 
     globalLogger.LogInfo("Application terminated naturally via main exit block.");
     std::cout << "Execution completed.\n";

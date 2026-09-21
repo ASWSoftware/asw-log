@@ -36,7 +36,9 @@ limitations under the License.
 // Add includes for each "Test_" module here
 #include "Test_ASWLog_Base.h"
 #include "Test_ASWLog_Config.h"
+#include "Test_ASWLog_ConsoleLog.h"
 #include "Test_ASWLog_FileLog.h"
+#include "Test_ASWLog_MultiLog.h"
 #include "Test_ASWLog_Types.h"
 #include "Test_ASWLog_Utils.h"
 //---------------------------------------------------------------------------
@@ -128,9 +130,11 @@ void TTestHandler::RegisterTestGroups()
 
     // ----- Add each class to be tested
 
-//    m_TestGroups.push_back(std::unique_ptr<TTest_ASWLog_Base>(new TTest_ASWLog_Base()));
+    m_TestGroups.push_back(std::unique_ptr<TTest_ASWLog_Base>(new TTest_ASWLog_Base()));
     m_TestGroups.push_back(std::unique_ptr<TTest_ASWLog_Config>(new TTest_ASWLog_Config()));
+    m_TestGroups.push_back(std::unique_ptr<TTest_ASWLog_ConsoleLog>(new TTest_ASWLog_ConsoleLog()));
     m_TestGroups.push_back(std::unique_ptr<TTest_ASWLog_FileLog>(new TTest_ASWLog_FileLog()));
+    m_TestGroups.push_back(std::unique_ptr<TTest_ASWLog_MultiLog>(new TTest_ASWLog_MultiLog()));
     m_TestGroups.push_back(std::unique_ptr<TTest_ASWLog_Types>(new TTest_ASWLog_Types()));
     m_TestGroups.push_back(std::unique_ptr<TTest_ASWLog_Utils>(new TTest_ASWLog_Utils()));
 

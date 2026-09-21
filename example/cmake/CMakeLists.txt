@@ -11,8 +11,10 @@ set(ASWLOG_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../..")
 add_executable(ASWLogExample
     "${ASWLOG_ROOT}/ASWLog/ASWLog_Base.cpp"
     "${ASWLOG_ROOT}/ASWLog/ASWLog_Config.cpp"
+    "${ASWLOG_ROOT}/ASWLog/ASWLog_ConsoleLog.cpp"
     "${ASWLOG_ROOT}/ASWLog/ASWLog_FileLog.cpp"
     "${ASWLOG_ROOT}/ASWLog/ASWLog_Interface.cpp"
+    "${ASWLOG_ROOT}/ASWLog/ASWLog_MultiLog.cpp"
     "${ASWLOG_ROOT}/ASWLog/ASWLog_Types.cpp"
     "${ASWLOG_ROOT}/ASWLog/ASWLog_Utils.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/main.cpp"
