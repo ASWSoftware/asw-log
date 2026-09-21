@@ -57,7 +57,7 @@ protected:
 public:
     std::string_view GetVersionStr() const noexcept final
     {
-        return "0.26.1"; // Semantic Versioning
+        return "0.26.3"; // Semantic Versioning
     }
 
     std::string GetFullVersionStr() const final
@@ -73,6 +73,37 @@ public:
     const TASWLogConfig& GetConfig() const noexcept final
     {
         return m_Config;
+    }
+
+    // Lock-free runtime level gate. Initialize() seeds this from m_Config.InitialMinimumLevel;
+    // afterward this atomic (not m_Config.InitialMinimumLevel) is the authoritative value
+    // used by Log()/LogRaw() to skip locking entirely for filtered entries.
+    Level GetMinimumLevel() const noexcept
+    {
+        return m_MinimumLevel.load(std::memory_order_relaxed);
+    }
+
+    void SetMinimumLevel(Level level) noexcept
+    {
+        m_MinimumLevel.store(level, std::memory_order_relaxed);
+    }
+
+protected:
+    // Invoked by sinks after their internal mutex has been released, so a callback that logs again does not
+    // deadlock. The config's OnLogEntry is called if set and 'level' meets 'CallbackMinimumLevel'.
+    void DispatchLogCallback(Level level, std::string_view formattedLine) const noexcept
+    {
+        const auto& callback = m_Config.OnLogEntry;
+        if (callback == nullptr || level < m_Config.CallbackMinimumLevel)
+            return;
+
+        try
+        {
+            callback(level, formattedLine);
+        }
+        catch (...)
+        {
+        }
     }
 
 public:

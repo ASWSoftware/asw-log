@@ -157,21 +157,29 @@
             <DependentOn>..\..\..\ASWLog\ASWLog_Config.h</DependentOn>
             <BuildOrder>10</BuildOrder>
         </CppCompile>
+        <CppCompile Include="..\..\..\ASWLog\ASWLog_ConsoleLog.cpp">
+            <DependentOn>..\..\..\ASWLog\ASWLog_ConsoleLog.h</DependentOn>
+            <BuildOrder>11</BuildOrder>
+        </CppCompile>
         <CppCompile Include="..\..\..\ASWLog\ASWLog_FileLog.cpp">
             <DependentOn>..\..\..\ASWLog\ASWLog_FileLog.h</DependentOn>
-            <BuildOrder>11</BuildOrder>
+            <BuildOrder>12</BuildOrder>
         </CppCompile>
         <CppCompile Include="..\..\..\ASWLog\ASWLog_Interface.cpp">
             <DependentOn>..\..\..\ASWLog\ASWLog_Interface.h</DependentOn>
-            <BuildOrder>12</BuildOrder>
+            <BuildOrder>13</BuildOrder>
+        </CppCompile>
+        <CppCompile Include="..\..\..\ASWLog\ASWLog_MultiLog.cpp">
+            <DependentOn>..\..\..\ASWLog\ASWLog_MultiLog.h</DependentOn>
+            <BuildOrder>14</BuildOrder>
         </CppCompile>
         <CppCompile Include="..\..\..\ASWLog\ASWLog_Types.cpp">
             <DependentOn>..\..\..\ASWLog\ASWLog_Types.h</DependentOn>
-            <BuildOrder>13</BuildOrder>
+            <BuildOrder>15</BuildOrder>
         </CppCompile>
         <CppCompile Include="..\..\..\ASWLog\ASWLog_Utils.cpp">
             <DependentOn>..\..\..\ASWLog\ASWLog_Utils.h</DependentOn>
-            <BuildOrder>14</BuildOrder>
+            <BuildOrder>16</BuildOrder>
         </CppCompile>
         <PCHCompile Include="ASWUnitTestsPCH1.h">
             <BuildOrder>0</BuildOrder>
@@ -200,17 +208,25 @@
             <DependentOn>..\tests\Test_ASWLog_Config.h</DependentOn>
             <BuildOrder>9</BuildOrder>
         </CppCompile>
+        <CppCompile Include="..\tests\Test_ASWLog_ConsoleLog.cpp">
+            <DependentOn>..\tests\Test_ASWLog_ConsoleLog.h</DependentOn>
+            <BuildOrder>10</BuildOrder>
+        </CppCompile>
         <CppCompile Include="..\tests\Test_ASWLog_FileLog.cpp">
             <DependentOn>..\tests\Test_ASWLog_FileLog.h</DependentOn>
-            <BuildOrder>10</BuildOrder>
+            <BuildOrder>11</BuildOrder>
+        </CppCompile>
+        <CppCompile Include="..\tests\Test_ASWLog_MultiLog.cpp">
+            <DependentOn>..\tests\Test_ASWLog_MultiLog.h</DependentOn>
+            <BuildOrder>12</BuildOrder>
         </CppCompile>
         <CppCompile Include="..\tests\Test_ASWLog_Types.cpp">
             <DependentOn>..\tests\Test_ASWLog_Types.h</DependentOn>
-            <BuildOrder>11</BuildOrder>
+            <BuildOrder>13</BuildOrder>
         </CppCompile>
         <CppCompile Include="..\tests\Test_ASWLog_Utils.cpp">
             <DependentOn>..\tests\Test_ASWLog_Utils.h</DependentOn>
-            <BuildOrder>12</BuildOrder>
+            <BuildOrder>14</BuildOrder>
         </CppCompile>
         <BuildConfiguration Include="Base">
             <Key>Base</Key>

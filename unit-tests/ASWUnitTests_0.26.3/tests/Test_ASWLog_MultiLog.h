@@ -1,5 +1,5 @@
 /* **************************************************************************
-Test_ASWLog_Base.h
+Test_ASWLog_MultiLog.h
 Author: Anthony S. West - ASW Software
 
 Copyright 2026 Anthony S. West
@@ -18,8 +18,8 @@ limitations under the License.
 
 ************************************************************************** */
 
-#ifndef Test_ASWLog_BaseH
-#define Test_ASWLog_BaseH
+#ifndef Test_ASWLog_MultiLogH
+#define Test_ASWLog_MultiLogH
 //---------------------------------------------------------------------------
 #include "ASWUnitTests_TestBase.h"
 //---------------------------------------------------------------------------
@@ -28,22 +28,29 @@ namespace ASWUnitTests
 {
 
 ///////////////////////////////////////////////////////////////////////////
-// TTest_ASWLog_Base
+// TTest_ASWLog_MultiLog
 ///////////////////////////////////////////////////////////////////////////
-class TTest_ASWLog_Base : public TTestGroupBase
+class TTest_ASWLog_MultiLog : public TTestGroupBase
 {
 private:
     typedef TTestGroupBase inherited;
 
 private: // Test methods
-    void Test_GetConfig_ReturnsLiveMutableReference();
-    void Test_GetFullVersionStr_ContainsVersion();
-    void Test_LogLevelConvenienceMethods();
-    void Test_SetGetMinimumLevel_RoundTrips();
+    void Test_AddLogger_RejectsDuplicateRegistration();
+    void Test_AddLogger_RejectsSelfRegistration();
+    void Test_Contains_ReflectsRegistrationState();
+    void Test_GetLoggerCount_ReflectsAddAndRemove();
+    void Test_GetLoggers_ReturnsSnapshotOfRegisteredSinks();
+    void Test_IsOpen_RequiresAllSinksOpen();
+    void Test_Log_FansOutToAllRegisteredSinks();
+    void Test_LogForce_BypassesCompositeGate();
+    void Test_RemoveAllLoggers_ClearsRegistrationAndReturnsCount();
+    void Test_RemoveLogger_StopsReceivingEntries();
+    void Test_SetMinimumLevel_GatesFanOutBeforeSinks();
 
 public:
-    TTest_ASWLog_Base();
-    ~TTest_ASWLog_Base() override;
+    TTest_ASWLog_MultiLog();
+    ~TTest_ASWLog_MultiLog() override;
 
     void SetUp_Group() override;
     void SetUp_Test(ITestCase& testCase) override;
@@ -54,4 +61,4 @@ public:
 } // ASWUnitTests
 
 //---------------------------------------------------------------------------
-#endif // #ifndef Test_ASWLog_BaseH
+#endif // #ifndef Test_ASWLog_MultiLogH

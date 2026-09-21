@@ -27,6 +27,7 @@ limitations under the License.
 #ifndef ASWLog_TypesH
 #define ASWLog_TypesH
 //---------------------------------------------------------------------------
+#include <cstddef>
 #include <cstdint>
 #include <optional>
 #include <string_view>
@@ -105,6 +106,9 @@ enum class Level : std::uint8_t
     // Examples include out-of-memory states, hardware faults, or failed sanity checks.
     Critical = 5,
 };
+
+// Number of Level enumerators (Trace..Critical). Update this when a Level is added or removed.
+constexpr std::size_t LevelCount = 6;
 
 [[nodiscard]] std::optional<Level> Level_FromString(std::string_view str) noexcept;
 

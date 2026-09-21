@@ -1,5 +1,5 @@
 /* **************************************************************************
-Test_ASWLog_Base.h
+Test_ASWLog_ConsoleLog.h
 Author: Anthony S. West - ASW Software
 
 Copyright 2026 Anthony S. West
@@ -18,8 +18,8 @@ limitations under the License.
 
 ************************************************************************** */
 
-#ifndef Test_ASWLog_BaseH
-#define Test_ASWLog_BaseH
+#ifndef Test_ASWLog_ConsoleLogH
+#define Test_ASWLog_ConsoleLogH
 //---------------------------------------------------------------------------
 #include "ASWUnitTests_TestBase.h"
 //---------------------------------------------------------------------------
@@ -28,22 +28,33 @@ namespace ASWUnitTests
 {
 
 ///////////////////////////////////////////////////////////////////////////
-// TTest_ASWLog_Base
+// TTest_ASWLog_ConsoleLog
 ///////////////////////////////////////////////////////////////////////////
-class TTest_ASWLog_Base : public TTestGroupBase
+class TTest_ASWLog_ConsoleLog : public TTestGroupBase
 {
 private:
     typedef TTestGroupBase inherited;
 
 private: // Test methods
-    void Test_GetConfig_ReturnsLiveMutableReference();
-    void Test_GetFullVersionStr_ContainsVersion();
-    void Test_LogLevelConvenienceMethods();
-    void Test_SetGetMinimumLevel_RoundTrips();
+    void Test_GetUseColor_ReflectsSetUseColor();
+    void Test_Initialize_SuppressesInfoBannersBelowMinimumLevel();
+    void Test_Initialize_WritesDriveInfoWhenEnabled();
+    void Test_IsColorSupported_ReflectsPlatformState();
+    void Test_LogLineMetadata_Options();
+    void Test_LogRawAndForceOptions();
+    void Test_LogRespectsMinimumLevel();
+    void Test_OnLogEntry_FiresForQualifyingLevelsOnly();
+    void Test_ResetLevelColor_RestoresDefault();
+    void Test_ResetLevelColors_RestoresAllDefaults();
+    void Test_SetLevelColor_EmptyStringDisablesColorForLevel();
+    void Test_SetLevelColor_OverridesDefaultColor();
+    void Test_UseColor_False_SuppressesAnsiCodes();
+    void Test_UseColor_WrapsOutputWithAnsiCodes();
+    void Test_WarnAndAboveWriteToStdErr();
 
 public:
-    TTest_ASWLog_Base();
-    ~TTest_ASWLog_Base() override;
+    TTest_ASWLog_ConsoleLog();
+    ~TTest_ASWLog_ConsoleLog() override;
 
     void SetUp_Group() override;
     void SetUp_Test(ITestCase& testCase) override;
@@ -54,4 +65,4 @@ public:
 } // ASWUnitTests
 
 //---------------------------------------------------------------------------
-#endif // #ifndef Test_ASWLog_BaseH
+#endif // #ifndef Test_ASWLog_ConsoleLogH

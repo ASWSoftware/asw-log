@@ -143,21 +143,29 @@
             <DependentOn>..\..\ASWLog\ASWLog_Config.h</DependentOn>
             <BuildOrder>3</BuildOrder>
         </CppCompile>
+        <CppCompile Include="..\..\ASWLog\ASWLog_ConsoleLog.cpp">
+            <DependentOn>..\..\ASWLog\ASWLog_ConsoleLog.h</DependentOn>
+            <BuildOrder>4</BuildOrder>
+        </CppCompile>
         <CppCompile Include="..\..\ASWLog\ASWLog_FileLog.cpp">
             <DependentOn>..\..\ASWLog\ASWLog_FileLog.h</DependentOn>
-            <BuildOrder>4</BuildOrder>
+            <BuildOrder>5</BuildOrder>
         </CppCompile>
         <CppCompile Include="..\..\ASWLog\ASWLog_Interface.cpp">
             <DependentOn>..\..\ASWLog\ASWLog_Interface.h</DependentOn>
-            <BuildOrder>5</BuildOrder>
+            <BuildOrder>6</BuildOrder>
+        </CppCompile>
+        <CppCompile Include="..\..\ASWLog\ASWLog_MultiLog.cpp">
+            <DependentOn>..\..\ASWLog\ASWLog_MultiLog.h</DependentOn>
+            <BuildOrder>7</BuildOrder>
         </CppCompile>
         <CppCompile Include="..\..\ASWLog\ASWLog_Types.cpp">
             <DependentOn>..\..\ASWLog\ASWLog_Types.h</DependentOn>
-            <BuildOrder>6</BuildOrder>
+            <BuildOrder>8</BuildOrder>
         </CppCompile>
         <CppCompile Include="..\..\ASWLog\ASWLog_Utils.cpp">
             <DependentOn>..\..\ASWLog\ASWLog_Utils.h</DependentOn>
-            <BuildOrder>7</BuildOrder>
+            <BuildOrder>9</BuildOrder>
         </CppCompile>
         <PCHCompile Include="ASWLogExamplePCH1.h">
             <BuildOrder>0</BuildOrder>

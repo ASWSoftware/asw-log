@@ -49,7 +49,7 @@ namespace ASWLog
 {
 
 //---------------------------------------------------------------------------
-std::string GenerateLogFileName(std::string_view customPostfix)
+std::string GenerateLogFileName(std::string_view prefix, std::string_view customPostfix)
 {
     // Get high-precision time point
     auto now = std::chrono::system_clock::now();
@@ -87,7 +87,13 @@ std::string GenerateLogFileName(std::string_view customPostfix)
         localCalendarTime.tm_sec,
         millisecondsFraction);
 
-    return std::format("{}_PID{}_TID{}_{}", timeStr, processId, threadId, customPostfix);
+    std::string name = prefix.empty() ? std::string() : std::format("{}_", prefix);
+    name += std::format("{}_PID{}_TID{}", timeStr, processId, threadId);
+
+    if (!customPostfix.empty())
+        name += std::format("_{}", customPostfix);
+
+    return name;
 }
 
 //---------------------------------------------------------------------------
