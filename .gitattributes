@@ -1,0 +1,19 @@
+# Let Git manage text detection and normalize to LF in the repo
+* text=auto
+
+# Force specific behaviors for certain files
+.uncrustify.cfg eol=lf
+
+# Force specific behaviors for predictable text extensions
+*.sh      text eol=lf
+*.yml     text eol=lf
+*.yaml    text eol=lf
+*.txt     text
+*.vcproj  text eol=crlf
+*.cbproj  -text
+
+# Explicitly denote binary files to block accidental corruption
+*.jpg     -text
+*.png     -text
+*.gif     -text
+*.pdf     -text
