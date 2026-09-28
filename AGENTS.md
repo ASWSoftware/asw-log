@@ -15,6 +15,7 @@ ASWLog is a thread-safe light-weight C++ logging tool for Windows and Linux proj
 - `example/` contains example app that uses the logger.
 - `example/rad370/` contains the RAD Studio 13.1 project and Windows build scripts.
 - `README.md` contains repo details.
+- `CHANGELOG.md` records notable changes per release (see Changelog below).
 - `.uncrustify.cfg` and `.githooks/` define the repository formatting workflow.
 
 ## Accuracy-First Engineering
@@ -71,6 +72,14 @@ For other environments, use the repository's CMake configuration when present or
 - Run the unit-test executable.
 - Check compiler warnings and errors.
 - Validate both Windows-specific and portable paths when the change touches platform code.
+
+## Changelog
+
+`CHANGELOG.md` follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and Semantic Versioning.
+
+- Record each notable change under `## [Unreleased]`, in the matching `### Added`, `### Changed`, `### Deprecated`, `### Removed`, `### Fixed`, or `### Security` section.
+- Describe the effect on someone using the logger, not the commit. For a breaking change, say what existing code must change.
+- When preparing a release, update the version returned by `TASWLogBase::GetVersionStr()` in `ASWLog/ASWLog_Base.h`, rename `[Unreleased]` to `[x.y.z] - YYYY-MM-DD`, start a new empty `[Unreleased]`, and update the compare links at the bottom of the file.
 
 ## Formatting and Review
 
