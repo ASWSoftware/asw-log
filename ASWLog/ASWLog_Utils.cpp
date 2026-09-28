@@ -217,8 +217,10 @@ std::string GetOSInfoString()
 #else
     using RtlGetVersionFunction = LONG(WINAPI*)(PRTL_OSVERSIONINFOW);
     const auto ntdll = GetModuleHandleW(L"ntdll.dll");
-    const auto rtlGetVersion =
-        ntdll == nullptr ? nullptr : reinterpret_cast<RtlGetVersionFunction>(GetProcAddress(ntdll, "RtlGetVersion"));
+    const auto rtlGetVersionProc = ntdll == nullptr ? nullptr : GetProcAddress(ntdll, "RtlGetVersion");
+    // Cast through the generic function pointer type void (*)() so GCC's -Wcast-function-type accepts converting
+    // GetProcAddress()'s FARPROC to the real signature.
+    const auto rtlGetVersion = reinterpret_cast<RtlGetVersionFunction>(reinterpret_cast<void (*)()>(rtlGetVersionProc));
     RTL_OSVERSIONINFOW versionInfo{};
 #endif
     versionInfo.dwOSVersionInfoSize = sizeof(versionInfo);
