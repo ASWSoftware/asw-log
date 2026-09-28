@@ -1,0 +1,112 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+# Cancel a superseded run on the same branch/PR instead of letting it finish.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  actions: read
+  checks: write
+
+jobs:
+  build-and-test:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    # Safety net: a hung/looping test should fail the job quickly instead of burning the runner's full time
+    # allotment. --test-timeout-seconds below covers a single hung test; this covers everything else.
+    timeout-minutes: 3
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Windows (MSVC)
+            os: windows-latest
+            generator: ""
+            build_args: "--config Release"
+            exe_path: build/bin/Release/ASWLogTests.exe
+          - name: Windows (MinGW)
+            os: windows-latest
+            generator: "MinGW Makefiles"
+            build_args: ""
+            exe_path: build/bin/ASWLogTests.exe
+          - name: Linux (GCC)
+            os: ubuntu-latest
+            generator: ""
+            build_args: ""
+            exe_path: build/bin/ASWLogTests
+            cc: gcc
+            cxx: g++
+          - name: Linux (Clang)
+            os: ubuntu-latest
+            generator: ""
+            build_args: ""
+            exe_path: build/bin/ASWLogTests
+            cc: clang
+            cxx: clang++
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+        with:
+          # The ASWUnitTests framework is the third_party/asw-unit-tests submodule. tests/cmake/CMakeLists.txt
+          # fails the configure step if it's missing, rather than silently building something else.
+          submodules: true
+
+      - name: Set up MinGW
+        if: matrix.generator == 'MinGW Makefiles'
+        uses: egor-tensin/setup-mingw@v3
+        with:
+          platform: x64
+
+      - name: Configure
+        shell: bash
+        run: |
+          if [ -n "${{ matrix.cc }}" ]; then
+            export CC="${{ matrix.cc }}"
+            export CXX="${{ matrix.cxx }}"
+          fi
+          if [ -n "${{ matrix.generator }}" ]; then
+            cmake -S tests/cmake -B build -G "${{ matrix.generator }}" -DCMAKE_BUILD_TYPE=Release
+          else
+            cmake -S tests/cmake -B build -DCMAKE_BUILD_TYPE=Release
+          fi
+
+      - name: Build
+        shell: bash
+        run: cmake --build build ${{ matrix.build_args }}
+
+      - name: Verify executable exists
+        shell: bash
+        run: |
+          if [ ! -f "${{ matrix.exe_path }}" ]; then
+            echo "ERROR: Executable not found at ${{ matrix.exe_path }}"
+            echo "Contents of build directory:"
+            find build -type f \( -name "ASWLogTests" -o -name "*.exe" \) 2>/dev/null || echo "No executables found"
+            exit 1
+          fi
+
+      - name: Run unit tests
+        shell: bash
+        # --test-timeout-seconds and --catch-crashes turn a hung or natively crashing test into a clean, reported
+        # failure instead of relying on the job's timeout-minutes or an opaque crashed job.
+        run: >-
+          ./${{ matrix.exe_path }} --project-name "ASWLog-CI" --report-junit junit-results.xml
+          --test-timeout-seconds 60 --catch-crashes
+
+      - name: Report test results
+        # Runs even if the tests above failed, so a failure still shows up as annotations instead of only as a red
+        # step in the raw log.
+        if: always()
+        uses: dorny/test-reporter@v1
+        with:
+          name: "Test Results - ${{ matrix.name }}"
+          path: junit-results.xml
+          reporter: java-junit
+          fail-on-error: true

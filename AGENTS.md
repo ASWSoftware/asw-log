@@ -10,6 +10,7 @@ ASWLog is a thread-safe light-weight C++ logging tool for Windows and Linux proj
 
 - `ASWLog/` contains the framework implementation.
 - `unit-tests/` contains unit tests.
+- `.github/workflows/ci.yml` builds and runs the unit tests on Windows (MSVC, MinGW) and Linux (GCC, Clang).
 - `example/` contains example app that uses the logger.
 - `example/rad370/` contains the RAD Studio 13.1 project and Windows build scripts.
 - `README.md` contains repo details.
