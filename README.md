@@ -67,6 +67,13 @@ Visual Studio). For RAD Studio, use `tests/rad370/ASWLogTests.cbproj` or its `Bu
 written to `tests/build/bin/<Config>`. GitHub Actions builds and runs the tests on Windows and Linux for each push and
 pull request to `main` and `develop`.
 
+On Windows with RAD Studio, the tests can also run in the ASWUnitTests VCL GUI runner, a window for choosing tests and
+reading their results: build `tests/vcl/gui/rad370/ASWLogTests_VCL_GUI.cbproj` (or its `Build_Win64x_*.bat` scripts),
+which writes `ASWLogTests_VCL_GUI.exe` to `tests/build/bin/<Config>`. `ASWLogTests_Group.groupproj` in the same folder
+opens it together with the console test project. The GUI takes the console runner's command line options plus a few of
+its own, e.g. `--run --exit` to run every test and exit with the console runner's exit code; see the ASWUnitTests
+README's "VCL GUI Runner" section.
+
 # Coding Standards
 
 To use uncrustify (for coding standards (pretty formatting) for this repo):

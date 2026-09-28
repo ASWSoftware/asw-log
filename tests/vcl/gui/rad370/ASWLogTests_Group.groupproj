@@ -1,0 +1,48 @@
+﻿<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+    <PropertyGroup>
+        <ProjectGuid>{B9C1C1D1-51C4-4339-93C3-6F6C69B6325A}</ProjectGuid>
+    </PropertyGroup>
+    <ItemGroup>
+        <Projects Include="ASWLogTests_VCL_GUI.cbproj">
+            <Dependencies/>
+        </Projects>
+        <Projects Include="..\..\..\rad370\ASWLogTests.cbproj">
+            <Dependencies/>
+        </Projects>
+    </ItemGroup>
+    <ProjectExtensions>
+        <Borland.Personality>Default.Personality.12</Borland.Personality>
+        <Borland.ProjectType/>
+        <BorlandProject>
+            <Default.Personality/>
+        </BorlandProject>
+    </ProjectExtensions>
+    <Target Name="ASWLogTests_VCL_GUI">
+        <MSBuild Projects="ASWLogTests_VCL_GUI.cbproj"/>
+    </Target>
+    <Target Name="ASWLogTests_VCL_GUI:Clean">
+        <MSBuild Projects="ASWLogTests_VCL_GUI.cbproj" Targets="Clean"/>
+    </Target>
+    <Target Name="ASWLogTests_VCL_GUI:Make">
+        <MSBuild Projects="ASWLogTests_VCL_GUI.cbproj" Targets="Make"/>
+    </Target>
+    <Target Name="ASWLogTests">
+        <MSBuild Projects="..\..\..\rad370\ASWLogTests.cbproj"/>
+    </Target>
+    <Target Name="ASWLogTests:Clean">
+        <MSBuild Projects="..\..\..\rad370\ASWLogTests.cbproj" Targets="Clean"/>
+    </Target>
+    <Target Name="ASWLogTests:Make">
+        <MSBuild Projects="..\..\..\rad370\ASWLogTests.cbproj" Targets="Make"/>
+    </Target>
+    <Target Name="Build">
+        <CallTarget Targets="ASWLogTests_VCL_GUI;ASWLogTests"/>
+    </Target>
+    <Target Name="Clean">
+        <CallTarget Targets="ASWLogTests_VCL_GUI:Clean;ASWLogTests:Clean"/>
+    </Target>
+    <Target Name="Make">
+        <CallTarget Targets="ASWLogTests_VCL_GUI:Make;ASWLogTests:Make"/>
+    </Target>
+    <Import Project="$(BDS)\Bin\CodeGear.Group.Targets" Condition="Exists('$(BDS)\Bin\CodeGear.Group.Targets')"/>
+</Project>
