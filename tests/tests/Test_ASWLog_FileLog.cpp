@@ -32,6 +32,8 @@ limitations under the License.
 #include <thread>
 #include <vector>
 //---------------------------------------------------------------------------
+#include "ASWUnitTests_Registry.h"
+//---------------------------------------------------------------------------
 #include "ASWLog_FileLog.h"
 //---------------------------------------------------------------------------
 
@@ -669,3 +671,6 @@ void TTest_ASWLog_FileLog::Test_RetentionMaxAge_DeletesExpiredBackupsAfterRotati
 //---------------------------------------------------------------------------
 
 } // namespace ASWUnitTests
+
+//---------------------------------------------------------------------------
+ASW_REGISTER_TEST_GROUP(ASWUnitTests::TTest_ASWLog_FileLog)

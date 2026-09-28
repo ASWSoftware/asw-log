@@ -39,6 +39,34 @@ cmake --build example/cmake/build --config Release
 
 The executable is written to `example/build/bin/Release/ASWLogExample.exe`, alongside RAD Studio output.
 
+# Unit Tests
+
+Using the logger only requires the `ASWLog` source. The unit tests in `tests` additionally use the
+[ASWUnitTests](https://github.com/ASWSoftware/asw-unit-tests) framework, included as a git submodule in
+`third_party/asw-unit-tests`. Clone with submodules:
+
+```
+git clone --recurse-submodules https://github.com/ASWSoftware/asw-log.git
+```
+
+or, in an existing clone:
+
+```
+git submodule update --init
+```
+
+Build and run the tests with CMake from the repository root:
+
+```
+cmake -S tests/cmake -B tests/cmake/build
+cmake --build tests/cmake/build --config Release
+```
+
+The executable is written to `tests/cmake/build/bin` (in a `Release` sub folder for multi-config generators such as
+Visual Studio). For RAD Studio, use `tests/rad370/ASWLogTests.cbproj` or its `Build_Win64x_*.bat` scripts; output is
+written to `tests/build/bin/<Config>`. GitHub Actions builds and runs the tests on Windows and Linux for each push and
+pull request to `main` and `develop`.
+
 # Coding Standards
 
 To use uncrustify (for coding standards (pretty formatting) for this repo):

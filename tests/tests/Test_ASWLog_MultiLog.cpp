@@ -30,6 +30,8 @@ limitations under the License.
 #include <iterator>
 #include <string>
 //---------------------------------------------------------------------------
+#include "ASWUnitTests_Registry.h"
+//---------------------------------------------------------------------------
 #include "ASWLog_FileLog.h"
 #include "ASWLog_MultiLog.h"
 //---------------------------------------------------------------------------
@@ -407,3 +409,6 @@ void TTest_ASWLog_MultiLog::Test_SetMinimumLevel_GatesFanOutBeforeSinks()
 //---------------------------------------------------------------------------
 
 } // namespace ASWUnitTests
+
+//---------------------------------------------------------------------------
+ASW_REGISTER_TEST_GROUP(ASWUnitTests::TTest_ASWLog_MultiLog)

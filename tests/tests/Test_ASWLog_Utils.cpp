@@ -29,6 +29,8 @@ limitations under the License.
 #include <chrono>
 #include <string>
 //---------------------------------------------------------------------------
+#include "ASWUnitTests_Registry.h"
+//---------------------------------------------------------------------------
 
 namespace ASWUnitTests
 {
@@ -170,3 +172,6 @@ void TTest_ASWLog_Utils::Test_Time_ToISO8601String()
 //---------------------------------------------------------------------------
 
 } // namespace ASWUnitTests
+
+//---------------------------------------------------------------------------
+ASW_REGISTER_TEST_GROUP(ASWUnitTests::TTest_ASWLog_Utils)

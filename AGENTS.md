@@ -9,7 +9,8 @@ These instructions apply to the entire repository unless a more specific `AGENTS
 ASWLog is a thread-safe light-weight C++ logging tool for Windows and Linux projects.
 
 - `ASWLog/` contains the framework implementation.
-- `unit-tests/` contains unit tests.
+- `tests/` contains the unit tests: test modules in `tests/tests/`, their CMake project in `tests/cmake/`, and their RAD Studio project in `tests/rad370/`.
+- `third_party/asw-unit-tests/` is the ASWUnitTests framework, a git submodule pinned to a release tag. Never edit files in it; test modules self-register with `ASW_REGISTER_TEST_GROUP`, so adding a test only touches `tests/` and its build files.
 - `.github/workflows/ci.yml` builds and runs the unit tests on Windows (MSVC, MinGW) and Linux (GCC, Clang).
 - `example/` contains example app that uses the logger.
 - `example/rad370/` contains the RAD Studio 13.1 project and Windows build scripts.
@@ -54,6 +55,15 @@ Prefer standard C++ and portable library facilities. Avoid compiler-, IDE-, or o
 ## Building and Testing
 
 The RAD Studio debug build can be run from `example/rad370/Build_Win64x_Debug.bat` when the `Rad370` environment variable points to the RAD Studio installation. The debug console prompts for "press enter to continue" after the run. The release script is `example/rad370/Build_Win64x_Release.bat`; it runs the tests and exits without that pause.
+
+The unit tests need the `third_party/asw-unit-tests` submodule; run `git submodule update --init` if it is empty. Build them with `tests/rad370/Build_Win64x_Debug.bat` or `Build_Win64x_Release.bat` (output in `tests/build/bin/<Config>/`), or with CMake:
+
+```text
+cmake -S tests/cmake -B tests/cmake/build
+cmake --build tests/cmake/build --config Release
+```
+
+When adding a test module, add its `.cpp`/`.h` to both `tests/cmake/CMakeLists.txt` and `tests/rad370/ASWLogTests.cbproj`, and keep their include paths in sync.
 
 For other environments, use the repository's CMake configuration when present or the IDE's native project configuration. Tests should be run outside the debugger unless debugging an expected exception is intentional. Before considering a change complete:
 
