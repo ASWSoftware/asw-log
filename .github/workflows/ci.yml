@@ -11,10 +11,10 @@ concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+# Read-only on purpose: a pull request from a fork gets a read-only token anyway, so test results are published as
+# check runs by test-report.yml instead.
 permissions:
   contents: read
-  actions: read
-  checks: write
 
 jobs:
   build-and-test:
@@ -93,6 +93,7 @@ jobs:
           fi
 
       - name: Run unit tests
+        id: tests
         shell: bash
         # --test-timeout-seconds and --catch-crashes turn a hung or natively crashing test into a clean, reported
         # failure instead of relying on the job's timeout-minutes or an opaque crashed job.
@@ -100,13 +101,13 @@ jobs:
           ./${{ matrix.exe_path }} --project-name "ASWLog-CI" --report-junit junit-results.xml
           --test-timeout-seconds 60 --catch-crashes
 
-      - name: Report test results
-        # Runs even if the tests above failed, so a failure still shows up as annotations instead of only as a red
-        # step in the raw log.
-        if: always()
-        uses: dorny/test-reporter@v1
+      - name: Upload test results
+        # Runs whenever the tests ran, pass or fail, so test-report.yml can publish the results (including failures
+        # as annotations). A missing report file after the tests ran is an error.
+        if: ${{ !cancelled() && steps.tests.outcome != 'skipped' }}
+        uses: actions/upload-artifact@v7
         with:
-          name: "Test Results - ${{ matrix.name }}"
+          # test-report.yml matches this name prefix and names each check run after the rest.
+          name: test-results-${{ matrix.name }}
           path: junit-results.xml
-          reporter: java-junit
-          fail-on-error: true
+          if-no-files-found: error
