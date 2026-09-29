@@ -31,6 +31,7 @@ limitations under the License.
 //---------------------------------------------------------------------------
 #include <chrono>
 #include <cstddef>
+#include <cstdint>
 #include <filesystem>
 #include <string>
 #include <string_view>
@@ -79,6 +80,20 @@ struct TSystemMemoryUsage
 [[nodiscard]] TSystemMemoryUsage GetSystemMemoryUsage();
 [[nodiscard]] std::string GetSystemMemoryUsageString();
 [[nodiscard]] std::string GetTimeInfoString();
+
+#if defined(_WIN32)
+/*
+    GetWindowsEditionName
+
+    Names the Windows edition for a product type returned by GetProductInfo() (e.g. PRODUCT_CORE is "Home",
+    PRODUCT_DATACENTER_SERVER is "Server Datacenter"), as used by GetOSInfoString().
+
+    Param 'isServer': Whether the OS is a server (OSVERSIONINFOEXW::wProductType isn't VER_NT_WORKSTATION). Used only
+        for a product type without a name here, which is returned as "Server (product type 0x...)" or
+        "Unknown (product type 0x...)".
+*/
+[[nodiscard]] std::string GetWindowsEditionName(std::uint32_t productType, bool isServer);
+#endif
 
 [[nodiscard]] bool MatchesWildcard(std::string_view value, std::string_view pattern);
 

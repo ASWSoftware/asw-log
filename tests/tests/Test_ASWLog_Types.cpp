@@ -24,10 +24,12 @@ limitations under the License.
 // Module header
 #include "Test_ASWLog_Types.h"
 //---------------------------------------------------------------------------
-#include "ASWLog_Types.h"
-//---------------------------------------------------------------------------
 #include <optional>
 #include <string>
+//---------------------------------------------------------------------------
+#include "ASWUnitTests_Registry.h"
+//---------------------------------------------------------------------------
+#include "ASWLog_Types.h"
 //---------------------------------------------------------------------------
 
 namespace ASWUnitTests
@@ -197,3 +199,6 @@ void TTest_ASWLog_Types::Test_LineEnding_ToString()
 //---------------------------------------------------------------------------
 
 } // namespace ASWUnitTests
+
+//---------------------------------------------------------------------------
+ASW_REGISTER_TEST_GROUP(ASWUnitTests::TTest_ASWLog_Types)

@@ -26,6 +26,8 @@ limitations under the License.
 //---------------------------------------------------------------------------
 #include <filesystem>
 //---------------------------------------------------------------------------
+#include "ASWUnitTests_Registry.h"
+//---------------------------------------------------------------------------
 #include "ASWLog_Config.h"
 //---------------------------------------------------------------------------
 
@@ -68,10 +70,10 @@ void TTest_ASWLog_Config::TearDown_Test(ITestCase& /*testCase*/)
 void TTest_ASWLog_Config::Test_ResolveLogFileDir_CustomFolder()
 {
     // Arrange
-    const auto expectedDir = std::filesystem::path("custom/logs");
+    const auto expectedDir = std::filesystem::path("custom") / "logs";
 
     ASWLog::TASWLogConfig config;
-    config.LogsFolderPath = std::filesystem::path("custom\\logs");
+    config.LogsFolderPath = std::filesystem::path("custom/logs");
     config.LogFilePath = std::filesystem::path("app.log");
 
     // Act
@@ -79,6 +81,13 @@ void TTest_ASWLog_Config::Test_ResolveLogFileDir_CustomFolder()
 
     // Assert
     CheckTrue(resolvedDir == expectedDir, __func__, __LINE__, "ResolveLogFileDir should use the configured logs folder");
+
+#if defined(_WIN32)
+    // Backslash is a separator only on Windows; on POSIX it's an ordinary file name character.
+    config.LogsFolderPath = std::filesystem::path("custom\\logs");
+    CheckTrue(config.ResolveLogFileDir() == expectedDir, __func__, __LINE__,
+        "ResolveLogFileDir should accept a backslash-separated logs folder on Windows");
+#endif
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_Config::Test_ResolveLogFilePath_AbsolutePath()
@@ -113,3 +122,6 @@ void TTest_ASWLog_Config::Test_ResolveLogFilePath_Defaults()
 //---------------------------------------------------------------------------
 
 } // namespace ASWUnitTests
+
+//---------------------------------------------------------------------------
+ASW_REGISTER_TEST_GROUP(ASWUnitTests::TTest_ASWLog_Config)

@@ -55,6 +55,8 @@ if not exist "%TARGET_DIR%\example\src\." (
     if errorlevel 1 exit /b 1
 )
 
+call :CopyFile "CHANGELOG.md" "%TARGET_DIR%\CHANGELOG.md"
+if errorlevel 1 exit /b 1
 call :CopyFile "LICENSE" "%TARGET_DIR%\LICENSE"
 if errorlevel 1 exit /b 1
 call :CopyFile "README.md" "%TARGET_DIR%\README.md"

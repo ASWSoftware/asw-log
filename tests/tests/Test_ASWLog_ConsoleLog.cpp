@@ -29,6 +29,8 @@ limitations under the License.
 #include <string>
 #include <vector>
 //---------------------------------------------------------------------------
+#include "ASWUnitTests_Registry.h"
+//---------------------------------------------------------------------------
 #include "ASWLog_ConsoleLog.h"
 //---------------------------------------------------------------------------
 
@@ -501,3 +503,6 @@ void TTest_ASWLog_ConsoleLog::Test_WarnAndAboveWriteToStdErr()
 //---------------------------------------------------------------------------
 
 } // namespace ASWUnitTests
+
+//---------------------------------------------------------------------------
+ASW_REGISTER_TEST_GROUP(ASWUnitTests::TTest_ASWLog_ConsoleLog)
