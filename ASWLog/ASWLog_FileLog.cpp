@@ -102,6 +102,14 @@ std::uintmax_t GetOpenFileSize(std::FILE* file)
     return 0;
 }
 
+// True if an operation that last failed at 'lastFailure' may be tried again at 'now', 'retryDelay' later. Also true if
+// the clock went backwards, so that a clock change can't postpone the retry.
+bool IsRetryDue(std::chrono::system_clock::time_point lastFailure, std::chrono::system_clock::time_point now,
+    std::chrono::milliseconds retryDelay)
+{
+    return now < lastFailure || now - lastFailure >= retryDelay;
+}
+
 // Formats a UTC time for a backup file name: "YYYY-MM-DD_HHMMSS_mmm".
 std::string ToBackupTimeLabel(std::chrono::system_clock::time_point timePoint)
 {
@@ -349,12 +357,28 @@ std::size_t TASWFileLog::DeleteOldLogs(
 }
 
 //---------------------------------------------------------------------------
-bool TASWFileLog::EnsureOpen()
+/*
+    TASWFileLog::EnsureOpenForWriteUnlocked
+
+    Makes sure the log file is open for the next write. Returns false if the entry can't be written.
+*/
+bool TASWFileLog::EnsureOpenForWriteUnlocked()
 {
-    if (m_FileStream.IsOpen())
+    const bool isInitialized = m_IsInitialized.load(std::memory_order_acquire);
+    if (isInitialized && m_FileStream.IsOpen())
         return true;
 
-    return OpenUnlocked();
+    // In this mode the file is opened for every write
+    if (m_Config.AutoOpenClosePerWrite)
+        return OpenUnlocked();
+
+    // Initialized but closed only happens when the file couldn't be reopened (e.g. after a rotation), since Close()
+    // also clears the initialized state. Circuit breaker: try again once CircuitBreakerResetDelay has passed since the
+    // last failed attempt, instead of paying for a failed open on every write while the file stays unavailable.
+    if (isInitialized && IsRetryDue(m_LastOpenFailure, NowUTC(), m_Config.CircuitBreakerResetDelay))
+        return OpenUnlocked();
+
+    return false;
 }
 
 //---------------------------------------------------------------------------
@@ -449,18 +473,8 @@ void TASWFileLog::Log(Level level, std::string_view message, std::source_locatio
     std::string writtenLine;
     {
         std::lock_guard<std::mutex> lock(m_FileMutex);
-        if (!m_IsInitialized.load(std::memory_order_acquire) || !m_FileStream.IsOpen())
-        {
-            if (m_Config.AutoOpenClosePerWrite)
-            {
-                if (!OpenUnlocked())
-                    return;
-            }
-            else
-            {
-                return;
-            }
-        }
+        if (!EnsureOpenForWriteUnlocked())
+            return;
 
         writtenLine = WriteLogEntry(level, message, false, false, true, loc);
 
@@ -478,18 +492,8 @@ void TASWFileLog::LogForce(Level level, std::string_view message, std::source_lo
     std::string writtenLine;
     {
         std::lock_guard<std::mutex> lock(m_FileMutex);
-        if (!m_IsInitialized.load(std::memory_order_acquire) || !m_FileStream.IsOpen())
-        {
-            if (m_Config.AutoOpenClosePerWrite)
-            {
-                if (!OpenUnlocked())
-                    return;
-            }
-            else
-            {
-                return;
-            }
-        }
+        if (!EnsureOpenForWriteUnlocked())
+            return;
 
         writtenLine = WriteLogEntry(level, message, true, false, true, loc);
 
@@ -507,18 +511,8 @@ void TASWFileLog::LogForceRaw(Level level, std::string_view message, std::source
     std::string writtenLine;
     {
         std::lock_guard<std::mutex> lock(m_FileMutex);
-        if (!m_IsInitialized.load(std::memory_order_acquire) || !m_FileStream.IsOpen())
-        {
-            if (m_Config.AutoOpenClosePerWrite)
-            {
-                if (!OpenUnlocked())
-                    return;
-            }
-            else
-            {
-                return;
-            }
-        }
+        if (!EnsureOpenForWriteUnlocked())
+            return;
 
         writtenLine = WriteLogEntry(level, message, true, true, false, loc);
 
@@ -539,18 +533,8 @@ void TASWFileLog::LogRaw(Level level, std::string_view message, std::source_loca
     std::string writtenLine;
     {
         std::lock_guard<std::mutex> lock(m_FileMutex);
-        if (!m_IsInitialized.load(std::memory_order_acquire) || !m_FileStream.IsOpen())
-        {
-            if (m_Config.AutoOpenClosePerWrite)
-            {
-                if (!OpenUnlocked())
-                    return;
-            }
-            else
-            {
-                return;
-            }
-        }
+        if (!EnsureOpenForWriteUnlocked())
+            return;
 
         writtenLine = WriteLogEntry(level, message, false, true, false, loc);
 
@@ -619,6 +603,7 @@ bool TASWFileLog::OpenUnlocked()
     if (!m_FileStream.IsOpen())
     {
         m_IsOpen.store(false, std::memory_order_release);
+        m_LastOpenFailure = NowUTC();
         return false;
     }
 
@@ -664,6 +649,7 @@ bool TASWFileLog::RotateLogFilesUnlocked(std::string_view reasonTag, std::string
 
     if (errorCode)
     {
+        m_LastRotationFailure = NowUTC();
         if (wasOpen)
             OpenUnlocked();
         return false;
@@ -757,8 +743,10 @@ std::string TASWFileLog::WriteLogEntry(
         }
     }
 
-    // Uses the size tracked by the stream, since on Windows the size read through the path isn't current while open
-    if (m_Config.EnableRotation && m_FileStream.IsOpen() && m_FileStream.GetSize() >= m_Config.MaxFileSizeBytes)
+    // Uses the size tracked by the stream, since on Windows the size read through the path isn't current while open.
+    // After a failed rotation (e.g. another program holds the file), waits RotationRetryDelay before trying again.
+    if (m_Config.EnableRotation && m_FileStream.IsOpen() && m_FileStream.GetSize() >= m_Config.MaxFileSizeBytes &&
+        IsRetryDue(m_LastRotationFailure, now, m_Config.RotationRetryDelay))
     {
         RotateLogFilesUnlocked("size", ToBackupTimeLabel(now));
     }

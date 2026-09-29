@@ -116,11 +116,13 @@ private:
     std::string m_LastLogDateStr; // Stores YYYY-MM-DD state to detect structural calendar shifts
     std::atomic<bool> m_IsOpen{ false };
     std::chrono::steady_clock::time_point m_LastFlushTime{};
+    std::chrono::system_clock::time_point m_LastOpenFailure{}; // NowUTC() when opening the file last failed
+    std::chrono::system_clock::time_point m_LastRotationFailure{}; // NowUTC() when a rotation last failed
 
 private:
     void AppendLineEnding(std::string& line);
     bool CloseUnlocked();
-    bool EnsureOpen();
+    bool EnsureOpenForWriteUnlocked();
     void Finalize();
     bool FlushUnlocked();
     void MaybeFlush(bool isNewLine);

@@ -25,12 +25,19 @@ limitations under the License.
 #include "Test_ASWLog_FileLog.h"
 //---------------------------------------------------------------------------
 #include <chrono>
+#include <cstdio>
 #include <filesystem>
 #include <fstream>
 #include <iterator>
 #include <string>
 #include <thread>
 #include <vector>
+
+#if defined(_WIN32)
+#include <share.h>
+#else
+#include <unistd.h>
+#endif
 //---------------------------------------------------------------------------
 #include "ASWUnitTests_Registry.h"
 //---------------------------------------------------------------------------
@@ -58,6 +65,63 @@ protected:
         return CurrentTime;
     }
 };
+
+// While alive, stops the log file from being renamed (so a rotation fails), and optionally from being opened for
+// writing, like a virus scanner or another program holding the file. Windows: a second handle without delete sharing
+// blocks the rename, and the read-only attribute blocks the open. POSIX: a read-only folder blocks the rename, and a
+// read-only file blocks the open (neither stops the root user).
+class TFileBlocker
+{
+private:
+    std::filesystem::path m_File;
+    bool m_BlockOpen;
+#if defined(_WIN32)
+    std::FILE* m_OtherHandle = nullptr;
+#endif
+
+    static constexpr auto WritePerms = std::filesystem::perms::owner_write | std::filesystem::perms::group_write |
+        std::filesystem::perms::others_write;
+
+public:
+    TFileBlocker(const std::filesystem::path& file, bool blockOpen)
+        : m_File(file),
+          m_BlockOpen(blockOpen)
+    {
+#if defined(_WIN32)
+        m_OtherHandle = _wfsopen(file.c_str(), L"rb", _SH_DENYNO);
+#else
+        std::filesystem::permissions(file.parent_path(), WritePerms, std::filesystem::perm_options::remove);
+#endif
+        if (m_BlockOpen)
+            std::filesystem::permissions(file, WritePerms, std::filesystem::perm_options::remove);
+    }
+
+    ~TFileBlocker()
+    {
+        std::error_code errorCode;
+        if (m_BlockOpen)
+            std::filesystem::permissions(m_File, std::filesystem::perms::owner_write, std::filesystem::perm_options::add, errorCode);
+#if defined(_WIN32)
+        if (m_OtherHandle != nullptr)
+            std::fclose(m_OtherHandle);
+#else
+        std::filesystem::permissions(m_File.parent_path(), std::filesystem::perms::owner_write, std::filesystem::perm_options::add, errorCode);
+#endif
+    }
+
+    TFileBlocker(const TFileBlocker&) = delete;
+    TFileBlocker& operator=(const TFileBlocker&) = delete;
+};
+
+// True if TFileBlocker can work: file permissions don't stop the root user on POSIX
+bool CanBlockFiles()
+{
+#if defined(_WIN32)
+    return true;
+#else
+    return geteuid() != 0;
+#endif
+}
 
 // A config for the rotation tests, with no line metadata or startup info, so each line is just its message
 ASWLog::TASWLogConfig MakeRotationTestConfig(const std::filesystem::path& logFile)
@@ -103,6 +167,9 @@ TTest_ASWLog_FileLog::TTest_ASWLog_FileLog()
     RegisterTest(&TTest_ASWLog_FileLog::Test_DailyRolling_KeepsExistingBackupForSameDate, "DailyRolling_KeepsExistingBackupForSameDate");
     RegisterTest(&TTest_ASWLog_FileLog::Test_DailyRolling_NamesBackupForContentDate, "DailyRolling_NamesBackupForContentDate");
     RegisterTest(&TTest_ASWLog_FileLog::Test_DeleteOldLogs_RemovesOldFiles, "DeleteOldLogs_RemovesOldFiles");
+    RegisterTest(&TTest_ASWLog_FileLog::Test_FailedReopen_RetriesAndResumesLogging, "FailedReopen_RetriesAndResumesLogging");
+    RegisterTest(&TTest_ASWLog_FileLog::Test_FailedReopen_ZeroResetDelayRetriesOnNextWrite, "FailedReopen_ZeroResetDelayRetriesOnNextWrite");
+    RegisterTest(&TTest_ASWLog_FileLog::Test_FailedSizeRotation_WaitsBeforeRetrying, "FailedSizeRotation_WaitsBeforeRetrying");
     RegisterTest(&TTest_ASWLog_FileLog::Test_InitializeAndLogInfo_WritesText, "InitializeAndLogInfo_WritesText");
     RegisterTest(&TTest_ASWLog_FileLog::Test_Initialize_SuppressesInfoBannersBelowMinimumLevel, "Initialize_SuppressesInfoBannersBelowMinimumLevel");
     RegisterTest(&TTest_ASWLog_FileLog::Test_LogFormatMethods_FormatsMessage, "LogFormatMethods_FormatsMessage");
@@ -242,6 +309,140 @@ void TTest_ASWLog_FileLog::Test_DeleteOldLogs_RemovesOldFiles()
     CheckEquals(static_cast<size_t>(1), deletedCount, __func__, __LINE__, "DeleteOldLogs should remove the stale matching file");
     CheckFalse(std::filesystem::exists(oldFile), __func__, __LINE__, "Old log file should be removed");
     CheckTrue(std::filesystem::exists(newFile), __func__, __LINE__, "Recent log file should remain");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_FileLog::Test_FailedReopen_RetriesAndResumesLogging()
+{
+    // Arrange
+    if (!CanBlockFiles())
+        Skip(__func__, __LINE__, "File permissions don't stop the root user, so the failure can't be simulated");
+
+    using namespace std::chrono_literals;
+    const auto logFile = TestTempDir / "reopen.log";
+    auto config = MakeRotationTestConfig(logFile);
+    config.CircuitBreakerResetDelay = 200ms;
+
+    const auto startTime = std::chrono::sys_days{ 2026y / 1 / 15 } + 10h;
+    TFixedClockFileLog logger;
+    logger.CurrentTime = startTime;
+
+    // Act
+    const bool initialized = logger.Initialize(config);
+    logger.LogInfo("before_outage");
+
+    bool rotated = true;
+    bool openDuringOutage = true;
+    {
+        // The rotation's rename fails, and so does reopening the log afterward
+        TFileBlocker blocker(logFile, true);
+        rotated = logger.RotateLogFiles("manual");
+        openDuringOutage = logger.IsOpen();
+        logger.LogInfo("during_outage");
+    }
+
+    // The file is available again, but the circuit breaker waits CircuitBreakerResetDelay before trying it
+    logger.CurrentTime = startTime + 100ms;
+    logger.LogInfo("too_soon");
+    logger.CurrentTime = startTime + 250ms;
+    logger.LogInfo("after_recovery");
+    const bool openAfterRecovery = logger.IsOpen();
+    logger.Close();
+
+    // Assert
+    const auto contents = ReadFileText(logFile);
+    CheckTrue(initialized, __func__, __LINE__, "Initialize should succeed");
+    CheckFalse(rotated, __func__, __LINE__, "RotateLogFiles should fail while the file is held");
+    CheckFalse(openDuringOutage, __func__, __LINE__, "The log should report closed after it couldn't be reopened");
+    CheckTrue(contents.find("before_outage") != std::string::npos, __func__, __LINE__, "Entries before the outage should be kept");
+    CheckTrue(contents.find("during_outage") == std::string::npos, __func__, __LINE__, "Entries while the file can't be opened are dropped");
+    CheckTrue(contents.find("too_soon") == std::string::npos, __func__, __LINE__, "The reopen should not be retried before CircuitBreakerResetDelay has passed");
+    CheckTrue(contents.find("after_recovery") != std::string::npos, __func__, __LINE__, "Logging should resume once CircuitBreakerResetDelay has passed and the file can be opened");
+    CheckTrue(openAfterRecovery, __func__, __LINE__, "The log should report open again after recovering");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_FileLog::Test_FailedReopen_ZeroResetDelayRetriesOnNextWrite()
+{
+    // Arrange
+    if (!CanBlockFiles())
+        Skip(__func__, __LINE__, "File permissions don't stop the root user, so the failure can't be simulated");
+
+    using namespace std::chrono_literals;
+    const auto logFile = TestTempDir / "reopen_zero.log";
+    auto config = MakeRotationTestConfig(logFile);
+    config.CircuitBreakerResetDelay = 0ms;
+
+    TFixedClockFileLog logger;
+    logger.CurrentTime = std::chrono::sys_days{ 2026y / 1 / 15 } + 10h;
+
+    // Act: the clock doesn't move, so only a zero delay lets the next write retry
+    const bool initialized = logger.Initialize(config);
+    bool rotated = true;
+    {
+        TFileBlocker blocker(logFile, true);
+        rotated = logger.RotateLogFiles("manual");
+    }
+    logger.LogInfo("next_write");
+    logger.Close();
+
+    // Assert
+    CheckTrue(initialized, __func__, __LINE__, "Initialize should succeed");
+    CheckFalse(rotated, __func__, __LINE__, "RotateLogFiles should fail while the file is held");
+    CheckTrue(ReadFileText(logFile).find("next_write") != std::string::npos, __func__, __LINE__, "With CircuitBreakerResetDelay 0, the next write should reopen the file");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_FileLog::Test_FailedSizeRotation_WaitsBeforeRetrying()
+{
+    // Arrange
+    if (!CanBlockFiles())
+        Skip(__func__, __LINE__, "File permissions don't stop the root user, so the failure can't be simulated");
+
+    using namespace std::chrono_literals;
+    const auto logFile = TestTempDir / "rotate_retry.log";
+    auto config = MakeRotationTestConfig(logFile);
+    config.EnableRotation = true;
+    config.MaxFileSizeBytes = 50;
+    config.RotationRetryDelay = 200ms;
+
+    const auto startTime = std::chrono::sys_days{ 2026y / 1 / 15 } + 10h;
+    TFixedClockFileLog logger;
+    logger.CurrentTime = startTime;
+
+    // Act
+    const bool initialized = logger.Initialize(config);
+    logger.LogInfo("line_one_long_enough_to_reach_the_size_limit_alone");
+    {
+        // The size rotation's rename fails, but the log reopens, so the entry is still written
+        TFileBlocker blocker(logFile, false);
+        logger.LogInfo("line_two");
+    }
+
+    // Still within RotationRetryDelay: no new rotation attempt yet
+    logger.CurrentTime = startTime + 100ms;
+    logger.LogInfo("line_three");
+    logger.CurrentTime = startTime + 250ms;
+    logger.LogInfo("line_four");
+    logger.Close();
+
+    // Assert
+    std::size_t backupCount = 0;
+    std::string backupContents;
+    for (const auto& entry : std::filesystem::directory_iterator(TestTempDir))
+    {
+        const auto name = entry.path().filename().string();
+        if (name.starts_with("rotate_retry.size.") && name.ends_with(".bak"))
+        {
+            ++backupCount;
+            backupContents = ReadFileText(entry.path());
+        }
+    }
+
+    const auto currentContents = ReadFileText(logFile);
+    CheckTrue(initialized, __func__, __LINE__, "Initialize should succeed");
+    CheckEquals(static_cast<size_t>(1), backupCount, __func__, __LINE__, "The rotation should succeed once RotationRetryDelay has passed");
+    CheckTrue(backupContents.find("line_two") != std::string::npos, __func__, __LINE__, "The entry written when the rotation failed should still reach the file");
+    CheckTrue(backupContents.find("line_three") != std::string::npos, __func__, __LINE__, "A failed rotation should not be retried before RotationRetryDelay has passed");
+    CheckTrue(currentContents.find("line_four") != std::string::npos, __func__, __LINE__, "The entry after the retry interval should go to the new log file");
+    CheckTrue(currentContents.find("line_three") == std::string::npos, __func__, __LINE__, "The new log file should only hold entries after the successful rotation");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_FileLog::Test_InitializeAndLogInfo_WritesText()

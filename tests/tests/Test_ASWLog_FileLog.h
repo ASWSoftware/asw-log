@@ -39,6 +39,9 @@ private: // Test methods
     void Test_DailyRolling_KeepsExistingBackupForSameDate();
     void Test_DailyRolling_NamesBackupForContentDate();
     void Test_DeleteOldLogs_RemovesOldFiles();
+    void Test_FailedReopen_RetriesAndResumesLogging();
+    void Test_FailedReopen_ZeroResetDelayRetriesOnNextWrite();
+    void Test_FailedSizeRotation_WaitsBeforeRetrying();
     void Test_InitializeAndLogInfo_WritesText();
     void Test_Initialize_SuppressesInfoBannersBelowMinimumLevel();
     void Test_LogFormatMethods_FormatsMessage();

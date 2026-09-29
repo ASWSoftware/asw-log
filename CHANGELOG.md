@@ -28,6 +28,13 @@ see [0.26.1](#0261---2026-09-17) for the initial versioned baseline.
 - `TASWLogBase::NowUTC()`, a protected virtual returning the time the logger
   uses for line timestamps, daily rolling, and backup names. A custom logger
   or a test can override it to control the logger's clock.
+- `TASWLogConfig::CircuitBreakerResetDelay` (default 500 ms), how long
+  `TASWFileLog` drops entries without trying to reopen a log file that
+  couldn't be reopened, before trying again. Each try still uses
+  `OpenRetryCount`/`OpenRetryDelay`; 0 tries on every entry.
+- `TASWLogConfig::RotationRetryDelay` (default 500 ms), how long
+  `TASWFileLog` waits after a failed size rotation before trying to rotate
+  again; 0 tries on every entry.
 
 ### Changed
 
@@ -69,6 +76,14 @@ see [0.26.1](#0261---2026-09-17) for the initial versioned baseline.
   doesn't update while the file is open. With `AutoOpenClosePerWrite`, the
   size is read again at every write, so other processes' writes to a shared
   log still count toward the limit.
+- `TASWFileLog` silently stopping for the rest of the process when the log
+  file couldn't be reopened, e.g. after a rotation while another program
+  briefly held the file. Later entries now retry the open once
+  `CircuitBreakerResetDelay` has passed since the last failed attempt, and
+  logging resumes as soon as it succeeds (entries logged while the file can't
+  be opened are dropped). A size rotation that fails is retried once
+  `RotationRetryDelay` has passed, instead of on every entry; entries keep
+  going to the current file meanwhile.
 
 ## [0.26.4] - 2026-09-21
 
