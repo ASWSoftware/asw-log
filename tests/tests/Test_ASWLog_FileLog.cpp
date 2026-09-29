@@ -113,6 +113,29 @@ public:
     TFileBlocker& operator=(const TFileBlocker&) = delete;
 };
 
+// While alive, makes 'folder' the current folder, so a test can use short relative paths
+class TScopedCurrentPath
+{
+private:
+    std::filesystem::path m_PreviousPath;
+
+public:
+    explicit TScopedCurrentPath(const std::filesystem::path& folder)
+        : m_PreviousPath(std::filesystem::current_path())
+    {
+        std::filesystem::current_path(folder);
+    }
+
+    ~TScopedCurrentPath()
+    {
+        std::error_code errorCode;
+        std::filesystem::current_path(m_PreviousPath, errorCode);
+    }
+
+    TScopedCurrentPath(const TScopedCurrentPath&) = delete;
+    TScopedCurrentPath& operator=(const TScopedCurrentPath&) = delete;
+};
+
 // True if TFileBlocker can work: file permissions don't stop the root user on POSIX
 bool CanBlockFiles()
 {
@@ -166,6 +189,8 @@ TTest_ASWLog_FileLog::TTest_ASWLog_FileLog()
 {
     RegisterTest(&TTest_ASWLog_FileLog::Test_DailyRolling_KeepsExistingBackupForSameDate, "DailyRolling_KeepsExistingBackupForSameDate");
     RegisterTest(&TTest_ASWLog_FileLog::Test_DailyRolling_NamesBackupForContentDate, "DailyRolling_NamesBackupForContentDate");
+    RegisterTest(&TTest_ASWLog_FileLog::Test_DeleteOldLogs_AcceptsShortRelativeFolder, "DeleteOldLogs_AcceptsShortRelativeFolder");
+    RegisterTest(&TTest_ASWLog_FileLog::Test_DeleteOldLogs_EmptyPatternDeletesNothing, "DeleteOldLogs_EmptyPatternDeletesNothing");
     RegisterTest(&TTest_ASWLog_FileLog::Test_DeleteOldLogs_MatchesNonASCIIFileNames, "DeleteOldLogs_MatchesNonASCIIFileNames");
     RegisterTest(&TTest_ASWLog_FileLog::Test_DeleteOldLogs_RemovesOldFiles, "DeleteOldLogs_RemovesOldFiles");
     RegisterTest(&TTest_ASWLog_FileLog::Test_FailedReopen_RetriesAndResumesLogging, "FailedReopen_RetriesAndResumesLogging");
@@ -284,6 +309,52 @@ void TTest_ASWLog_FileLog::Test_DailyRolling_NamesBackupForContentDate()
     CheckFalse(std::filesystem::exists(TestTempDir / "rolling.daily.2026-01-16.bak"), __func__, __LINE__, "The daily backup should not be named for the day that just started");
     CheckTrue(currentContents.find("day_two_entry") != std::string::npos, __func__, __LINE__, "The new day's entries should go to the reopened log file");
     CheckTrue(currentContents.find("day_one_entry") == std::string::npos, __func__, __LINE__, "The reopened log file should not contain the previous day's entries");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_FileLog::Test_DeleteOldLogs_AcceptsShortRelativeFolder()
+{
+    // Arrange: an old file in "lg", a relative folder name as short as a root folder such as "C:\"
+    const auto shortFolder = TestTempDir / "lg";
+    std::filesystem::create_directories(shortFolder);
+    const auto oldFile = shortFolder / "old_example.log";
+    {
+        std::ofstream oldStream(oldFile);
+        oldStream << "old";
+    }
+    std::filesystem::last_write_time(oldFile, std::chrono::file_clock::now() - std::chrono::hours(2));
+
+    // Act
+    std::size_t deletedCount = 0;
+    {
+        const TScopedCurrentPath currentPath(TestTempDir);
+        deletedCount = ASWLog::TASWFileLog::DeleteOldLogs("lg", "*.log", std::chrono::hours(1));
+    }
+
+    // Assert
+    CheckEquals(static_cast<size_t>(1), deletedCount, __func__, __LINE__, "DeleteOldLogs should accept a short relative folder name");
+    CheckFalse(std::filesystem::exists(oldFile), __func__, __LINE__, "The old file in the relative folder should be removed");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_FileLog::Test_DeleteOldLogs_EmptyPatternDeletesNothing()
+{
+    // Arrange
+    const auto oldFile = TestTempDir / "old_example.log";
+    {
+        std::ofstream oldStream(oldFile);
+        oldStream << "old";
+    }
+    std::filesystem::last_write_time(oldFile, std::chrono::file_clock::now() - std::chrono::hours(2));
+
+    // Act
+    const auto emptyPatternCount = ASWLog::TASWFileLog::DeleteOldLogs(TestTempDir, "", std::chrono::hours(1));
+    const bool existsAfterEmptyPattern = std::filesystem::exists(oldFile);
+    const auto starPatternCount = ASWLog::TASWFileLog::DeleteOldLogs(TestTempDir, "*", std::chrono::hours(1));
+
+    // Assert
+    CheckEquals(static_cast<size_t>(0), emptyPatternCount, __func__, __LINE__, "An empty pattern should delete nothing");
+    CheckTrue(existsAfterEmptyPattern, __func__, __LINE__, "An empty pattern should leave the old file");
+    CheckEquals(static_cast<size_t>(1), starPatternCount, __func__, __LINE__, "The \"*\" pattern should delete every old file");
+    CheckFalse(std::filesystem::exists(oldFile), __func__, __LINE__, "The \"*\" pattern should remove the old file");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_FileLog::Test_DeleteOldLogs_MatchesNonASCIIFileNames()

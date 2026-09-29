@@ -95,6 +95,15 @@ struct TSystemMemoryUsage
 [[nodiscard]] std::string GetWindowsEditionName(std::uint32_t productType, bool isServer);
 #endif
 
+/*
+    IsRootFolder
+
+    True if 'folder' is the root of a drive, network share, volume or file system (e.g. "C:\", "\\server\share\", "/"),
+    or if that can't be determined (e.g. the path is empty or its server can't be reached). A relative path is resolved
+    against the current folder, so "." is a root folder when the current folder is. Never throws.
+*/
+[[nodiscard]] bool IsRootFolder(const std::filesystem::path& folder) noexcept;
+
 [[nodiscard]] bool MatchesWildcard(std::string_view value, std::string_view pattern);
 
 /*

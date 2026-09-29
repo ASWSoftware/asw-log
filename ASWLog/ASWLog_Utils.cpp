@@ -477,6 +477,50 @@ std::string GetWindowsEditionName(std::uint32_t productType, bool isServer)
 #endif
 
 //---------------------------------------------------------------------------
+bool IsRootFolder(const std::filesystem::path& folder) noexcept
+{
+    try
+    {
+#if defined(_WIN32)
+        // Asks Windows rather than parsing the path, because standard libraries differ on UNC paths (MinGW's reads
+        // "\\server\share" as a relative path). GetFullPathNameW resolves a relative path, ".", ".." and '/'.
+        const DWORD fullPathSize = GetFullPathNameW(folder.c_str(), 0, nullptr, nullptr);
+        if (fullPathSize == 0)
+            return true;
+
+        std::wstring fullPath(fullPathSize, L'\0');
+        const DWORD fullPathLength = GetFullPathNameW(folder.c_str(), fullPathSize, fullPath.data(), nullptr);
+        if (fullPathLength == 0 || fullPathLength >= fullPathSize)
+            return true;
+
+        fullPath.resize(fullPathLength);
+
+        // The mount point of the volume holding the folder, with a trailing separator, e.g. "C:\" or
+        // "\\server\share\". It is never longer than the full path plus that separator.
+        std::wstring volumePath(fullPath.size() + 2, L'\0');
+        if (!GetVolumePathNameW(fullPath.c_str(), volumePath.data(), static_cast<DWORD>(volumePath.size())))
+            return true;
+
+        volumePath.resize(std::char_traits<wchar_t>::length(volumePath.c_str()));
+
+        if (fullPath.back() != L'\\')
+            fullPath += L'\\';
+
+        return CompareStringOrdinal(fullPath.c_str(), -1, volumePath.c_str(), -1, TRUE) == CSTR_EQUAL;
+#else
+        // Only a root folder is its own parent. Unlike comparing paths, this also covers "." and "..".
+        std::error_code errorCode;
+        const bool isOwnParent = std::filesystem::equivalent(folder, folder / "..", errorCode);
+        return isOwnParent || errorCode;
+#endif
+    }
+    catch (...)
+    {
+        return true;
+    }
+}
+
+//---------------------------------------------------------------------------
 bool MatchesWildcard(std::string_view value, std::string_view pattern)
 {
     std::size_t valueIndex = 0;

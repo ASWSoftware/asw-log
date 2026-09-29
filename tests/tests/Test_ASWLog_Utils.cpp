@@ -27,7 +27,9 @@ limitations under the License.
 #include "ASWLog_Utils.h"
 //---------------------------------------------------------------------------
 #include <chrono>
+#include <filesystem>
 #include <string>
+#include <system_error>
 
 #if defined(_WIN32)
 #include <windows.h>
@@ -47,6 +49,8 @@ TTest_ASWLog_Utils::TTest_ASWLog_Utils()
     RegisterTest(&TTest_ASWLog_Utils::Test_GenerateLogFileName_PrefixAndPostfixAreOptional, "GenerateLogFileName_PrefixAndPostfixAreOptional");
     RegisterTest(&TTest_ASWLog_Utils::Test_GetOSInfoString_ContainsEdition, "GetOSInfoString_ContainsEdition");
     RegisterTest(&TTest_ASWLog_Utils::Test_GetWindowsEditionName_ProductTypes, "GetWindowsEditionName_ProductTypes");
+    RegisterTest(&TTest_ASWLog_Utils::Test_IsRootFolder_DetectsRootFolders, "IsRootFolder_DetectsRootFolders");
+    RegisterTest(&TTest_ASWLog_Utils::Test_IsRootFolder_ResolvesRelativePaths, "IsRootFolder_ResolvesRelativePaths");
     RegisterTest(&TTest_ASWLog_Utils::Test_MatchesWildcard_Patterns, "MatchesWildcard_Patterns");
     RegisterTest(&TTest_ASWLog_Utils::Test_Time_ToDateString, "Time_ToDateString");
     RegisterTest(&TTest_ASWLog_Utils::Test_Time_ToISO8601String, "Time_ToISO8601String");
@@ -156,6 +160,54 @@ void TTest_ASWLog_Utils::Test_GetWindowsEditionName_ProductTypes()
 #endif
 }
 //---------------------------------------------------------------------------
+void TTest_ASWLog_Utils::Test_IsRootFolder_DetectsRootFolders()
+{
+    // Arrange
+    const auto tempDir = std::filesystem::temp_directory_path();
+    const auto root = tempDir.root_path();
+    const auto firstFolder = root / *tempDir.relative_path().begin(); // e.g. "C:\Users" or "/tmp"
+
+    // Act & Assert
+    CheckTrue(ASWLog::IsRootFolder(root), __func__, __LINE__, "The root of the temp folder's path should be a root folder");
+    CheckTrue(ASWLog::IsRootFolder(root / "."), __func__, __LINE__, "The root followed by \".\" should be a root folder");
+    CheckTrue(ASWLog::IsRootFolder(firstFolder / ".."), __func__, __LINE__, "A folder's \"..\" at the top level should be a root folder");
+    CheckFalse(ASWLog::IsRootFolder(firstFolder), __func__, __LINE__, "A top-level folder should not be a root folder");
+    CheckFalse(ASWLog::IsRootFolder(tempDir), __func__, __LINE__, "The temp folder should not be a root folder");
+    CheckTrue(ASWLog::IsRootFolder(std::filesystem::path()), __func__, __LINE__, "An empty path can't be checked, so it should count as a root folder");
+
+#if defined(_WIN32)
+    const auto driveLetter = tempDir.root_name().string().substr(0, 1);
+    CheckTrue(ASWLog::IsRootFolder(driveLetter + ":/"), __func__, __LINE__, "A drive root written with '/' should be a root folder");
+
+    // The drive's administrative share (e.g. "\\localhost\C$\"), when this machine allows it. Forward slashes, since
+    // Windows accepts them in UNC paths too.
+    const std::filesystem::path share = "//localhost/" + driveLetter + "$/";
+    std::error_code errorCode;
+    if (std::filesystem::is_directory(share / tempDir.relative_path(), errorCode))
+    {
+        CheckTrue(ASWLog::IsRootFolder(share), __func__, __LINE__, "A network share's root should be a root folder");
+        CheckFalse(ASWLog::IsRootFolder(share / tempDir.relative_path()), __func__, __LINE__, "A folder in a network share should not be a root folder");
+    }
+    else
+    {
+        Log("  " + share.string() + " isn't available, so the network share checks were skipped");
+    }
+#endif
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_Utils::Test_IsRootFolder_ResolvesRelativePaths()
+{
+    // Arrange: a relative path from the current folder up to its root, e.g. "..\..\.."
+    const auto currentPath = std::filesystem::current_path();
+    const auto relativeRoot = std::filesystem::relative(currentPath.root_path(), currentPath);
+
+    // Act & Assert
+    CheckFalse(relativeRoot.empty(), __func__, __LINE__, "The relative path to the root should be found");
+    CheckTrue(ASWLog::IsRootFolder(relativeRoot), __func__, __LINE__, "A relative path that leads to a root should be a root folder");
+    if (currentPath != currentPath.root_path())
+        CheckFalse(ASWLog::IsRootFolder("."), __func__, __LINE__, "\".\" should not be a root folder when the current folder isn't one");
+}
+//---------------------------------------------------------------------------
 void TTest_ASWLog_Utils::Test_MatchesWildcard_Patterns()
 {
     // Arrange
@@ -167,6 +219,7 @@ void TTest_ASWLog_Utils::Test_MatchesWildcard_Patterns()
     CheckTrue(ASWLog::MatchesWildcard(fileName, "app_*.log"), __func__, __LINE__, "Wildcard should match mid-string patterns");
     CheckTrue(ASWLog::MatchesWildcard(fileName2, "n?tes.*"), __func__, __LINE__, "Question mark wildcard should match a single character");
     CheckFalse(ASWLog::MatchesWildcard(fileName, "*.txt"), __func__, __LINE__, "Wildcard should reject non-matching files");
+    CheckTrue(ASWLog::MatchesWildcard("no_extension", "*"), __func__, __LINE__, "A lone '*' should match any name, with or without a dot");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_Utils::Test_Time_ToDateString()

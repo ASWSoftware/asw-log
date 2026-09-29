@@ -327,12 +327,17 @@ std::size_t TASWFileLog::DeleteOldLogs(
 {
     // Never throws: uses the std::error_code overloads, skipping an entry it can't read and stopping if the folder can't
     // be listed. File names are matched as UTF-8, since the ANSI code page conversion of path::string() can throw.
+
+    // An empty pattern would match every file; a caller who means that passes "*"
+    if (pattern.empty())
+        return 0;
+
     std::error_code errorCode;
     if (!std::filesystem::is_directory(logDir, errorCode))
         return 0;
 
-    // Don't allow root directory, such as "C:\"
-    if (logDir.native().length() <= 3)
+    // Never clean up a root folder, such as "C:\", "\\server\share\" or "/"
+    if (IsRootFolder(logDir))
         return 0;
 
     const auto cutoff = std::filesystem::file_time_type::clock::now() - maxAge;
@@ -347,8 +352,7 @@ std::size_t TASWFileLog::DeleteOldLogs(
         if (!entry.is_regular_file(entryError))
             continue;
 
-        const auto match = pattern.empty() || MatchesWildcard(PathToUTF8String(entry.path().filename()), pattern);
-        if (!match)
+        if (!MatchesWildcard(PathToUTF8String(entry.path().filename()), pattern))
             continue;
 
         const auto lastWrite = entry.last_write_time(entryError);

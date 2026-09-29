@@ -145,6 +145,9 @@ protected:
     }
 
 public: // Static methods
+    // Deletes the files in 'logDir' (not its subfolders) whose names match the wildcard 'pattern' ('*' and '?', matched
+    // as UTF-8) and that were last written more than 'maxAge' ago. Returns how many it deleted. Deletes nothing if
+    // 'pattern' is empty (pass "*" for every file) or if 'logDir' is a root folder (see IsRootFolder()). Never throws.
     static std::size_t DeleteOldLogs(const std::filesystem::path& logDir, std::string_view pattern, std::chrono::hours maxAge);
     // Singleton support for the common static instance. The instance is never destroyed, so it is safe to use until
     // the process ends, e.g. from another static object's destructor or a thread still running at exit. At exit it is

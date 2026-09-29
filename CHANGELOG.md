@@ -42,6 +42,9 @@ see [0.26.1](#0261---2026-09-17) for the initial versioned baseline.
   `GetColorMode()` to choose it (default `Auto`).
 - `TASWConsoleLog::DetectStreamColorSupport()`, a protected virtual deciding
   whether stdout or stderr shows colors; override it to change the detection.
+- `IsRootFolder()`, telling whether a folder is the root of a drive, network
+  share, volume, or file system (e.g. `C:\`, `\\server\share\`, `/`), as
+  used by `DeleteOldLogs`.
 
 ### Changed
 
@@ -56,6 +59,9 @@ see [0.26.1](#0261---2026-09-17) for the initial versioned baseline.
 - `TASWConsoleLog::IsColorSupported()` now reports whether stdout or stderr
   is a console or terminal that shows colors. On Linux it used to be always
   true; it's now false when both streams are redirected.
+- `TASWFileLog::DeleteOldLogs` with an empty `pattern` now deletes nothing;
+  it used to delete every file in the folder older than `maxAge`. To keep
+  that behavior, pass `"*"`.
 
 ### Removed
 
@@ -146,6 +152,10 @@ see [0.26.1](#0261---2026-09-17) for the initial versioned baseline.
   composite couldn't be initialized again, unlike the other loggers.
   Concurrent `Initialize()` calls could also all succeed and write the
   configuration at the same time; now exactly one succeeds.
+- `DeleteOldLogs` refusing any folder path of 3 characters or fewer, such
+  as the relative folders `log` or `.`, which it mistook for a root folder.
+  It now refuses only an actual root folder, which it also didn't recognize
+  in forms such as `\\server\share\` or `C:\logs\..`.
 
 ## [0.26.4] - 2026-09-21
 
