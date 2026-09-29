@@ -112,6 +112,7 @@
         <Manifest_File>$(BDS)\bin\default_app.manifest</Manifest_File>
         <BCC_PCHName_Clang>ASWLogTests_VCL_GUIPCH1.h</BCC_PCHName_Clang>
         <BCC_UserSuppliedOptions>-Wno-padded -Wno-format-nonliteral</BCC_UserSuppliedOptions>
+        <Debugger_RunParams>--project-name &quot;ASWLogTests&quot;</Debugger_RunParams>
     </PropertyGroup>
     <PropertyGroup Condition="'$(Base_Win64)'!=''">
         <PackageImports>adortl;bcbie;bcbsmp;bindcomp;bindcompdbx;bindcompfmx;bindcompvcl;bindcompvclsmp;bindcompvclwinx;bindengine;CloudService;CustomIPTransport;dbexpress;dbrtl;dbxcds;DbxClientDriver;DbxCommonDriver;DBXInterBaseDriver;DBXMySQLDriver;DBXSqliteDriver;dsnap;dsnapcon;dsnapxml;FireDAC;FireDACADSDriver;FireDACCommon;FireDACCommonDriver;FireDACCommonODBC;FireDACIBDriver;FireDACMSAccDriver;FireDACMySQLDriver;FireDACPgDriver;FireDACSqliteDriver;fmx;fmxase;fmxdae;fmxFireDAC;fmxobj;FMXTee;FmxTeeUI;IndyCore;IndyIPClient;IndyIPCommon;IndyIPServer;IndyProtocols;IndySystem;inet;inetdb;inetdbxpress;inetstn;RESTBackendComponents;RESTComponents;rtl;Skia;soapmidas;soaprtl;soapserver;Tee;TeeDB;TeeUI;tethering;vcl;vclactnband;vcldb;vcldsnap;vcledge;vclFireDAC;vclie;vclimg;VCLRESTComponents;VclSmp;vcltouch;vclwinx;vclx;xmlrtl;$(PackageImports)</PackageImports>
@@ -134,6 +135,7 @@
         <AppDPIAwarenessMode>none</AppDPIAwarenessMode>
         <BCC_PCHName_Clang>ASWLogTests_VCL_GUIPCH1.h</BCC_PCHName_Clang>
         <BCC_UserSuppliedOptions>-Wno-c++98-compat -Wno-c++98-compat-pedantic -Wno-padded -Wno-weak-vtables -Wno-used-but-marked-unused -Wno-format-nonliteral</BCC_UserSuppliedOptions>
+        <Debugger_RunParams>--project-name &quot;ASWLogTests&quot;</Debugger_RunParams>
     </PropertyGroup>
     <PropertyGroup Condition="'$(Cfg_1)'!=''">
         <BCC_OptimizeForSpeed>false</BCC_OptimizeForSpeed>
@@ -218,6 +220,41 @@
             <DependentOn>..\..\..\..\ASWLog\ASWLog_Utils.h</DependentOn>
             <BuildOrder>9</BuildOrder>
         </CppCompile>
+        <CppCompile Include="..\..\..\tests\Test_ASWLog_Base.cpp">
+            <DependentOn>..\..\..\tests\Test_ASWLog_Base.h</DependentOn>
+            <BuildOrder>27</BuildOrder>
+        </CppCompile>
+        <CppCompile Include="..\..\..\tests\Test_ASWLog_Config.cpp">
+            <DependentOn>..\..\..\tests\Test_ASWLog_Config.h</DependentOn>
+            <BuildOrder>28</BuildOrder>
+        </CppCompile>
+        <CppCompile Include="..\..\..\tests\Test_ASWLog_ConsoleLog.cpp">
+            <DependentOn>..\..\..\tests\Test_ASWLog_ConsoleLog.h</DependentOn>
+            <BuildOrder>29</BuildOrder>
+        </CppCompile>
+        <CppCompile Include="..\..\..\tests\Test_ASWLog_FileLog.cpp">
+            <DependentOn>..\..\..\tests\Test_ASWLog_FileLog.h</DependentOn>
+            <BuildOrder>30</BuildOrder>
+        </CppCompile>
+        <CppCompile Include="..\..\..\tests\Test_ASWLog_MultiLog.cpp">
+            <DependentOn>..\..\..\tests\Test_ASWLog_MultiLog.h</DependentOn>
+            <BuildOrder>31</BuildOrder>
+        </CppCompile>
+        <CppCompile Include="..\..\..\tests\Test_ASWLog_Types.cpp">
+            <DependentOn>..\..\..\tests\Test_ASWLog_Types.h</DependentOn>
+            <BuildOrder>32</BuildOrder>
+        </CppCompile>
+        <CppCompile Include="..\..\..\tests\Test_ASWLog_Utils.cpp">
+            <DependentOn>..\..\..\tests\Test_ASWLog_Utils.h</DependentOn>
+            <BuildOrder>33</BuildOrder>
+        </CppCompile>
+        <CppCompile Include="ASWLogTests_VCL_GUI.cpp">
+            <BuildOrder>0</BuildOrder>
+        </CppCompile>
+        <PCHCompile Include="ASWLogTests_VCL_GUIPCH1.h">
+            <BuildOrder>1</BuildOrder>
+            <PCH>true</PCH>
+        </PCHCompile>
         <CppCompile Include="..\..\..\..\third_party\asw-unit-tests\src\ASWUnitTests_CLI.cpp">
             <DependentOn>..\..\..\..\third_party\asw-unit-tests\src\ASWUnitTests_CLI.h</DependentOn>
             <BuildOrder>10</BuildOrder>
@@ -288,41 +325,6 @@
             <DependentOn>..\..\..\..\third_party\asw-unit-tests\vcl\gui\src\ASWUnitTests_GUI_TextDialog.h</DependentOn>
             <BuildOrder>26</BuildOrder>
         </CppCompile>
-        <CppCompile Include="..\..\..\tests\Test_ASWLog_Base.cpp">
-            <DependentOn>..\..\..\tests\Test_ASWLog_Base.h</DependentOn>
-            <BuildOrder>27</BuildOrder>
-        </CppCompile>
-        <CppCompile Include="..\..\..\tests\Test_ASWLog_Config.cpp">
-            <DependentOn>..\..\..\tests\Test_ASWLog_Config.h</DependentOn>
-            <BuildOrder>28</BuildOrder>
-        </CppCompile>
-        <CppCompile Include="..\..\..\tests\Test_ASWLog_ConsoleLog.cpp">
-            <DependentOn>..\..\..\tests\Test_ASWLog_ConsoleLog.h</DependentOn>
-            <BuildOrder>29</BuildOrder>
-        </CppCompile>
-        <CppCompile Include="..\..\..\tests\Test_ASWLog_FileLog.cpp">
-            <DependentOn>..\..\..\tests\Test_ASWLog_FileLog.h</DependentOn>
-            <BuildOrder>30</BuildOrder>
-        </CppCompile>
-        <CppCompile Include="..\..\..\tests\Test_ASWLog_MultiLog.cpp">
-            <DependentOn>..\..\..\tests\Test_ASWLog_MultiLog.h</DependentOn>
-            <BuildOrder>31</BuildOrder>
-        </CppCompile>
-        <CppCompile Include="..\..\..\tests\Test_ASWLog_Types.cpp">
-            <DependentOn>..\..\..\tests\Test_ASWLog_Types.h</DependentOn>
-            <BuildOrder>32</BuildOrder>
-        </CppCompile>
-        <CppCompile Include="..\..\..\tests\Test_ASWLog_Utils.cpp">
-            <DependentOn>..\..\..\tests\Test_ASWLog_Utils.h</DependentOn>
-            <BuildOrder>33</BuildOrder>
-        </CppCompile>
-        <CppCompile Include="ASWLogTests_VCL_GUI.cpp">
-            <BuildOrder>0</BuildOrder>
-        </CppCompile>
-        <PCHCompile Include="ASWLogTests_VCL_GUIPCH1.h">
-            <BuildOrder>1</BuildOrder>
-            <PCH>true</PCH>
-        </PCHCompile>
         <FormResources Include="..\..\..\..\third_party\asw-unit-tests\vcl\gui\src\ASWUnitTests_GUI_MainForm.dfm"/>
         <BuildConfiguration Include="Base">
             <Key>Base</Key>
