@@ -13,8 +13,8 @@ see [0.26.1](#0261---2026-09-17) for the initial versioned baseline.
 ### Added
 
 - CI workflow (`.github/workflows/ci.yml`), building and running the unit
-  tests on Windows (MSVC, MinGW) and Linux (GCC, Clang), plus a
-  `test-report.yml` workflow publishing the JUnit results as check runs,
+  tests on Windows (MSVC, MinGW) and Linux (GCC, Clang). Each job shows its
+  JUnit test report on the run's summary page and uploads it as an artifact,
   including for pull requests from forks.
 - VCL GUI test runner (`tests/vcl/gui/rad370/ASWLogTests_VCL_GUI.cbproj`),
   running the unit tests in the ASWUnitTests GUI (a window with a test tree,

@@ -11,8 +11,8 @@ concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
-# Read-only on purpose: a pull request from a fork gets a read-only token anyway, so test results are published as
-# check runs by test-report.yml instead.
+# Read-only on purpose: a pull request from a fork gets a read-only token anyway, so nothing here needs to write
+# (the test report goes to each job's summary page, which needs no permission).
 permissions:
   contents: read
 
@@ -101,13 +101,23 @@ jobs:
           ./${{ matrix.exe_path }} --project-name "ASWLog-CI" --report-junit junit-results.xml
           --test-timeout-seconds 60 --catch-crashes
 
+      - name: Test results summary
+        # Runs whenever the tests ran, pass or fail, so failures show up in the report too. In this mode the reporter
+        # only writes this job's summary page and makes no GitHub API calls, so it also works for pull requests from
+        # forks, whose token is read-only. It also fails if the tests ran but the report is missing or unreadable.
+        if: ${{ !cancelled() && steps.tests.outcome != 'skipped' }}
+        uses: dorny/test-reporter@v3
+        with:
+          name: Test Results - ${{ matrix.name }}
+          path: junit-results.xml
+          reporter: java-junit
+          use-actions-summary: true
+
       - name: Upload test results
-        # Runs whenever the tests ran, pass or fail, so test-report.yml can publish the results (including failures
-        # as annotations). A missing report file after the tests ran is an error.
+        # Keeps the JUnit report as a downloadable artifact of the run.
         if: ${{ !cancelled() && steps.tests.outcome != 'skipped' }}
         uses: actions/upload-artifact@v7
         with:
-          # test-report.yml matches this name prefix and names each check run after the rest.
           name: test-results-${{ matrix.name }}
           path: junit-results.xml
           if-no-files-found: error
