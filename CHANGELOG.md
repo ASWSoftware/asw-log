@@ -37,6 +37,11 @@ see [0.26.1](#0261---2026-09-17) for the initial versioned baseline.
   again; 0 tries on every entry.
 - `PathToUTF8String()`, converting a `std::filesystem::path` to a UTF-8
   string without throwing.
+- `ColorMode` (`Auto`, `Always`, `Never`), with `ColorMode_ToString()` and
+  `ColorMode_FromString()`, and `TASWConsoleLog::SetColorMode()`/
+  `GetColorMode()` to choose it (default `Auto`).
+- `TASWConsoleLog::DetectStreamColorSupport()`, a protected virtual deciding
+  whether stdout or stderr shows colors; override it to change the detection.
 
 ### Changed
 
@@ -48,6 +53,17 @@ see [0.26.1](#0261---2026-09-17) for the initial versioned baseline.
   `tests/rad370/`. Building the tests requires the submodule
   (`git clone --recurse-submodules`, or `git submodule update --init`); using
   the logger itself does not.
+- `TASWConsoleLog::IsColorSupported()` now reports whether stdout or stderr
+  is a console or terminal that shows colors. On Linux it used to be always
+  true; it's now false when both streams are redirected.
+
+### Removed
+
+- `TASWConsoleLog::SetUseColor()` and `GetUseColor()`, replaced by
+  `SetColorMode()`/`GetColorMode()`. Replace `SetUseColor(false)` with
+  `SetColorMode(ASWLog::ColorMode::Never)`. `SetUseColor(true)` (the old
+  default) becomes `ColorMode::Auto`, or `ColorMode::Always` to keep writing
+  color codes to output that isn't a terminal.
 
 ### Fixed
 
@@ -112,6 +128,11 @@ see [0.26.1](#0261---2026-09-17) for the initial versioned baseline.
   `GetApplicationInfoString()` now write the path as UTF-8.
 - On Linux, reading unexpected `/proc/self/status` contents for the memory
   information could throw.
+- `TASWConsoleLog` writing ANSI color codes into redirected output (files and
+  pipes) and into Windows consoles that can't show them. With the default
+  `ColorMode::Auto`, stdout and stderr are each colored only if they show
+  colors, and not at all when the `NO_COLOR` environment variable is set
+  (https://no-color.org).
 
 ## [0.26.4] - 2026-09-21
 

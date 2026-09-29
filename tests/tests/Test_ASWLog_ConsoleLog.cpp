@@ -24,10 +24,19 @@ limitations under the License.
 // Module header
 #include "Test_ASWLog_ConsoleLog.h"
 //---------------------------------------------------------------------------
+#include <cstdlib>
 #include <iostream>
+#include <optional>
 #include <sstream>
 #include <string>
+#include <utility>
 #include <vector>
+
+#if defined(_WIN32)
+#include <windows.h>
+#undef min
+#undef max
+#endif
 //---------------------------------------------------------------------------
 #include "ASWUnitTests_Registry.h"
 //---------------------------------------------------------------------------
@@ -39,6 +48,79 @@ namespace ASWUnitTests
 
 namespace
 {
+
+// A TASWConsoleLog whose streams report the color support a test chooses, through the DetectStreamColorSupport()
+// hook, since under a test runner the real stdout and stderr aren't terminals.
+class TColorDetectConsoleLog : public ASWLog::TASWConsoleLog
+{
+public:
+    bool StdOutSupportsColor = false;
+    bool StdErrSupportsColor = false;
+
+protected:
+    bool DetectStreamColorSupport(bool isStdErr) override
+    {
+        return isStdErr ? StdErrSupportsColor : StdOutSupportsColor;
+    }
+};
+
+// RAII helper: sets an environment variable (or removes it, given std::nullopt), restoring its previous value on
+// destruction.
+class TScopedEnvironmentVariable
+{
+private:
+    std::string m_Name;
+    std::optional<std::string> m_PreviousValue;
+
+    static std::optional<std::string> Get(const std::string& name)
+    {
+#if defined(_WIN32)
+        // The Windows API rather than the C runtime, since that's what TASWConsoleLog reads (and MinGW's runtime has
+        // no _dupenv_s)
+        const DWORD size = GetEnvironmentVariableA(name.c_str(), nullptr, 0);
+        if (size == 0)
+            return std::nullopt;
+
+        std::string value(size, '\0');
+        value.resize(GetEnvironmentVariableA(name.c_str(), value.data(), size));
+        return value;
+#else
+        const char* value = std::getenv(name.c_str());
+        if (value == nullptr)
+            return std::nullopt;
+
+        return std::string(value);
+#endif
+    }
+
+    static void Set(const std::string& name, const std::optional<std::string>& value)
+    {
+#if defined(_WIN32)
+        SetEnvironmentVariableA(name.c_str(), value ? value->c_str() : nullptr); // nullptr removes the variable
+#else
+        if (value)
+            setenv(name.c_str(), value->c_str(), 1);
+        else
+            unsetenv(name.c_str());
+#endif
+    }
+
+public:
+    TScopedEnvironmentVariable(std::string name, std::optional<std::string> value)
+        : m_Name(std::move(name)),
+          m_PreviousValue(Get(m_Name))
+    {
+        Set(m_Name, value);
+    }
+
+    ~TScopedEnvironmentVariable()
+    {
+        Set(m_Name, m_PreviousValue);
+    }
+
+    TScopedEnvironmentVariable(const TScopedEnvironmentVariable&) = delete;
+    TScopedEnvironmentVariable& operator=(const TScopedEnvironmentVariable&) = delete;
+};
 
 // RAII helper: redirects a standard stream's buffer to an internal buffer for
 // the lifetime of the object, restoring the original buffer on destruction.
@@ -102,10 +184,14 @@ ASWLog::TASWLogConfig MakeQuietConfig()
 TTest_ASWLog_ConsoleLog::TTest_ASWLog_ConsoleLog()
     : inherited("ASWLog_ConsoleLog_Tests")
 {
-    RegisterTest(&TTest_ASWLog_ConsoleLog::Test_GetUseColor_ReflectsSetUseColor, "GetUseColor_ReflectsSetUseColor");
+    RegisterTest(&TTest_ASWLog_ConsoleLog::Test_ColorModeAlways_WrapsOutputWithAnsiCodes, "ColorModeAlways_WrapsOutputWithAnsiCodes");
+    RegisterTest(&TTest_ASWLog_ConsoleLog::Test_ColorModeAuto_ColorsOnlyStreamsThatSupportIt, "ColorModeAuto_ColorsOnlyStreamsThatSupportIt");
+    RegisterTest(&TTest_ASWLog_ConsoleLog::Test_ColorModeAuto_HonorsNoColor, "ColorModeAuto_HonorsNoColor");
+    RegisterTest(&TTest_ASWLog_ConsoleLog::Test_ColorModeNever_SuppressesAnsiCodes, "ColorModeNever_SuppressesAnsiCodes");
+    RegisterTest(&TTest_ASWLog_ConsoleLog::Test_GetColorMode_ReflectsSetColorMode, "GetColorMode_ReflectsSetColorMode");
     RegisterTest(&TTest_ASWLog_ConsoleLog::Test_Initialize_SuppressesInfoBannersBelowMinimumLevel, "Initialize_SuppressesInfoBannersBelowMinimumLevel");
     RegisterTest(&TTest_ASWLog_ConsoleLog::Test_Initialize_WritesDriveInfoWhenEnabled, "Initialize_WritesDriveInfoWhenEnabled");
-    RegisterTest(&TTest_ASWLog_ConsoleLog::Test_IsColorSupported_ReflectsPlatformState, "IsColorSupported_ReflectsPlatformState");
+    RegisterTest(&TTest_ASWLog_ConsoleLog::Test_IsColorSupported_ReflectsDetectedStreams, "IsColorSupported_ReflectsDetectedStreams");
     RegisterTest(&TTest_ASWLog_ConsoleLog::Test_LogLineMetadata_Options, "LogLineMetadata_Options");
     RegisterTest(&TTest_ASWLog_ConsoleLog::Test_LogRawAndForceOptions, "LogRawAndForceOptions");
     RegisterTest(&TTest_ASWLog_ConsoleLog::Test_LogRespectsMinimumLevel, "LogRespectsMinimumLevel");
@@ -114,8 +200,6 @@ TTest_ASWLog_ConsoleLog::TTest_ASWLog_ConsoleLog()
     RegisterTest(&TTest_ASWLog_ConsoleLog::Test_ResetLevelColors_RestoresAllDefaults, "ResetLevelColors_RestoresAllDefaults");
     RegisterTest(&TTest_ASWLog_ConsoleLog::Test_SetLevelColor_EmptyStringDisablesColorForLevel, "SetLevelColor_EmptyStringDisablesColorForLevel");
     RegisterTest(&TTest_ASWLog_ConsoleLog::Test_SetLevelColor_OverridesDefaultColor, "SetLevelColor_OverridesDefaultColor");
-    RegisterTest(&TTest_ASWLog_ConsoleLog::Test_UseColor_False_SuppressesAnsiCodes, "UseColor_False_SuppressesAnsiCodes");
-    RegisterTest(&TTest_ASWLog_ConsoleLog::Test_UseColor_WrapsOutputWithAnsiCodes, "UseColor_WrapsOutputWithAnsiCodes");
     RegisterTest(&TTest_ASWLog_ConsoleLog::Test_WarnAndAboveWriteToStdErr, "WarnAndAboveWriteToStdErr");
 }
 //---------------------------------------------------------------------------
@@ -143,20 +227,136 @@ void TTest_ASWLog_ConsoleLog::TearDown_Test(ITestCase& /*testCase*/)
 // /////// Begin tests after this line ///////////////////////
 
 //---------------------------------------------------------------------------
-void TTest_ASWLog_ConsoleLog::Test_GetUseColor_ReflectsSetUseColor()
+void TTest_ASWLog_ConsoleLog::Test_ColorModeAlways_WrapsOutputWithAnsiCodes()
+{
+    // Arrange: the real stdout isn't a terminal under a test runner, so only Always colors it
+    auto config = MakeQuietConfig();
+
+    ASWLog::TASWConsoleLog logger;
+    logger.SetColorMode(ASWLog::ColorMode::Always);
+
+    // Act
+    TStreamCapture outCapture(std::cout);
+    const bool initialized = logger.Initialize(config);
+    logger.LogInfo("colored_message");
+    logger.Close();
+
+    // Assert
+    CheckTrue(initialized, __func__, __LINE__, "Initialize should succeed");
+    CheckTrue(outCapture.Str().find("\x1b[") != std::string::npos, __func__, __LINE__, "ColorMode::Always should wrap output with ANSI escape codes");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_ConsoleLog::Test_ColorModeAuto_ColorsOnlyStreamsThatSupportIt()
+{
+    // Arrange: stdout shows colors and stderr doesn't (e.g. stderr redirected to a file)
+    TScopedEnvironmentVariable noColor("NO_COLOR", std::nullopt);
+    auto config = MakeQuietConfig();
+
+    TColorDetectConsoleLog logger;
+    logger.StdOutSupportsColor = true;
+    logger.StdErrSupportsColor = false;
+
+    // Act
+    TStreamCapture outCapture(std::cout);
+    TStreamCapture errCapture(std::cerr);
+    const bool initialized = logger.Initialize(config);
+    logger.LogInfo("stdout_message");
+    logger.LogError("stderr_message");
+    logger.Close();
+
+    const auto outContents = outCapture.Str();
+    const auto errContents = errCapture.Str();
+
+    // Assert
+    CheckTrue(initialized, __func__, __LINE__, "Initialize should succeed");
+    CheckTrue(logger.GetColorMode() == ASWLog::ColorMode::Auto, __func__, __LINE__, "ColorMode should default to Auto");
+    CheckTrue(outContents.find("\x1b[") != std::string::npos, __func__, __LINE__, "Auto should color a stream that shows colors");
+    CheckTrue(errContents.find("\x1b[") == std::string::npos, __func__, __LINE__, "Auto should not color a stream that doesn't show colors, such as a file or a pipe");
+    CheckTrue(errContents.find("stderr_message") != std::string::npos, __func__, __LINE__, "The uncolored message should still be written");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_ConsoleLog::Test_ColorModeAuto_HonorsNoColor()
+{
+    // Arrange: both streams show colors, but NO_COLOR asks for none
+    TScopedEnvironmentVariable noColor("NO_COLOR", "1");
+    auto config = MakeQuietConfig();
+
+    TColorDetectConsoleLog autoLogger;
+    autoLogger.StdOutSupportsColor = true;
+    autoLogger.StdErrSupportsColor = true;
+
+    TColorDetectConsoleLog alwaysLogger;
+    alwaysLogger.StdOutSupportsColor = true;
+    alwaysLogger.StdErrSupportsColor = true;
+    alwaysLogger.SetColorMode(ASWLog::ColorMode::Always);
+
+    // Act
+    std::string autoContents;
+    std::string alwaysContents;
+    bool autoInitialized = false;
+    bool alwaysInitialized = false;
+    {
+        TStreamCapture outCapture(std::cout);
+        autoInitialized = autoLogger.Initialize(config);
+        autoLogger.LogInfo("auto_message");
+        autoLogger.Close();
+        autoContents = outCapture.Str();
+    }
+    {
+        TStreamCapture outCapture(std::cout);
+        alwaysInitialized = alwaysLogger.Initialize(config);
+        alwaysLogger.LogInfo("always_message");
+        alwaysLogger.Close();
+        alwaysContents = outCapture.Str();
+    }
+
+    // Assert
+    CheckTrue(autoInitialized && alwaysInitialized, __func__, __LINE__, "Initialize should succeed");
+    CheckTrue(autoContents.find("\x1b[") == std::string::npos, __func__, __LINE__, "Auto should not color any stream when NO_COLOR is set");
+    CheckTrue(autoContents.find("auto_message") != std::string::npos, __func__, __LINE__, "The uncolored message should still be written");
+    CheckTrue(alwaysContents.find("\x1b[") != std::string::npos, __func__, __LINE__, "Always should color even when NO_COLOR is set");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_ConsoleLog::Test_ColorModeNever_SuppressesAnsiCodes()
+{
+    // Arrange: a stream that shows colors, so only Never can suppress them
+    auto config = MakeQuietConfig();
+
+    TColorDetectConsoleLog logger;
+    logger.StdOutSupportsColor = true;
+    logger.SetColorMode(ASWLog::ColorMode::Never);
+
+    // Act
+    TStreamCapture outCapture(std::cout);
+    const bool initialized = logger.Initialize(config);
+    logger.LogInfo("plain_message");
+    logger.Close();
+
+    const auto contents = outCapture.Str();
+
+    // Assert
+    CheckTrue(initialized, __func__, __LINE__, "Initialize should succeed");
+    CheckTrue(contents.find("\x1b[") == std::string::npos, __func__, __LINE__, "ColorMode::Never should suppress all ANSI escape codes");
+    CheckTrue(contents.find("plain_message") != std::string::npos, __func__, __LINE__, "The message should still be written");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_ConsoleLog::Test_GetColorMode_ReflectsSetColorMode()
 {
     // Arrange
     ASWLog::TASWConsoleLog logger;
 
     // Assert
-    CheckTrue(logger.GetUseColor(), __func__, __LINE__, "UseColor should default to true");
+    CheckTrue(logger.GetColorMode() == ASWLog::ColorMode::Auto, __func__, __LINE__, "ColorMode should default to Auto");
 
     // Act & Assert
-    logger.SetUseColor(false);
-    CheckFalse(logger.GetUseColor(), __func__, __LINE__, "SetUseColor(false) should be reflected by GetUseColor()");
+    logger.SetColorMode(ASWLog::ColorMode::Always);
+    CheckTrue(logger.GetColorMode() == ASWLog::ColorMode::Always, __func__, __LINE__, "SetColorMode(Always) should be reflected by GetColorMode()");
 
-    logger.SetUseColor(true);
-    CheckTrue(logger.GetUseColor(), __func__, __LINE__, "SetUseColor(true) should be reflected by GetUseColor()");
+    logger.SetColorMode(ASWLog::ColorMode::Never);
+    CheckTrue(logger.GetColorMode() == ASWLog::ColorMode::Never, __func__, __LINE__, "SetColorMode(Never) should be reflected by GetColorMode()");
+
+    logger.SetColorMode(ASWLog::ColorMode::Auto);
+    CheckTrue(logger.GetColorMode() == ASWLog::ColorMode::Auto, __func__, __LINE__, "SetColorMode(Auto) should be reflected by GetColorMode()");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_ConsoleLog::Test_Initialize_SuppressesInfoBannersBelowMinimumLevel()
@@ -170,7 +370,7 @@ void TTest_ASWLog_ConsoleLog::Test_Initialize_SuppressesInfoBannersBelowMinimumL
     // every internal Info-level banner writer, not just a subset.
 
     ASWLog::TASWConsoleLog logger;
-    logger.SetUseColor(false);
+    logger.SetColorMode(ASWLog::ColorMode::Never);
 
     // Act
     TStreamCapture outCapture(std::cout);
@@ -201,7 +401,7 @@ void TTest_ASWLog_ConsoleLog::Test_Initialize_WritesDriveInfoWhenEnabled()
     config.Init_LogDriveInfo = true;
 
     ASWLog::TASWConsoleLog logger;
-    logger.SetUseColor(false);
+    logger.SetColorMode(ASWLog::ColorMode::Never);
 
     // Act
     TStreamCapture outCapture(std::cout);
@@ -213,27 +413,29 @@ void TTest_ASWLog_ConsoleLog::Test_Initialize_WritesDriveInfoWhenEnabled()
     CheckTrue(outCapture.Str().find("Drive:") != std::string::npos, __func__, __LINE__, "Init_LogDriveInfo should write disk space diagnostics to the console when enabled");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_ConsoleLog::Test_IsColorSupported_ReflectsPlatformState()
+void TTest_ASWLog_ConsoleLog::Test_IsColorSupported_ReflectsDetectedStreams()
 {
     // Arrange
     auto config = MakeQuietConfig();
-    ASWLog::TASWConsoleLog logger;
+
+    TColorDetectConsoleLog noStreamLogger;
+
+    TColorDetectConsoleLog stdErrOnlyLogger;
+    stdErrOnlyLogger.StdErrSupportsColor = true;
 
     // Assert: color support is not yet determined before Initialize() runs
-    CheckFalse(logger.IsColorSupported(), __func__, __LINE__, "IsColorSupported should be false before Initialize() runs");
+    CheckFalse(stdErrOnlyLogger.IsColorSupported(), __func__, __LINE__, "IsColorSupported should be false before Initialize() runs");
 
     // Act
-    const bool initialized = logger.Initialize(config);
-    logger.Close();
+    const bool noStreamInitialized = noStreamLogger.Initialize(config);
+    const bool stdErrOnlyInitialized = stdErrOnlyLogger.Initialize(config);
+    noStreamLogger.Close();
+    stdErrOnlyLogger.Close();
 
     // Assert
-    CheckTrue(initialized, __func__, __LINE__, "Initialize should succeed");
-#if !defined(_WIN32)
-    // POSIX terminals accept ANSI escape codes natively, so this is unconditional there.
-    // On Windows it depends on whether a real console is attached (not the case when
-    // stdout/stderr are redirected, e.g. under a test harness), so it is not asserted here.
-    CheckTrue(logger.IsColorSupported(), __func__, __LINE__, "POSIX platforms should always report color as supported after Initialize()");
-#endif
+    CheckTrue(noStreamInitialized && stdErrOnlyInitialized, __func__, __LINE__, "Initialize should succeed");
+    CheckFalse(noStreamLogger.IsColorSupported(), __func__, __LINE__, "IsColorSupported should be false when neither stream shows colors");
+    CheckTrue(stdErrOnlyLogger.IsColorSupported(), __func__, __LINE__, "IsColorSupported should be true when either stream shows colors");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_ConsoleLog::Test_LogLineMetadata_Options()
@@ -248,7 +450,7 @@ void TTest_ASWLog_ConsoleLog::Test_LogLineMetadata_Options()
     config.LogSourceLine = true;
 
     ASWLog::TASWConsoleLog logger;
-    logger.SetUseColor(false);
+    logger.SetColorMode(ASWLog::ColorMode::Never);
 
     // Act
     TStreamCapture outCapture(std::cout);
@@ -274,7 +476,7 @@ void TTest_ASWLog_ConsoleLog::Test_LogRawAndForceOptions()
     auto config = MakeQuietConfig();
 
     ASWLog::TASWConsoleLog logger;
-    logger.SetUseColor(false);
+    logger.SetColorMode(ASWLog::ColorMode::Never);
 
     // Act
     TStreamCapture outCapture(std::cout);
@@ -302,7 +504,7 @@ void TTest_ASWLog_ConsoleLog::Test_LogRespectsMinimumLevel()
     config.InitialMinimumLevel = ASWLog::Level::Error;
 
     ASWLog::TASWConsoleLog logger;
-    logger.SetUseColor(false);
+    logger.SetColorMode(ASWLog::ColorMode::Never);
 
     // Act
     TStreamCapture outCapture(std::cout);
@@ -333,7 +535,7 @@ void TTest_ASWLog_ConsoleLog::Test_OnLogEntry_FiresForQualifyingLevelsOnly()
         };
 
     ASWLog::TASWConsoleLog logger;
-    logger.SetUseColor(false);
+    logger.SetColorMode(ASWLog::ColorMode::Never);
 
     // Act
     TStreamCapture outCapture(std::cout);
@@ -390,7 +592,7 @@ void TTest_ASWLog_ConsoleLog::Test_SetLevelColor_EmptyStringDisablesColorForLeve
     auto config = MakeQuietConfig();
 
     ASWLog::TASWConsoleLog logger;
-    logger.SetUseColor(true);
+    logger.SetColorMode(ASWLog::ColorMode::Always);
     logger.SetLevelColor(ASWLog::Level::Info, "");
 
     // Act
@@ -413,7 +615,7 @@ void TTest_ASWLog_ConsoleLog::Test_SetLevelColor_OverridesDefaultColor()
     auto config = MakeQuietConfig();
 
     ASWLog::TASWConsoleLog logger;
-    logger.SetUseColor(true);
+    logger.SetColorMode(ASWLog::ColorMode::Always);
 
     const std::string defaultInfoColor = logger.GetLevelColor(ASWLog::Level::Info);
     const std::string customColor = "\x1b[35m"; // magenta
@@ -437,54 +639,13 @@ void TTest_ASWLog_ConsoleLog::Test_SetLevelColor_OverridesDefaultColor()
     CheckTrue(contents.find(defaultInfoColor) == std::string::npos, __func__, __LINE__, "The default color should no longer appear for Info once overridden");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_ConsoleLog::Test_UseColor_False_SuppressesAnsiCodes()
-{
-    // Arrange
-    auto config = MakeQuietConfig();
-
-    ASWLog::TASWConsoleLog logger;
-    logger.SetUseColor(false);
-
-    // Act
-    TStreamCapture outCapture(std::cout);
-    const bool initialized = logger.Initialize(config);
-    logger.LogInfo("plain_message");
-    logger.Close();
-
-    const auto contents = outCapture.Str();
-
-    // Assert
-    CheckTrue(initialized, __func__, __LINE__, "Initialize should succeed");
-    CheckTrue(contents.find("\x1b[") == std::string::npos, __func__, __LINE__, "UseColor = false should suppress all ANSI escape codes");
-    CheckTrue(contents.find("plain_message") != std::string::npos, __func__, __LINE__, "The message should still be written");
-}
-//---------------------------------------------------------------------------
-void TTest_ASWLog_ConsoleLog::Test_UseColor_WrapsOutputWithAnsiCodes()
-{
-    // Arrange
-    auto config = MakeQuietConfig();
-
-    ASWLog::TASWConsoleLog logger;
-    logger.SetUseColor(true);
-
-    // Act
-    TStreamCapture outCapture(std::cout);
-    const bool initialized = logger.Initialize(config);
-    logger.LogInfo("colored_message");
-    logger.Close();
-
-    // Assert
-    CheckTrue(initialized, __func__, __LINE__, "Initialize should succeed");
-    CheckTrue(outCapture.Str().find("\x1b[") != std::string::npos, __func__, __LINE__, "UseColor should wrap output with ANSI escape codes");
-}
-//---------------------------------------------------------------------------
 void TTest_ASWLog_ConsoleLog::Test_WarnAndAboveWriteToStdErr()
 {
     // Arrange
     auto config = MakeQuietConfig();
 
     ASWLog::TASWConsoleLog logger;
-    logger.SetUseColor(false);
+    logger.SetColorMode(ASWLog::ColorMode::Never);
 
     // Act
     TStreamCapture outCapture(std::cout);

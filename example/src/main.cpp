@@ -144,7 +144,9 @@ int main(int argc, char* argv[])
     consoleConfig.WriteShutdownLog = false;
 
     ASWLog::TASWConsoleLog consoleLogger;
-    // consoleLogger.SetUseColor(false); // Uncomment on a terminal without ANSI support
+    // Colors are used only on a console or terminal that shows them (ColorMode::Auto, the default); uncomment to
+    // turn them off everywhere, or use ColorMode::Always to force them
+    // consoleLogger.SetColorMode(ASWLog::ColorMode::Never);
     if (consoleLogger.Initialize(consoleConfig))
     {
         consoleLogger.LogInfo("Console logger initialized - Info and below print to stdout.");

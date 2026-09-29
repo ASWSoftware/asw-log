@@ -39,6 +39,8 @@ namespace ASWUnitTests
 TTest_ASWLog_Types::TTest_ASWLog_Types()
     : inherited("ASWLog_Types_Tests")
 {
+    RegisterTest(&TTest_ASWLog_Types::Test_ColorMode_FromString, "ColorMode_FromString");
+    RegisterTest(&TTest_ASWLog_Types::Test_ColorMode_ToString, "ColorMode_ToString");
     RegisterTest(&TTest_ASWLog_Types::Test_FlushMode_FromString, "FlushMode_FromString");
     RegisterTest(&TTest_ASWLog_Types::Test_FlushMode_ToString, "FlushMode_ToString");
     RegisterTest(&TTest_ASWLog_Types::Test_Level_FromString, "Level_FromString");
@@ -70,6 +72,40 @@ void TTest_ASWLog_Types::TearDown_Test(ITestCase& /*testCase*/)
 
 // /////// Begin tests after this line ///////////////////////
 
+//---------------------------------------------------------------------------
+void TTest_ASWLog_Types::Test_ColorMode_FromString()
+{
+    // Arrange
+    const auto autoMode = ASWLog::ColorMode_FromString("AUTO");
+    const auto always = ASWLog::ColorMode_FromString("ALWAYS");
+    const auto never = ASWLog::ColorMode_FromString("NEVER");
+    const auto never_mixedCase = ASWLog::ColorMode_FromString("Never");
+    const auto unknown = ASWLog::ColorMode_FromString("SOMETIMES");
+
+    // Act & Assert
+    CheckTrue(autoMode.has_value(), __func__, __LINE__, "AUTO should parse");
+    CheckTrue(always.has_value(), __func__, __LINE__, "ALWAYS should parse");
+    CheckTrue(never.has_value(), __func__, __LINE__, "NEVER should parse");
+    CheckTrue(never_mixedCase.has_value(), __func__, __LINE__, "Never mixed case should parse");
+    CheckFalse(unknown.has_value(), __func__, __LINE__, "An unknown string should not parse");
+    CheckEquals(static_cast<int32_t>(ASWLog::ColorMode::Auto), static_cast<int32_t>(*autoMode), __func__, __LINE__, "AUTO should map to Auto");
+    CheckEquals(static_cast<int32_t>(ASWLog::ColorMode::Always), static_cast<int32_t>(*always), __func__, __LINE__, "ALWAYS should map to Always");
+    CheckEquals(static_cast<int32_t>(ASWLog::ColorMode::Never), static_cast<int32_t>(*never), __func__, __LINE__, "NEVER should map to Never");
+    CheckEquals(static_cast<int32_t>(ASWLog::ColorMode::Never), static_cast<int32_t>(*never_mixedCase), __func__, __LINE__, "Never should map to Never");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_Types::Test_ColorMode_ToString()
+{
+    // Arrange
+    const std::string autoMode = std::string(ASWLog::ColorMode_ToString(ASWLog::ColorMode::Auto));
+    const std::string always = std::string(ASWLog::ColorMode_ToString(ASWLog::ColorMode::Always));
+    const std::string never = std::string(ASWLog::ColorMode_ToString(ASWLog::ColorMode::Never));
+
+    // Act & Assert
+    CheckEquals(std::string("AUTO"), autoMode, __func__, __LINE__, "Auto should stringify as AUTO");
+    CheckEquals(std::string("ALWAYS"), always, __func__, __LINE__, "Always should stringify as ALWAYS");
+    CheckEquals(std::string("NEVER"), never, __func__, __LINE__, "Never should stringify as NEVER");
+}
 //---------------------------------------------------------------------------
 void TTest_ASWLog_Types::Test_FlushMode_FromString()
 {
