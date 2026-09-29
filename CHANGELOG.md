@@ -133,6 +133,15 @@ see [0.26.1](#0261---2026-09-17) for the initial versioned baseline.
   `ColorMode::Auto`, stdout and stderr are each colored only if they show
   colors, and not at all when the `NO_COLOR` environment variable is set
   (https://no-color.org).
+- Undefined behavior when logging through `TASWFileLog::GetInstance()` or
+  `TASWConsoleLog::GetInstance()` during static destruction, e.g. from another
+  static object's destructor or a thread still running at exit, since the
+  instance could already be destroyed. The instance is now never destroyed;
+  at exit it only writes the shutdown entry and closes, in the same order as
+  before. A static object constructed after the first `GetInstance()` call
+  can still log from its destructor; one constructed before it has its
+  entries dropped. Leak checkers that list memory still allocated at exit
+  (e.g. the MSVC debug heap's report) now include the instance.
 
 ## [0.26.4] - 2026-09-21
 

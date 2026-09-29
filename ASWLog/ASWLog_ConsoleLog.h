@@ -100,7 +100,9 @@ protected:
     }
 
 public: // Static methods
-    static TASWConsoleLog& GetInstance(); // Singleton support for the common static instance
+    // Singleton support for the common static instance. Never destroyed; finalized at exit in static destruction
+    // order, like TASWFileLog::GetInstance() (see there).
+    static TASWConsoleLog& GetInstance();
 
 public:
     TASWConsoleLog() = default;

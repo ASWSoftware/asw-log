@@ -43,6 +43,7 @@ private: // Test methods
     void Test_FailedReopen_RetriesAndResumesLogging();
     void Test_FailedReopen_ZeroResetDelayRetriesOnNextWrite();
     void Test_FailedSizeRotation_WaitsBeforeRetrying();
+    void Test_GetInstance_ReturnsSameInstance();
     void Test_InitializeAndLogInfo_WritesText();
     void Test_Initialize_SuppressesInfoBannersBelowMinimumLevel();
     void Test_LogFormatMethods_FormatsMessage();

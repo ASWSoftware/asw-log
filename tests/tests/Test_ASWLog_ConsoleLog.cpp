@@ -189,6 +189,7 @@ TTest_ASWLog_ConsoleLog::TTest_ASWLog_ConsoleLog()
     RegisterTest(&TTest_ASWLog_ConsoleLog::Test_ColorModeAuto_HonorsNoColor, "ColorModeAuto_HonorsNoColor");
     RegisterTest(&TTest_ASWLog_ConsoleLog::Test_ColorModeNever_SuppressesAnsiCodes, "ColorModeNever_SuppressesAnsiCodes");
     RegisterTest(&TTest_ASWLog_ConsoleLog::Test_GetColorMode_ReflectsSetColorMode, "GetColorMode_ReflectsSetColorMode");
+    RegisterTest(&TTest_ASWLog_ConsoleLog::Test_GetInstance_ReturnsSameInstance, "GetInstance_ReturnsSameInstance");
     RegisterTest(&TTest_ASWLog_ConsoleLog::Test_Initialize_SuppressesInfoBannersBelowMinimumLevel, "Initialize_SuppressesInfoBannersBelowMinimumLevel");
     RegisterTest(&TTest_ASWLog_ConsoleLog::Test_Initialize_WritesDriveInfoWhenEnabled, "Initialize_WritesDriveInfoWhenEnabled");
     RegisterTest(&TTest_ASWLog_ConsoleLog::Test_IsColorSupported_ReflectsDetectedStreams, "IsColorSupported_ReflectsDetectedStreams");
@@ -357,6 +358,16 @@ void TTest_ASWLog_ConsoleLog::Test_GetColorMode_ReflectsSetColorMode()
 
     logger.SetColorMode(ASWLog::ColorMode::Auto);
     CheckTrue(logger.GetColorMode() == ASWLog::ColorMode::Auto, __func__, __LINE__, "SetColorMode(Auto) should be reflected by GetColorMode()");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_ConsoleLog::Test_GetInstance_ReturnsSameInstance()
+{
+    // Act
+    auto& first = ASWLog::TASWConsoleLog::GetInstance();
+    auto& second = ASWLog::TASWConsoleLog::GetInstance();
+
+    // Assert
+    CheckTrue(&first == &second, __func__, __LINE__, "GetInstance should return the same logger on every call");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_ConsoleLog::Test_Initialize_SuppressesInfoBannersBelowMinimumLevel()

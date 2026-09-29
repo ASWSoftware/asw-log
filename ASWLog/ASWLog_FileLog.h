@@ -146,7 +146,13 @@ protected:
 
 public: // Static methods
     static std::size_t DeleteOldLogs(const std::filesystem::path& logDir, std::string_view pattern, std::chrono::hours maxAge);
-    static TASWFileLog& GetInstance(); // Singleton support for the common static instance
+    // Singleton support for the common static instance. The instance is never destroyed, so it is safe to use until
+    // the process ends, e.g. from another static object's destructor or a thread still running at exit. At exit it is
+    // finalized (shutdown entry, flush, close) in static destruction order: a static object constructed after the
+    // first GetInstance() call can still log from its destructor, while one constructed before it is destroyed after
+    // the finalize, so what it logs is dropped. Leak checkers that list memory still allocated at exit (e.g. the MSVC
+    // debug heap's report) include the instance.
+    static TASWFileLog& GetInstance();
 
 public:
     TASWFileLog() = default;

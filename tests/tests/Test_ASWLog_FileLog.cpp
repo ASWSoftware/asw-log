@@ -171,6 +171,7 @@ TTest_ASWLog_FileLog::TTest_ASWLog_FileLog()
     RegisterTest(&TTest_ASWLog_FileLog::Test_FailedReopen_RetriesAndResumesLogging, "FailedReopen_RetriesAndResumesLogging");
     RegisterTest(&TTest_ASWLog_FileLog::Test_FailedReopen_ZeroResetDelayRetriesOnNextWrite, "FailedReopen_ZeroResetDelayRetriesOnNextWrite");
     RegisterTest(&TTest_ASWLog_FileLog::Test_FailedSizeRotation_WaitsBeforeRetrying, "FailedSizeRotation_WaitsBeforeRetrying");
+    RegisterTest(&TTest_ASWLog_FileLog::Test_GetInstance_ReturnsSameInstance, "GetInstance_ReturnsSameInstance");
     RegisterTest(&TTest_ASWLog_FileLog::Test_InitializeAndLogInfo_WritesText, "InitializeAndLogInfo_WritesText");
     RegisterTest(&TTest_ASWLog_FileLog::Test_Initialize_SuppressesInfoBannersBelowMinimumLevel, "Initialize_SuppressesInfoBannersBelowMinimumLevel");
     RegisterTest(&TTest_ASWLog_FileLog::Test_LogFormatMethods_FormatsMessage, "LogFormatMethods_FormatsMessage");
@@ -483,6 +484,16 @@ void TTest_ASWLog_FileLog::Test_FailedSizeRotation_WaitsBeforeRetrying()
     CheckTrue(backupContents.find("line_three") != std::string::npos, __func__, __LINE__, "A failed rotation should not be retried before RotationRetryDelay has passed");
     CheckTrue(currentContents.find("line_four") != std::string::npos, __func__, __LINE__, "The entry after the retry interval should go to the new log file");
     CheckTrue(currentContents.find("line_three") == std::string::npos, __func__, __LINE__, "The new log file should only hold entries after the successful rotation");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_FileLog::Test_GetInstance_ReturnsSameInstance()
+{
+    // Act
+    auto& first = ASWLog::TASWFileLog::GetInstance();
+    auto& second = ASWLog::TASWFileLog::GetInstance();
+
+    // Assert
+    CheckTrue(&first == &second, __func__, __LINE__, "GetInstance should return the same logger on every call");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_FileLog::Test_InitializeAndLogInfo_WritesText()

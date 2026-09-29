@@ -49,6 +49,16 @@ public:
     }
 };
 
+// Static object example: logs through the singleton from its destructor, which runs after main returns
+class MyStaticClass
+{
+public:
+    ~MyStaticClass()
+    {
+        ASWLog::TASWFileLog::GetInstance().LogInfo("Static object destroyed after main returned.");
+    }
+};
+
 //---------------------------------------------------------------------------
 
 int main(int argc, char* argv[])
@@ -88,6 +98,10 @@ int main(int argc, char* argv[])
     }
 
     std::cout << "Using singleton logger: " << globalLogger.GetFullVersionStr() << "\n";
+
+    // A static object constructed after the first GetInstance() call is destroyed before the singleton is finalized at
+    // exit, so its destructor's entry is written just before the shutdown banner
+    static MyStaticClass staticObject;
 
     // Example of diverse log layers across different contextual zones
     globalLogger.LogTrace("Testing Trace log line layout parameters.");

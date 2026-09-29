@@ -26,6 +26,7 @@ limitations under the License.
 //---------------------------------------------------------------------------
 // System includes here
 #include <algorithm>
+#include <cstdlib>
 #include <filesystem>
 #include <format>
 #include <fstream>
@@ -434,8 +435,13 @@ bool TASWFileLog::FlushUnlocked()
 //---------------------------------------------------------------------------
 TASWFileLog& TASWFileLog::GetInstance()
 {
-    static TASWFileLog instance;
-    return instance;
+    // Never deleted, so the instance stays usable through static destruction. It is only finalized at exit, by a
+    // handler registered right after it is created, which runs where a static instance's destructor would have run.
+    static TASWFileLog* const instance = new TASWFileLog();
+    [[maybe_unused]] static const int atExitResult = std::atexit([] {
+            instance->Finalize();
+        });
+    return *instance;
 }
 
 //---------------------------------------------------------------------------
