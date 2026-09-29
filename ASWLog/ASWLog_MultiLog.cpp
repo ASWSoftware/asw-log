@@ -72,6 +72,34 @@ bool TASWMultiLog::Contains(const IASWLog& logger) const noexcept
 }
 
 //---------------------------------------------------------------------------
+/*
+    TASWMultiLog::FanOut
+
+    Calls 'logCall' with each registered sink. Never throws: a sink that throws (e.g. a custom IASWLog) doesn't stop
+    the others from receiving the entry, and doesn't throw into the application.
+*/
+template<typename TLogCall>
+void TASWMultiLog::FanOut(const TLogCall& logCall) const noexcept
+{
+    try
+    {
+        for (auto* sink : SnapshotSinks())
+        {
+            try
+            {
+                logCall(*sink);
+            }
+            catch (...)
+            {
+            }
+        }
+    }
+    catch (...)
+    {
+    }
+}
+
+//---------------------------------------------------------------------------
 std::size_t TASWMultiLog::GetLoggerCount() const noexcept
 {
     std::lock_guard<std::mutex> lock(m_ListMutex);
@@ -122,22 +150,25 @@ void TASWMultiLog::Log(Level level, std::string_view message, std::source_locati
     if (level < GetMinimumLevel())
         return;
 
-    for (auto* sink : SnapshotSinks())
-        sink->Log(level, message, loc);
+    FanOut([&](IASWLog& sink) {
+            sink.Log(level, message, loc);
+        });
 }
 
 //---------------------------------------------------------------------------
 void TASWMultiLog::LogForce(Level level, std::string_view message, std::source_location loc)
 {
-    for (auto* sink : SnapshotSinks())
-        sink->LogForce(level, message, loc);
+    FanOut([&](IASWLog& sink) {
+            sink.LogForce(level, message, loc);
+        });
 }
 
 //---------------------------------------------------------------------------
 void TASWMultiLog::LogForceRaw(Level level, std::string_view message, std::source_location loc)
 {
-    for (auto* sink : SnapshotSinks())
-        sink->LogForceRaw(level, message, loc);
+    FanOut([&](IASWLog& sink) {
+            sink.LogForceRaw(level, message, loc);
+        });
 }
 
 //---------------------------------------------------------------------------
@@ -146,8 +177,9 @@ void TASWMultiLog::LogRaw(Level level, std::string_view message, std::source_loc
     if (level < GetMinimumLevel())
         return;
 
-    for (auto* sink : SnapshotSinks())
-        sink->LogRaw(level, message, loc);
+    FanOut([&](IASWLog& sink) {
+            sink.LogRaw(level, message, loc);
+        });
 }
 
 //---------------------------------------------------------------------------

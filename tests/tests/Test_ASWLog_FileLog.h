@@ -38,6 +38,7 @@ private:
 private: // Test methods
     void Test_DailyRolling_KeepsExistingBackupForSameDate();
     void Test_DailyRolling_NamesBackupForContentDate();
+    void Test_DeleteOldLogs_MatchesNonASCIIFileNames();
     void Test_DeleteOldLogs_RemovesOldFiles();
     void Test_FailedReopen_RetriesAndResumesLogging();
     void Test_FailedReopen_ZeroResetDelayRetriesOnNextWrite();

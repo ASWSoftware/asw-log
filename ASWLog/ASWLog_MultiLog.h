@@ -65,6 +65,8 @@ private:
     mutable std::mutex m_ListMutex; // Protects only the sink list; each sink manages its own internal thread-safety.
 
 private:
+    template<typename TLogCall>
+    void FanOut(const TLogCall& logCall) const noexcept;
     std::vector<IASWLog*> SnapshotSinks() const;
 
 protected:

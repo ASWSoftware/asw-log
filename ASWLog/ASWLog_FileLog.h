@@ -123,8 +123,9 @@ private:
     void AppendLineEnding(std::string& line);
     bool CloseUnlocked();
     bool EnsureOpenForWriteUnlocked();
-    void Finalize();
+    void Finalize() noexcept;
     bool FlushUnlocked();
+    void LogEntry(Level level, std::string_view message, bool force, bool raw, bool includeNewLine, std::source_location loc) noexcept;
     void MaybeFlush(bool isNewLine);
     bool OpenUnlocked();
     bool RotateLogFilesUnlocked(std::string_view reasonTag, std::string_view timeLabel);

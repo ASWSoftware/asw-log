@@ -73,8 +73,9 @@ private:
     void AppendLineEnding(std::string& line);
     bool CloseUnlocked();
     void EnableAnsiColorSupport();
-    void Finalize();
+    void Finalize() noexcept;
     [[nodiscard]] std::string_view LevelColorUnlocked(Level level) const noexcept; // Caller must hold m_ConsoleMutex.
+    void LogEntry(Level level, std::string_view message, bool force, bool raw, bool includeNewLine, std::source_location loc) noexcept;
     bool OpenUnlocked();
     void WriteApplicationInfo();
     void WriteDriveInfo();

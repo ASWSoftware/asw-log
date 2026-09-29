@@ -43,6 +43,7 @@ private: // Test methods
     void Test_GetLoggers_ReturnsSnapshotOfRegisteredSinks();
     void Test_IsOpen_RequiresAllSinksOpen();
     void Test_Log_FansOutToAllRegisteredSinks();
+    void Test_Log_ThrowingSinkDoesNotStopOtherSinks();
     void Test_LogForce_BypassesCompositeGate();
     void Test_RemoveAllLoggers_ClearsRegistrationAndReturnsCount();
     void Test_RemoveLogger_StopsReceivingEntries();

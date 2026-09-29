@@ -24,7 +24,9 @@ limitations under the License.
 // Module header
 #include "Test_ASWLog_Base.h"
 //---------------------------------------------------------------------------
+#include <format>
 #include <source_location>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 //---------------------------------------------------------------------------
@@ -32,6 +34,34 @@ limitations under the License.
 //---------------------------------------------------------------------------
 #include "ASWLog_Base.h"
 //---------------------------------------------------------------------------
+
+namespace
+{
+
+// A value whose formatting throws, to check that the *Fmt methods don't throw
+struct TThrowingValue
+{
+    bool ThrowStdException = true; // Else throws an int, which isn't a std::exception
+};
+
+} // namespace
+
+template<>
+struct std::formatter<TThrowingValue>
+{
+    constexpr std::format_parse_context::iterator parse(std::format_parse_context& context)
+    {
+        return context.begin();
+    }
+
+    std::format_context::iterator format(const TThrowingValue& value, std::format_context& /*context*/) const
+    {
+        if (value.ThrowStdException)
+            throw std::runtime_error("formatter failed");
+
+        throw 42;
+    }
+};
 
 namespace ASWUnitTests
 {
@@ -118,6 +148,7 @@ TTest_ASWLog_Base::TTest_ASWLog_Base()
 {
     RegisterTest(&TTest_ASWLog_Base::Test_GetConfig_ReturnsLiveMutableReference, "GetConfig_ReturnsLiveMutableReference");
     RegisterTest(&TTest_ASWLog_Base::Test_GetFullVersionStr_ContainsVersion, "GetFullVersionStr_ContainsVersion");
+    RegisterTest(&TTest_ASWLog_Base::Test_LogFormatMethods_LogErrorInsteadOfThrowing, "LogFormatMethods_LogErrorInsteadOfThrowing");
     RegisterTest(&TTest_ASWLog_Base::Test_LogFormatMethods_PassCallerLocation, "LogFormatMethods_PassCallerLocation");
     RegisterTest(&TTest_ASWLog_Base::Test_LogLevelConvenienceMethods, "LogLevelConvenienceMethods");
     RegisterTest(&TTest_ASWLog_Base::Test_SetGetMinimumLevel_RoundTrips, "SetGetMinimumLevel_RoundTrips");
@@ -179,6 +210,40 @@ void TTest_ASWLog_Base::Test_GetFullVersionStr_ContainsVersion()
 
     // Assert
     CheckEquals(expected, version, __func__, __LINE__, "Full version string should combine the logger class name and the version number");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_Base::Test_LogFormatMethods_LogErrorInsteadOfThrowing()
+{
+    // Arrange
+    TTestLogger logger;
+    std::string wrongArgumentCountMessage;
+    std::string stdExceptionMessage;
+    std::string otherExceptionMessage;
+    bool threw = false;
+
+    // Act
+    try
+    {
+        logger.LogInfoFmt("bad {} {}", 1);
+        wrongArgumentCountMessage = logger.LastMessage;
+
+        logger.LogErrorFmt("value {}", TThrowingValue{ true });
+        stdExceptionMessage = logger.LastMessage;
+
+        logger.LogForceFmt(ASWLog::Level::Warn, "value {}", TThrowingValue{ false });
+        otherExceptionMessage = logger.LastMessage;
+    }
+    catch (...)
+    {
+        threw = true;
+    }
+
+    // Assert
+    CheckFalse(threw, __func__, __LINE__, "A *Fmt call should not throw when formatting fails");
+    CheckTrue(wrongArgumentCountMessage.starts_with("[ASWLog format error: "), __func__, __LINE__, "A format string that doesn't match its arguments should log the error: " + wrongArgumentCountMessage);
+    CheckTrue(wrongArgumentCountMessage.ends_with("] bad {} {}"), __func__, __LINE__, "The logged error should end with the format string: " + wrongArgumentCountMessage);
+    CheckEquals(std::string("[ASWLog format error: formatter failed] value {}"), stdExceptionMessage, __func__, __LINE__, "A std::exception from a formatter should be logged with its message");
+    CheckEquals(std::string("[ASWLog format error: unknown exception] value {}"), otherExceptionMessage, __func__, __LINE__, "Any other exception from a formatter should be logged too");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_Base::Test_LogFormatMethods_PassCallerLocation()

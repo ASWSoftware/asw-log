@@ -35,6 +35,8 @@ see [0.26.1](#0261---2026-09-17) for the initial versioned baseline.
 - `TASWLogConfig::RotationRetryDelay` (default 500 ms), how long
   `TASWFileLog` waits after a failed size rotation before trying to rotate
   again; 0 tries on every entry.
+- `PathToUTF8String()`, converting a `std::filesystem::path` to a UTF-8
+  string without throwing.
 
 ### Changed
 
@@ -90,6 +92,26 @@ see [0.26.1](#0261---2026-09-17) for the initial versioned baseline.
   The format string parameter is now a `TASWFormatString`, which captures the
   caller's location; string literals, `std::string`, and `std::string_view`
   format strings convert to it automatically.
+- Logging calls throwing exceptions into the application:
+  - A `*Fmt` call whose format string doesn't match its arguments, or whose
+    argument's formatter throws, now logs
+    `[ASWLog format error: <reason>] <format string>` instead of throwing
+    `std::format_error`.
+  - `TASWFileLog` and `TASWConsoleLog` drop an entry they fail to write
+    (e.g. out of memory) instead of throwing, and an exception while writing
+    the shutdown entry in their destructors can no longer terminate the
+    program.
+  - `TASWMultiLog` catches an exception from one of its loggers (e.g. a
+    custom `IASWLog`) and still logs to the others.
+- `DeleteOldLogs` (also run by `RetentionMaxAge` after a rotation) throwing
+  on file-system errors, and on file names the Windows ANSI code page can't
+  represent (seen with RAD Studio's library). It now skips entries it can't
+  read, and matches `pattern` against UTF-8 file names.
+- `Initialize()` able to throw on Windows when the executable's path has
+  characters the ANSI code page can't represent. The startup "App:" line and
+  `GetApplicationInfoString()` now write the path as UTF-8.
+- On Linux, reading unexpected `/proc/self/status` contents for the memory
+  information could throw.
 
 ## [0.26.4] - 2026-09-21
 

@@ -97,6 +97,15 @@ struct TSystemMemoryUsage
 
 [[nodiscard]] bool MatchesWildcard(std::string_view value, std::string_view pattern);
 
+/*
+    PathToUTF8String
+
+    Converts a path to a UTF-8 string. Unlike std::filesystem::path::string(), which converts to the Windows ANSI code
+    page and can throw for characters it can't represent, this never throws; it returns an empty string if the path
+    can't be converted.
+*/
+[[nodiscard]] std::string PathToUTF8String(const std::filesystem::path& path) noexcept;
+
 namespace Time
 {
 

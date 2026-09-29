@@ -126,23 +126,30 @@ void TASWConsoleLog::EnableAnsiColorSupport()
 }
 
 //---------------------------------------------------------------------------
-void TASWConsoleLog::Finalize()
+void TASWConsoleLog::Finalize() noexcept
 {
-    std::lock_guard<std::mutex> lock(m_ConsoleMutex);
-    if (!m_IsInitialized.load(std::memory_order_acquire))
-        return;
-
-    if (m_Config.WriteShutdownLog)
+    // Called from the destructor, where an exception would terminate the program
+    try
     {
-        std::string msg = "Logger shutdown: " + Time::ToISO8601String(NowUTC());
+        std::lock_guard<std::mutex> lock(m_ConsoleMutex);
+        if (!m_IsInitialized.load(std::memory_order_acquire))
+            return;
 
-        if (!m_Config.BannerMessage_Shutdown.empty())
-            msg += ", " + m_Config.BannerMessage_Shutdown;
+        if (m_Config.WriteShutdownLog)
+        {
+            std::string msg = "Logger shutdown: " + Time::ToISO8601String(NowUTC());
 
-        WriteLogEntry(Level::Info, msg, false, false, true, std::source_location::current());
+            if (!m_Config.BannerMessage_Shutdown.empty())
+                msg += ", " + m_Config.BannerMessage_Shutdown;
+
+            WriteLogEntry(Level::Info, msg, false, false, true, std::source_location::current());
+        }
+
+        CloseUnlocked();
     }
-
-    CloseUnlocked();
+    catch (...)
+    {
+    }
 }
 
 //---------------------------------------------------------------------------
@@ -217,49 +224,48 @@ void TASWConsoleLog::Log(Level level, std::string_view message, std::source_loca
     if (level < GetMinimumLevel())
         return;
 
-    std::string writtenLine;
+    LogEntry(level, message, false, false, true, loc);
+}
+
+//---------------------------------------------------------------------------
+/*
+    TASWConsoleLog::LogEntry
+
+    Writes one entry for the public Log* methods, then calls OnLogEntry. Never throws, so that logging can't throw
+    into the application: if writing fails (e.g. out of memory), the entry is dropped.
+*/
+void TASWConsoleLog::LogEntry(
+    Level level, std::string_view message, bool force, bool raw, bool includeNewLine, std::source_location loc) noexcept
+{
+    try
     {
-        std::lock_guard<std::mutex> lock(m_ConsoleMutex);
-        if (!m_IsInitialized.load(std::memory_order_acquire) || !m_IsOpen.load(std::memory_order_acquire))
-            return;
+        std::string writtenLine;
+        {
+            std::lock_guard<std::mutex> lock(m_ConsoleMutex);
+            if (!m_IsInitialized.load(std::memory_order_acquire) || !m_IsOpen.load(std::memory_order_acquire))
+                return;
 
-        writtenLine = WriteLogEntry(level, message, false, false, true, loc);
+            writtenLine = WriteLogEntry(level, message, force, raw, includeNewLine, loc);
+        }
+
+        if (!writtenLine.empty())
+            DispatchLogCallback(level, writtenLine);
     }
-
-    if (!writtenLine.empty())
-        DispatchLogCallback(level, writtenLine);
+    catch (...)
+    {
+    }
 }
 
 //---------------------------------------------------------------------------
 void TASWConsoleLog::LogForce(Level level, std::string_view message, std::source_location loc)
 {
-    std::string writtenLine;
-    {
-        std::lock_guard<std::mutex> lock(m_ConsoleMutex);
-        if (!m_IsInitialized.load(std::memory_order_acquire) || !m_IsOpen.load(std::memory_order_acquire))
-            return;
-
-        writtenLine = WriteLogEntry(level, message, true, false, true, loc);
-    }
-
-    if (!writtenLine.empty())
-        DispatchLogCallback(level, writtenLine);
+    LogEntry(level, message, true, false, true, loc);
 }
 
 //---------------------------------------------------------------------------
 void TASWConsoleLog::LogForceRaw(Level level, std::string_view message, std::source_location loc)
 {
-    std::string writtenLine;
-    {
-        std::lock_guard<std::mutex> lock(m_ConsoleMutex);
-        if (!m_IsInitialized.load(std::memory_order_acquire) || !m_IsOpen.load(std::memory_order_acquire))
-            return;
-
-        writtenLine = WriteLogEntry(level, message, true, true, false, loc);
-    }
-
-    if (!writtenLine.empty())
-        DispatchLogCallback(level, writtenLine);
+    LogEntry(level, message, true, true, false, loc);
 }
 
 //---------------------------------------------------------------------------
@@ -268,17 +274,7 @@ void TASWConsoleLog::LogRaw(Level level, std::string_view message, std::source_l
     if (level < GetMinimumLevel())
         return;
 
-    std::string writtenLine;
-    {
-        std::lock_guard<std::mutex> lock(m_ConsoleMutex);
-        if (!m_IsInitialized.load(std::memory_order_acquire) || !m_IsOpen.load(std::memory_order_acquire))
-            return;
-
-        writtenLine = WriteLogEntry(level, message, false, true, false, loc);
-    }
-
-    if (!writtenLine.empty())
-        DispatchLogCallback(level, writtenLine);
+    LogEntry(level, message, false, true, false, loc);
 }
 
 //---------------------------------------------------------------------------
@@ -334,7 +330,7 @@ void TASWConsoleLog::SetUseColor(bool useColor) noexcept
 //---------------------------------------------------------------------------
 void TASWConsoleLog::WriteApplicationInfo()
 {
-    auto applicationInfo = std::format("app_exe='{}', app_target=", GetExecutablePath().string());
+    auto applicationInfo = std::format("app_exe='{}', app_target=", PathToUTF8String(GetExecutablePath()));
 
 #if defined(_WIN64)
     applicationInfo += "Win64";

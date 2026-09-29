@@ -166,6 +166,7 @@ TTest_ASWLog_FileLog::TTest_ASWLog_FileLog()
 {
     RegisterTest(&TTest_ASWLog_FileLog::Test_DailyRolling_KeepsExistingBackupForSameDate, "DailyRolling_KeepsExistingBackupForSameDate");
     RegisterTest(&TTest_ASWLog_FileLog::Test_DailyRolling_NamesBackupForContentDate, "DailyRolling_NamesBackupForContentDate");
+    RegisterTest(&TTest_ASWLog_FileLog::Test_DeleteOldLogs_MatchesNonASCIIFileNames, "DeleteOldLogs_MatchesNonASCIIFileNames");
     RegisterTest(&TTest_ASWLog_FileLog::Test_DeleteOldLogs_RemovesOldFiles, "DeleteOldLogs_RemovesOldFiles");
     RegisterTest(&TTest_ASWLog_FileLog::Test_FailedReopen_RetriesAndResumesLogging, "FailedReopen_RetriesAndResumesLogging");
     RegisterTest(&TTest_ASWLog_FileLog::Test_FailedReopen_ZeroResetDelayRetriesOnNextWrite, "FailedReopen_ZeroResetDelayRetriesOnNextWrite");
@@ -282,6 +283,44 @@ void TTest_ASWLog_FileLog::Test_DailyRolling_NamesBackupForContentDate()
     CheckFalse(std::filesystem::exists(TestTempDir / "rolling.daily.2026-01-16.bak"), __func__, __LINE__, "The daily backup should not be named for the day that just started");
     CheckTrue(currentContents.find("day_two_entry") != std::string::npos, __func__, __LINE__, "The new day's entries should go to the reopened log file");
     CheckTrue(currentContents.find("day_one_entry") == std::string::npos, __func__, __LINE__, "The reopened log file should not contain the previous day's entries");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_FileLog::Test_DeleteOldLogs_MatchesNonASCIIFileNames()
+{
+    // Arrange: a file name with a character outside the Windows ANSI code page (Greek small lambda, U+03BB, which is
+    // CE BB in UTF-8). Written with escapes, and without a u8"" literal: MSVC builds turned both the raw character and
+    // u8"\xCE\xBB" into a different name. A wide hex escape is a UTF-16 code unit on every Windows compiler, and a
+    // POSIX file name is just bytes.
+#if defined(_WIN32)
+    const std::filesystem::path oldFileName = L"\x03BB_old_example.log";
+#else
+    const std::filesystem::path oldFileName = "\xCE\xBB_old_example.log";
+#endif
+    const auto oldFile = TestTempDir / oldFileName;
+    {
+        std::ofstream oldStream(oldFile);
+        oldStream << "old";
+    }
+    std::filesystem::last_write_time(oldFile, std::chrono::file_clock::now() - std::chrono::hours(2));
+
+    const std::string utf8Pattern = "\xCE\xBB_*example.log"; // U+03BB in UTF-8, then "_*example.log"
+    std::size_t deletedCount = 0;
+    bool threw = false;
+
+    // Act
+    try
+    {
+        deletedCount = ASWLog::TASWFileLog::DeleteOldLogs(TestTempDir, utf8Pattern, std::chrono::hours(1));
+    }
+    catch (...)
+    {
+        threw = true;
+    }
+
+    // Assert
+    CheckFalse(threw, __func__, __LINE__, "DeleteOldLogs should not throw for a file name the ANSI code page can't represent");
+    CheckEquals(static_cast<size_t>(1), deletedCount, __func__, __LINE__, "DeleteOldLogs should match UTF-8 patterns against UTF-8 file names");
+    CheckFalse(std::filesystem::exists(oldFile), __func__, __LINE__, "The matching old file should be removed");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_FileLog::Test_DeleteOldLogs_RemovesOldFiles()

@@ -324,7 +324,10 @@ bool TASWFileLog::CloseUnlocked()
 std::size_t TASWFileLog::DeleteOldLogs(
     const std::filesystem::path& logDir, std::string_view pattern, std::chrono::hours maxAge)
 {
-    if (!std::filesystem::exists(logDir) || !std::filesystem::is_directory(logDir))
+    // Never throws: uses the std::error_code overloads, skipping an entry it can't read and stopping if the folder can't
+    // be listed. File names are matched as UTF-8, since the ANSI code page conversion of path::string() can throw.
+    std::error_code errorCode;
+    if (!std::filesystem::is_directory(logDir, errorCode))
         return 0;
 
     // Don't allow root directory, such as "C:\"
@@ -334,21 +337,23 @@ std::size_t TASWFileLog::DeleteOldLogs(
     const auto cutoff = std::filesystem::file_time_type::clock::now() - maxAge;
     std::size_t deletedCount = 0;
 
-    for (const auto& entry : std::filesystem::directory_iterator(logDir))
+    std::filesystem::directory_iterator entries(logDir, errorCode);
+    for (const std::filesystem::directory_iterator end; !errorCode && entries != end; entries.increment(errorCode))
     {
-        if (!entry.is_regular_file())
+        const auto& entry = *entries;
+
+        std::error_code entryError;
+        if (!entry.is_regular_file(entryError))
             continue;
 
-        const auto filename = entry.path().filename().string();
-        const auto match = pattern.empty() || MatchesWildcard(filename, pattern);
+        const auto match = pattern.empty() || MatchesWildcard(PathToUTF8String(entry.path().filename()), pattern);
         if (!match)
             continue;
 
-        const auto lastWrite = std::filesystem::last_write_time(entry.path());
-        if (lastWrite < cutoff)
+        const auto lastWrite = entry.last_write_time(entryError);
+        if (!entryError && lastWrite < cutoff)
         {
-            std::error_code errorCode;
-            if (std::filesystem::remove(entry.path(), errorCode) && !errorCode)
+            if (std::filesystem::remove(entry.path(), entryError) && !entryError)
                 ++deletedCount;
         }
     }
@@ -382,23 +387,30 @@ bool TASWFileLog::EnsureOpenForWriteUnlocked()
 }
 
 //---------------------------------------------------------------------------
-void TASWFileLog::Finalize()
+void TASWFileLog::Finalize() noexcept
 {
-    std::lock_guard<std::mutex> lock(m_FileMutex);
-    if (!m_IsInitialized.load(std::memory_order_acquire))
-        return;
-
-    if (m_Config.WriteShutdownLog)
+    // Called from the destructor, where an exception would terminate the program
+    try
     {
-        std::string msg = "Logger shutdown: " + Time::ToISO8601String(NowUTC());
+        std::lock_guard<std::mutex> lock(m_FileMutex);
+        if (!m_IsInitialized.load(std::memory_order_acquire))
+            return;
 
-        if (!m_Config.BannerMessage_Shutdown.empty())
-            msg += ", " + m_Config.BannerMessage_Shutdown;
+        if (m_Config.WriteShutdownLog)
+        {
+            std::string msg = "Logger shutdown: " + Time::ToISO8601String(NowUTC());
 
-        WriteLogEntry(Level::Info, msg, false, false, true, std::source_location::current());
+            if (!m_Config.BannerMessage_Shutdown.empty())
+                msg += ", " + m_Config.BannerMessage_Shutdown;
+
+            WriteLogEntry(Level::Info, msg, false, false, true, std::source_location::current());
+        }
+
+        CloseUnlocked();
     }
-
-    CloseUnlocked();
+    catch (...)
+    {
+    }
 }
 
 //---------------------------------------------------------------------------
@@ -470,58 +482,51 @@ void TASWFileLog::Log(Level level, std::string_view message, std::source_locatio
     if (level < GetMinimumLevel())
         return;
 
-    std::string writtenLine;
+    LogEntry(level, message, false, false, true, loc);
+}
+
+//---------------------------------------------------------------------------
+/*
+    TASWFileLog::LogEntry
+
+    Writes one entry for the public Log* methods, then calls OnLogEntry. Never throws, so that logging can't throw
+    into the application: if writing fails (e.g. out of memory), the entry is dropped.
+*/
+void TASWFileLog::LogEntry(
+    Level level, std::string_view message, bool force, bool raw, bool includeNewLine, std::source_location loc) noexcept
+{
+    try
     {
-        std::lock_guard<std::mutex> lock(m_FileMutex);
-        if (!EnsureOpenForWriteUnlocked())
-            return;
+        std::string writtenLine;
+        {
+            std::lock_guard<std::mutex> lock(m_FileMutex);
+            if (!EnsureOpenForWriteUnlocked())
+                return;
 
-        writtenLine = WriteLogEntry(level, message, false, false, true, loc);
+            writtenLine = WriteLogEntry(level, message, force, raw, includeNewLine, loc);
 
-        if (m_Config.AutoOpenClosePerWrite)
-            CloseUnlocked();
+            if (m_Config.AutoOpenClosePerWrite)
+                CloseUnlocked();
+        }
+
+        if (!writtenLine.empty())
+            DispatchLogCallback(level, writtenLine);
     }
-
-    if (!writtenLine.empty())
-        DispatchLogCallback(level, writtenLine);
+    catch (...)
+    {
+    }
 }
 
 //---------------------------------------------------------------------------
 void TASWFileLog::LogForce(Level level, std::string_view message, std::source_location loc)
 {
-    std::string writtenLine;
-    {
-        std::lock_guard<std::mutex> lock(m_FileMutex);
-        if (!EnsureOpenForWriteUnlocked())
-            return;
-
-        writtenLine = WriteLogEntry(level, message, true, false, true, loc);
-
-        if (m_Config.AutoOpenClosePerWrite)
-            CloseUnlocked();
-    }
-
-    if (!writtenLine.empty())
-        DispatchLogCallback(level, writtenLine);
+    LogEntry(level, message, true, false, true, loc);
 }
 
 //---------------------------------------------------------------------------
 void TASWFileLog::LogForceRaw(Level level, std::string_view message, std::source_location loc)
 {
-    std::string writtenLine;
-    {
-        std::lock_guard<std::mutex> lock(m_FileMutex);
-        if (!EnsureOpenForWriteUnlocked())
-            return;
-
-        writtenLine = WriteLogEntry(level, message, true, true, false, loc);
-
-        if (m_Config.AutoOpenClosePerWrite)
-            CloseUnlocked();
-    }
-
-    if (!writtenLine.empty())
-        DispatchLogCallback(level, writtenLine);
+    LogEntry(level, message, true, true, false, loc);
 }
 
 //---------------------------------------------------------------------------
@@ -530,20 +535,7 @@ void TASWFileLog::LogRaw(Level level, std::string_view message, std::source_loca
     if (level < GetMinimumLevel())
         return;
 
-    std::string writtenLine;
-    {
-        std::lock_guard<std::mutex> lock(m_FileMutex);
-        if (!EnsureOpenForWriteUnlocked())
-            return;
-
-        writtenLine = WriteLogEntry(level, message, false, true, false, loc);
-
-        if (m_Config.AutoOpenClosePerWrite)
-            CloseUnlocked();
-    }
-
-    if (!writtenLine.empty())
-        DispatchLogCallback(level, writtenLine);
+    LogEntry(level, message, false, true, false, loc);
 }
 
 //---------------------------------------------------------------------------
@@ -658,7 +650,7 @@ bool TASWFileLog::RotateLogFilesUnlocked(std::string_view reasonTag, std::string
     if (m_Config.RetentionMaxAge.count() > 0)
     {
         DeleteOldLogs(m_Config.ResolveLogFileDir(),
-            std::format("{}.*.bak", m_Config.ResolveLogFilePath().stem().string()), m_Config.RetentionMaxAge);
+            std::format("{}.*.bak", PathToUTF8String(m_Config.ResolveLogFilePath().stem())), m_Config.RetentionMaxAge);
     }
 
     if (wasOpen)
@@ -670,7 +662,7 @@ bool TASWFileLog::RotateLogFilesUnlocked(std::string_view reasonTag, std::string
 //---------------------------------------------------------------------------
 void TASWFileLog::WriteApplicationInfo()
 {
-    auto applicationInfo = std::format("app_exe='{}', app_target=", GetExecutablePath().string());
+    auto applicationInfo = std::format("app_exe='{}', app_target=", PathToUTF8String(GetExecutablePath()));
 
 #if defined(_WIN64)
     applicationInfo += "Win64";

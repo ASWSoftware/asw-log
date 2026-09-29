@@ -28,7 +28,10 @@ limitations under the License.
 #include <filesystem>
 #include <fstream>
 #include <iterator>
+#include <source_location>
+#include <stdexcept>
 #include <string>
+#include <string_view>
 //---------------------------------------------------------------------------
 #include "ASWUnitTests_Registry.h"
 //---------------------------------------------------------------------------
@@ -44,6 +47,57 @@ namespace
 
 const auto GroupBaseTempDir = std::filesystem::temp_directory_path() / "aswlog_multilog_tests";
 const auto TestTempDir = GroupBaseTempDir / "test";
+
+// A sink whose logging methods all throw, standing in for a faulty custom IASWLog
+class TThrowingLogger final : public ASWLog::TASWLogBase
+{
+protected:
+    std::string_view GetLoggerClassName() const noexcept override
+    {
+        return "TThrowingLogger";
+    }
+
+public:
+    bool Initialize(const ASWLog::TASWLogConfig& /*config*/) override
+    {
+        return true;
+    }
+
+    bool Open() override
+    {
+        return true;
+    }
+
+    bool Close() override
+    {
+        return true;
+    }
+
+    bool IsOpen() const noexcept override
+    {
+        return true;
+    }
+
+    void Log(ASWLog::Level /*level*/, std::string_view /*message*/, std::source_location /*loc*/) override
+    {
+        throw std::runtime_error("sink failed");
+    }
+
+    void LogRaw(ASWLog::Level /*level*/, std::string_view /*message*/, std::source_location /*loc*/) override
+    {
+        throw std::runtime_error("sink failed");
+    }
+
+    void LogForce(ASWLog::Level /*level*/, std::string_view /*message*/, std::source_location /*loc*/) override
+    {
+        throw std::runtime_error("sink failed");
+    }
+
+    void LogForceRaw(ASWLog::Level /*level*/, std::string_view /*message*/, std::source_location /*loc*/) override
+    {
+        throw std::runtime_error("sink failed");
+    }
+};
 
 std::string ReadFileText(const std::filesystem::path& path)
 {
@@ -98,6 +152,7 @@ TTest_ASWLog_MultiLog::TTest_ASWLog_MultiLog()
     RegisterTest(&TTest_ASWLog_MultiLog::Test_GetLoggers_ReturnsSnapshotOfRegisteredSinks, "GetLoggers_ReturnsSnapshotOfRegisteredSinks");
     RegisterTest(&TTest_ASWLog_MultiLog::Test_IsOpen_RequiresAllSinksOpen, "IsOpen_RequiresAllSinksOpen");
     RegisterTest(&TTest_ASWLog_MultiLog::Test_Log_FansOutToAllRegisteredSinks, "Log_FansOutToAllRegisteredSinks");
+    RegisterTest(&TTest_ASWLog_MultiLog::Test_Log_ThrowingSinkDoesNotStopOtherSinks, "Log_ThrowingSinkDoesNotStopOtherSinks");
     RegisterTest(&TTest_ASWLog_MultiLog::Test_LogForce_BypassesCompositeGate, "LogForce_BypassesCompositeGate");
     RegisterTest(&TTest_ASWLog_MultiLog::Test_RemoveAllLoggers_ClearsRegistrationAndReturnsCount, "RemoveAllLoggers_ClearsRegistrationAndReturnsCount");
     RegisterTest(&TTest_ASWLog_MultiLog::Test_RemoveLogger_StopsReceivingEntries, "RemoveLogger_StopsReceivingEntries");
@@ -306,6 +361,44 @@ void TTest_ASWLog_MultiLog::Test_Log_FansOutToAllRegisteredSinks()
     // Assert
     CheckTrue(ReadFileText(fileA).find("fanned_out_message") != std::string::npos, __func__, __LINE__, "sinkA should receive the fanned-out message");
     CheckTrue(ReadFileText(fileB).find("fanned_out_message") != std::string::npos, __func__, __LINE__, "sinkB should receive the fanned-out message");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_MultiLog::Test_Log_ThrowingSinkDoesNotStopOtherSinks()
+{
+    // Arrange: the throwing sink is registered first, so it's called before the file sink
+    const auto file = TestTempDir / "after_throwing_sink.log";
+
+    TThrowingLogger throwingSink;
+    ASWLog::TASWFileLog fileSink;
+    CheckTrue(fileSink.Initialize(MakeFileConfig(TestTempDir, file, ASWLog::Level::Trace)), __func__, __LINE__, "fileSink should initialize");
+
+    ASWLog::TASWMultiLog multiLog;
+    multiLog.AddLogger(throwingSink);
+    multiLog.AddLogger(fileSink);
+
+    bool threw = false;
+
+    // Act
+    try
+    {
+        multiLog.LogInfo("log_message");
+        multiLog.LogRaw(ASWLog::Level::Info, "raw_message\n");
+        multiLog.LogForce(ASWLog::Level::Info, "force_message");
+        multiLog.LogForceRaw(ASWLog::Level::Info, "force_raw_message\n");
+    }
+    catch (...)
+    {
+        threw = true;
+    }
+    fileSink.Close();
+
+    // Assert
+    const auto contents = ReadFileText(file);
+    CheckFalse(threw, __func__, __LINE__, "An exception from one sink should not escape the composite");
+    CheckTrue(contents.find("log_message") != std::string::npos, __func__, __LINE__, "Log should still reach the other sinks");
+    CheckTrue(contents.find("raw_message") != std::string::npos, __func__, __LINE__, "LogRaw should still reach the other sinks");
+    CheckTrue(contents.find("force_message") != std::string::npos, __func__, __LINE__, "LogForce should still reach the other sinks");
+    CheckTrue(contents.find("force_raw_message") != std::string::npos, __func__, __LINE__, "LogForceRaw should still reach the other sinks");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_MultiLog::Test_LogForce_BypassesCompositeGate()

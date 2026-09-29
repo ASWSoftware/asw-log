@@ -26,6 +26,7 @@ limitations under the License.
 //---------------------------------------------------------------------------
 // System includes here
 #include <algorithm>
+#include <charconv>
 #include <chrono>
 #include <ctime>
 #include <filesystem>
@@ -47,6 +48,25 @@ limitations under the License.
 
 namespace ASWLog
 {
+
+#if !defined(_WIN32)
+namespace
+{
+
+// Returns the number in a /proc/self/status line such as "VmRSS:     1234 kB", or 0 if it has none.
+std::uint64_t ParseStatusLineKB(std::string_view line) noexcept
+{
+    const auto start = line.find_first_of("0123456789");
+    if (start == std::string_view::npos)
+        return 0;
+
+    std::uint64_t value = 0;
+    std::from_chars(line.data() + start, line.data() + line.size(), value);
+    return value;
+}
+
+} // namespace
+#endif
 
 //---------------------------------------------------------------------------
 std::string GenerateLogFileName(std::string_view prefix, std::string_view customPostfix)
@@ -100,7 +120,7 @@ std::string GenerateLogFileName(std::string_view prefix, std::string_view custom
 std::string GetApplicationInfoString()
 {
     auto exePath = GetExecutablePath();
-    return std::format("application_exe='{}', command_line='{}'", exePath.string(), GetCommandLineString());
+    return std::format("application_exe='{}', command_line='{}'", PathToUTF8String(exePath), GetCommandLineString());
 }
 
 //---------------------------------------------------------------------------
@@ -140,7 +160,8 @@ std::string GetCommandLineString()
 std::string GetDriveInfoString()
 {
     std::error_code errorCode;
-    auto freeSpace = std::filesystem::space(std::filesystem::current_path(), errorCode);
+    const auto currentPath = std::filesystem::current_path(errorCode);
+    auto freeSpace = std::filesystem::space(currentPath, errorCode);
     const auto totalMiB = freeSpace.capacity / (1024ULL * 1024ULL);
     const auto freeMiB = freeSpace.free / (1024ULL * 1024ULL);
     const auto usedMiB = totalMiB > freeMiB ? totalMiB - freeMiB : 0ULL;
@@ -189,9 +210,9 @@ TMemoryUsage GetMemoryUsage()
     while (std::getline(statusFile, line))
     {
         if (line.rfind("VmRSS:", 0) == 0)
-            residentSetKb = std::stoull(line.substr(line.find_first_of("0123456789")));
+            residentSetKb = ParseStatusLineKB(line);
         else if (line.rfind("VmHWM:", 0) == 0)
-            peakResidentSetKb = std::stoull(line.substr(line.find_first_of("0123456789")));
+            peakResidentSetKb = ParseStatusLineKB(line);
     }
 
     usage.WorkingSetBytes = static_cast<std::size_t>(residentSetKb * 1024ULL);
@@ -495,6 +516,20 @@ bool MatchesWildcard(std::string_view value, std::string_view pattern)
         ++patternIndex;
 
     return patternIndex == pattern.size();
+}
+
+//---------------------------------------------------------------------------
+std::string PathToUTF8String(const std::filesystem::path& path) noexcept
+{
+    try
+    {
+        const auto utf8 = path.u8string();
+        return std::string(utf8.begin(), utf8.end());
+    }
+    catch (...)
+    {
+        return {};
+    }
 }
 
 //---------------------------------------------------------------------------

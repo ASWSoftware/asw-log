@@ -28,8 +28,10 @@ limitations under the License.
 #define ASWLog_InterfaceH
 //---------------------------------------------------------------------------
 #include <concepts>
+#include <exception>
 #include <format>
 #include <source_location>
+#include <string>
 #include <string_view>
 //---------------------------------------------------------------------------
 #include "ASWLog_Config.h"
@@ -57,6 +59,38 @@ struct TASWFormatString
         : Format(format),
           Location(location)
     {
+    }
+
+    // Formats the message from 'args'. Never throws: if formatting fails (e.g. the format string doesn't match the
+    // arguments), returns "[ASWLog format error: <reason>] <format string>" instead, so the entry is still logged.
+    template<typename ... Args>
+    [[nodiscard]] std::string FormatMessage(Args&... args) const noexcept
+    {
+        try
+        {
+            return std::vformat(Format, std::make_format_args(args ...));
+        }
+        catch (const std::exception& error)
+        {
+            return DescribeFormatError(error.what());
+        }
+        catch (...)
+        {
+            return DescribeFormatError("unknown exception");
+        }
+    }
+
+private:
+    [[nodiscard]] std::string DescribeFormatError(std::string_view reason) const noexcept
+    {
+        try
+        {
+            return std::string("[ASWLog format error: ").append(reason).append("] ").append(Format);
+        }
+        catch (...)
+        {
+            return {}; // Out of memory: log an empty entry rather than throw
+        }
     }
 };
 
@@ -97,65 +131,66 @@ public:
     virtual void LogCritical(std::string_view msg, std::source_location loc = std::source_location::current()) = 0;
 
     // --- Non-virtual Inline Template Format Methods ---
-    // Each passes on the caller's source location, captured by TASWFormatString.
+    // Each passes on the caller's source location, captured by TASWFormatString. A formatting error is logged in place
+    // of the message instead of thrown (see TASWFormatString::FormatMessage()).
     template<typename ... Args>
     inline void LogFmt(Level level, TASWFormatString fmt, Args&&... args)
     {
-        Log(level, std::vformat(fmt.Format, std::make_format_args(args ...)), fmt.Location);
+        Log(level, fmt.FormatMessage(args ...), fmt.Location);
     }
 
     template<typename ... Args>
     inline void LogRawFmt(Level level, TASWFormatString fmt, Args&&... args)
     {
-        LogRaw(level, std::vformat(fmt.Format, std::make_format_args(args ...)), fmt.Location);
+        LogRaw(level, fmt.FormatMessage(args ...), fmt.Location);
     }
 
     template<typename ... Args>
     inline void LogForceFmt(Level level, TASWFormatString fmt, Args&&... args)
     {
-        LogForce(level, std::vformat(fmt.Format, std::make_format_args(args ...)), fmt.Location);
+        LogForce(level, fmt.FormatMessage(args ...), fmt.Location);
     }
 
     template<typename ... Args>
     inline void LogForceRawFmt(Level level, TASWFormatString fmt, Args&&... args)
     {
-        LogForceRaw(level, std::vformat(fmt.Format, std::make_format_args(args ...)), fmt.Location);
+        LogForceRaw(level, fmt.FormatMessage(args ...), fmt.Location);
     }
 
     template<typename ... Args>
     inline void LogTraceFmt(TASWFormatString fmt, Args&&... args)
     {
-        Log(Level::Trace, std::vformat(fmt.Format, std::make_format_args(args ...)), fmt.Location);
+        Log(Level::Trace, fmt.FormatMessage(args ...), fmt.Location);
     }
 
     template<typename ... Args>
     inline void LogDebugFmt(TASWFormatString fmt, Args&&... args)
     {
-        Log(Level::Debug, std::vformat(fmt.Format, std::make_format_args(args ...)), fmt.Location);
+        Log(Level::Debug, fmt.FormatMessage(args ...), fmt.Location);
     }
 
     template<typename ... Args>
     inline void LogInfoFmt(TASWFormatString fmt, Args&&... args)
     {
-        Log(Level::Info, std::vformat(fmt.Format, std::make_format_args(args ...)), fmt.Location);
+        Log(Level::Info, fmt.FormatMessage(args ...), fmt.Location);
     }
 
     template<typename ... Args>
     inline void LogWarnFmt(TASWFormatString fmt, Args&&... args)
     {
-        Log(Level::Warn, std::vformat(fmt.Format, std::make_format_args(args ...)), fmt.Location);
+        Log(Level::Warn, fmt.FormatMessage(args ...), fmt.Location);
     }
 
     template<typename ... Args>
     inline void LogErrorFmt(TASWFormatString fmt, Args&&... args)
     {
-        Log(Level::Error, std::vformat(fmt.Format, std::make_format_args(args ...)), fmt.Location);
+        Log(Level::Error, fmt.FormatMessage(args ...), fmt.Location);
     }
 
     template<typename ... Args>
     inline void LogCriticalFmt(TASWFormatString fmt, Args&&... args)
     {
-        Log(Level::Critical, std::vformat(fmt.Format, std::make_format_args(args ...)), fmt.Location);
+        Log(Level::Critical, fmt.FormatMessage(args ...), fmt.Location);
     }
 };
 
