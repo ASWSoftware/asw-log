@@ -25,6 +25,7 @@ limitations under the License.
 #include "Test_ASWLog_MultiLog.h"
 //---------------------------------------------------------------------------
 #include <algorithm>
+#include <atomic>
 #include <filesystem>
 #include <fstream>
 #include <iterator>
@@ -32,6 +33,8 @@ limitations under the License.
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <thread>
+#include <vector>
 //---------------------------------------------------------------------------
 #include "ASWUnitTests_Registry.h"
 //---------------------------------------------------------------------------
@@ -147,9 +150,11 @@ TTest_ASWLog_MultiLog::TTest_ASWLog_MultiLog()
 {
     RegisterTest(&TTest_ASWLog_MultiLog::Test_AddLogger_RejectsDuplicateRegistration, "AddLogger_RejectsDuplicateRegistration");
     RegisterTest(&TTest_ASWLog_MultiLog::Test_AddLogger_RejectsSelfRegistration, "AddLogger_RejectsSelfRegistration");
+    RegisterTest(&TTest_ASWLog_MultiLog::Test_Close_AllowsInitializeAgain, "Close_AllowsInitializeAgain");
     RegisterTest(&TTest_ASWLog_MultiLog::Test_Contains_ReflectsRegistrationState, "Contains_ReflectsRegistrationState");
     RegisterTest(&TTest_ASWLog_MultiLog::Test_GetLoggerCount_ReflectsAddAndRemove, "GetLoggerCount_ReflectsAddAndRemove");
     RegisterTest(&TTest_ASWLog_MultiLog::Test_GetLoggers_ReturnsSnapshotOfRegisteredSinks, "GetLoggers_ReturnsSnapshotOfRegisteredSinks");
+    RegisterTest(&TTest_ASWLog_MultiLog::Test_Initialize_ConcurrentCallsSucceedOnce, "Initialize_ConcurrentCallsSucceedOnce");
     RegisterTest(&TTest_ASWLog_MultiLog::Test_IsOpen_RequiresAllSinksOpen, "IsOpen_RequiresAllSinksOpen");
     RegisterTest(&TTest_ASWLog_MultiLog::Test_Log_FansOutToAllRegisteredSinks, "Log_FansOutToAllRegisteredSinks");
     RegisterTest(&TTest_ASWLog_MultiLog::Test_Log_ThrowingSinkDoesNotStopOtherSinks, "Log_ThrowingSinkDoesNotStopOtherSinks");
@@ -233,6 +238,29 @@ void TTest_ASWLog_MultiLog::Test_AddLogger_RejectsSelfRegistration()
     multiLog.LogInfo("no_recursion_expected");
 }
 //---------------------------------------------------------------------------
+void TTest_ASWLog_MultiLog::Test_Close_AllowsInitializeAgain()
+{
+    // Arrange
+    const auto fileA = TestTempDir / "reinitialize_sink.log";
+    ASWLog::TASWFileLog sinkA;
+    ASWLog::TASWMultiLog multiLog;
+    multiLog.AddLogger(sinkA);
+
+    // Act: initialize, close, then initialize again with a different level
+    const bool firstInitialize = multiLog.Initialize(MakeFileConfig(TestTempDir, fileA, ASWLog::Level::Warn));
+    multiLog.Close();
+    const bool secondInitialize = multiLog.Initialize(MakeFileConfig(TestTempDir, fileA, ASWLog::Level::Error));
+    const auto levelAfterSecondInitialize = multiLog.GetMinimumLevel();
+    multiLog.LogError("after_reinitialize");
+    multiLog.Close();
+
+    // Assert
+    CheckTrue(firstInitialize, __func__, __LINE__, "The first Initialize should succeed");
+    CheckTrue(secondInitialize, __func__, __LINE__, "Initialize after Close should succeed");
+    CheckTrue(levelAfterSecondInitialize == ASWLog::Level::Error, __func__, __LINE__, "Initialize after Close should seed the level from the new config");
+    CheckTrue(ReadFileText(fileA).find("after_reinitialize") != std::string::npos, __func__, __LINE__, "Initialize after Close should initialize the sinks again");
+}
+//---------------------------------------------------------------------------
 void TTest_ASWLog_MultiLog::Test_Contains_ReflectsRegistrationState()
 {
     // Arrange
@@ -311,6 +339,48 @@ void TTest_ASWLog_MultiLog::Test_GetLoggers_ReturnsSnapshotOfRegisteredSinks()
 
     sinkA.Close();
     sinkB.Close();
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_MultiLog::Test_Initialize_ConcurrentCallsSucceedOnce()
+{
+    // Arrange
+    constexpr int roundCount = 200;
+    constexpr int threadCount = 4;
+    int roundsWithOneSuccess = 0;
+
+    // A large config takes longer to copy, which widens the gap an unsynchronized check-then-set would leave
+    ASWLog::TASWLogConfig config;
+    config.BannerMessage_Init.assign(64 * 1024, 'x');
+
+    // Act: in each round, several threads call Initialize on a new composite at the same moment
+    for (int round = 0; round < roundCount; ++round)
+    {
+        ASWLog::TASWMultiLog multiLog;
+        std::atomic<bool> start{ false };
+        std::atomic<int> successCount{ 0 };
+
+        std::vector<std::thread> threads;
+        for (int index = 0; index < threadCount; ++index)
+        {
+            threads.emplace_back([&] {
+                    while (!start.load())
+                        std::this_thread::yield();
+
+                    if (multiLog.Initialize(config))
+                        ++successCount;
+                });
+        }
+
+        start.store(true);
+        for (auto& thread : threads)
+            thread.join();
+
+        if (successCount.load() == 1)
+            ++roundsWithOneSuccess;
+    }
+
+    // Assert
+    CheckEquals(roundCount, roundsWithOneSuccess, __func__, __LINE__, "Exactly one of the concurrent Initialize calls should succeed");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_MultiLog::Test_IsOpen_RequiresAllSinksOpen()

@@ -61,6 +61,12 @@ bool TASWMultiLog::Close()
             allSucceeded = false;
     }
 
+    // Like the other loggers, a closed composite can be initialized again
+    {
+        std::lock_guard<std::mutex> lock(m_StateMutex);
+        m_IsInitialized.store(false, std::memory_order_release);
+    }
+
     return allSucceeded;
 }
 
@@ -115,11 +121,15 @@ std::vector<IASWLog*> TASWMultiLog::GetLoggers() const
 //---------------------------------------------------------------------------
 bool TASWMultiLog::Initialize(const TASWLogConfig& config)
 {
-    if (m_IsInitialized.load(std::memory_order_acquire))
-        return false;
+    {
+        std::lock_guard<std::mutex> lock(m_StateMutex);
+        if (m_IsInitialized.load(std::memory_order_acquire))
+            return false;
 
-    m_Config = config;
-    m_MinimumLevel.store(m_Config.InitialMinimumLevel, std::memory_order_release);
+        m_Config = config;
+        m_MinimumLevel.store(m_Config.InitialMinimumLevel, std::memory_order_release);
+        m_IsInitialized.store(true, std::memory_order_release);
+    }
 
     bool allSucceeded = true;
     for (auto* sink : SnapshotSinks())
@@ -128,7 +138,6 @@ bool TASWMultiLog::Initialize(const TASWLogConfig& config)
             allSucceeded = false;
     }
 
-    m_IsInitialized.store(true, std::memory_order_release);
     return allSucceeded;
 }
 

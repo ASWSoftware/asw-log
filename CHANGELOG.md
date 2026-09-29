@@ -142,6 +142,10 @@ see [0.26.1](#0261---2026-09-17) for the initial versioned baseline.
   can still log from its destructor; one constructed before it has its
   entries dropped. Leak checkers that list memory still allocated at exit
   (e.g. the MSVC debug heap's report) now include the instance.
+- `TASWMultiLog::Initialize()` returning false after `Close()`, so a closed
+  composite couldn't be initialized again, unlike the other loggers.
+  Concurrent `Initialize()` calls could also all succeed and write the
+  configuration at the same time; now exactly one succeeds.
 
 ## [0.26.4] - 2026-09-21
 
