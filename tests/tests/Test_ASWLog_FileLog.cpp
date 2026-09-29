@@ -173,6 +173,7 @@ TTest_ASWLog_FileLog::TTest_ASWLog_FileLog()
     RegisterTest(&TTest_ASWLog_FileLog::Test_InitializeAndLogInfo_WritesText, "InitializeAndLogInfo_WritesText");
     RegisterTest(&TTest_ASWLog_FileLog::Test_Initialize_SuppressesInfoBannersBelowMinimumLevel, "Initialize_SuppressesInfoBannersBelowMinimumLevel");
     RegisterTest(&TTest_ASWLog_FileLog::Test_LogFormatMethods_FormatsMessage, "LogFormatMethods_FormatsMessage");
+    RegisterTest(&TTest_ASWLog_FileLog::Test_LogFormatMethods_WriteCallerSourceLine, "LogFormatMethods_WriteCallerSourceLine");
     RegisterTest(&TTest_ASWLog_FileLog::Test_LogLineMetadata_Options, "LogLineMetadata_Options");
     RegisterTest(&TTest_ASWLog_FileLog::Test_LogNewLineAndForceOptions, "LogNewLineAndForceOptions");
     RegisterTest(&TTest_ASWLog_FileLog::Test_LogRawOptions, "LogRawOptions");
@@ -552,6 +553,33 @@ void TTest_ASWLog_FileLog::Test_LogFormatMethods_FormatsMessage()
     CheckTrue(contents.find("value=42, suffix=done") != std::string::npos, __func__, __LINE__, "LogInfoFmt should format the message");
     CheckTrue(contents.find("trace ok") != std::string::npos, __func__, __LINE__, "LogTraceFmt should format the message");
     CheckTrue(contents.find("forced value") != std::string::npos, __func__, __LINE__, "LogForceFmt should bypass filter and format the message");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_FileLog::Test_LogFormatMethods_WriteCallerSourceLine()
+{
+    // Arrange
+    const auto logFile = TestTempDir / "fmt_location.log";
+
+    ASWLog::TASWLogConfig config;
+    config.LogsFolderPath = TestTempDir;
+    config.LogFilePath = logFile;
+    config.LogSourceLine = true;
+    config.OpenRetryCount = 1;
+
+    ASWLog::TASWFileLog logger;
+
+    // Act
+    const bool initialized = logger.Initialize(config);
+    const int callLine = __LINE__ + 1;
+    logger.LogInfoFmt("located {}", 1);
+    logger.Close();
+
+    // Assert
+    const auto contents = ReadFileText(logFile);
+    const auto expected = "[Test_ASWLog_FileLog.cpp:" + std::to_string(callLine) + "]: located 1";
+    CheckTrue(initialized, __func__, __LINE__, "Initialize should succeed");
+    CheckTrue(contents.find(expected) != std::string::npos, __func__, __LINE__, "LogSourceLine should show the file and line of the LogInfoFmt call: " + expected);
+    CheckTrue(contents.find("ASWLog_Interface.h") == std::string::npos, __func__, __LINE__, "LogSourceLine should not show the header that implements the *Fmt methods");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_FileLog::Test_LogLineMetadata_Options()

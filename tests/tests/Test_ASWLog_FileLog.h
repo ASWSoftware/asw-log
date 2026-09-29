@@ -45,6 +45,7 @@ private: // Test methods
     void Test_InitializeAndLogInfo_WritesText();
     void Test_Initialize_SuppressesInfoBannersBelowMinimumLevel();
     void Test_LogFormatMethods_FormatsMessage();
+    void Test_LogFormatMethods_WriteCallerSourceLine();
     void Test_LogLineMetadata_Options();
     void Test_LogNewLineAndForceOptions();
     void Test_LogRawOptions();

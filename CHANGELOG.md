@@ -84,6 +84,12 @@ see [0.26.1](#0261---2026-09-17) for the initial versioned baseline.
   be opened are dropped). A size rotation that fails is retried once
   `RotationRetryDelay` has passed, instead of on every entry; entries keep
   going to the current file meanwhile.
+- `LogSourceLine`/`LogMethodName` reporting a location inside
+  `ASWLog_Interface.h` for every `*Fmt` call (`LogInfoFmt`, `LogFmt`,
+  `LogForceRawFmt`, etc.) instead of the caller's file, line, and function.
+  The format string parameter is now a `TASWFormatString`, which captures the
+  caller's location; string literals, `std::string`, and `std::string_view`
+  format strings convert to it automatically.
 
 ## [0.26.4] - 2026-09-21
 

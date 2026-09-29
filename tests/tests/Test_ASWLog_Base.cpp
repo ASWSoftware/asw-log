@@ -24,7 +24,9 @@ limitations under the License.
 // Module header
 #include "Test_ASWLog_Base.h"
 //---------------------------------------------------------------------------
+#include <source_location>
 #include <string>
+#include <string_view>
 //---------------------------------------------------------------------------
 #include "ASWUnitTests_Registry.h"
 //---------------------------------------------------------------------------
@@ -45,6 +47,7 @@ private:
 public:
     ASWLog::Level LastLevel = ASWLog::Level::Info;
     std::string LastMessage;
+    std::source_location LastLocation;
 
 protected:
     std::string_view GetLoggerClassName() const noexcept override
@@ -80,9 +83,9 @@ public:
 
     void Log(ASWLog::Level level, std::string_view message, std::source_location loc = std::source_location::current()) override
     {
-        static_cast<void>(loc);
         LastLevel = level;
         LastMessage = std::string(message);
+        LastLocation = loc;
     }
 
     void LogRaw(ASWLog::Level level, std::string_view message, std::source_location loc = std::source_location::current()) override
@@ -115,6 +118,7 @@ TTest_ASWLog_Base::TTest_ASWLog_Base()
 {
     RegisterTest(&TTest_ASWLog_Base::Test_GetConfig_ReturnsLiveMutableReference, "GetConfig_ReturnsLiveMutableReference");
     RegisterTest(&TTest_ASWLog_Base::Test_GetFullVersionStr_ContainsVersion, "GetFullVersionStr_ContainsVersion");
+    RegisterTest(&TTest_ASWLog_Base::Test_LogFormatMethods_PassCallerLocation, "LogFormatMethods_PassCallerLocation");
     RegisterTest(&TTest_ASWLog_Base::Test_LogLevelConvenienceMethods, "LogLevelConvenienceMethods");
     RegisterTest(&TTest_ASWLog_Base::Test_SetGetMinimumLevel_RoundTrips, "SetGetMinimumLevel_RoundTrips");
 }
@@ -175,6 +179,65 @@ void TTest_ASWLog_Base::Test_GetFullVersionStr_ContainsVersion()
 
     // Assert
     CheckEquals(expected, version, __func__, __LINE__, "Full version string should combine the logger class name and the version number");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_Base::Test_LogFormatMethods_PassCallerLocation()
+{
+    // Arrange
+    TTestLogger logger;
+    const std::string testName = __func__;
+    const std::string thisFile = std::source_location::current().file_name();
+
+    // Checks the location and message the last *Fmt call passed to the logger
+    const auto checkCall = [&](int expectedLine, const std::string& method, const std::string& expectedMessage)
+        {
+            const auto& location = logger.LastLocation;
+            CheckEquals(expectedMessage, logger.LastMessage, testName, __LINE__, method + " should format the message");
+            CheckEquals(thisFile, std::string(location.file_name()), testName, __LINE__, method + " should pass the caller's file, not ASWLog_Interface.h");
+            CheckEquals(static_cast<int64_t>(expectedLine), static_cast<int64_t>(location.line()), testName, __LINE__, method + " should pass the caller's line");
+            CheckTrue(std::string_view(location.function_name()).find(testName) != std::string_view::npos, testName, __LINE__, method + " should pass the caller's function");
+        };
+
+    // Act and Assert: each expected line is the line after the one that records it
+    int line = __LINE__ + 1;
+    logger.LogFmt(ASWLog::Level::Info, "fmt {}", 1);
+    checkCall(line, "LogFmt", "fmt 1");
+
+    line = __LINE__ + 1;
+    logger.LogRawFmt(ASWLog::Level::Info, "raw {}", 2);
+    checkCall(line, "LogRawFmt", "raw 2");
+
+    line = __LINE__ + 1;
+    logger.LogForceFmt(ASWLog::Level::Info, "force {}", 3);
+    checkCall(line, "LogForceFmt", "force 3");
+
+    line = __LINE__ + 1;
+    logger.LogForceRawFmt(ASWLog::Level::Info, "force raw {}", 4);
+    checkCall(line, "LogForceRawFmt", "force raw 4");
+
+    line = __LINE__ + 1;
+    logger.LogTraceFmt("trace {}", 5);
+    checkCall(line, "LogTraceFmt", "trace 5");
+
+    line = __LINE__ + 1;
+    logger.LogDebugFmt("debug {}", 6);
+    checkCall(line, "LogDebugFmt", "debug 6");
+
+    line = __LINE__ + 1;
+    logger.LogInfoFmt("info {}", 7);
+    checkCall(line, "LogInfoFmt", "info 7");
+
+    line = __LINE__ + 1;
+    logger.LogWarnFmt("warn {}", 8);
+    checkCall(line, "LogWarnFmt", "warn 8");
+
+    line = __LINE__ + 1;
+    logger.LogErrorFmt("error {}", 9);
+    checkCall(line, "LogErrorFmt", "error 9");
+
+    line = __LINE__ + 1;
+    logger.LogCriticalFmt(std::string("critical {}"), 10); // A std::string format also converts
+    checkCall(line, "LogCriticalFmt", "critical 10");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_Base::Test_LogLevelConvenienceMethods()
