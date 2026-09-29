@@ -47,6 +47,9 @@ see [0.26.1](#0261---2026-09-17) for the initial versioned baseline.
   names the Home, Pro for Workstations, Enterprise LTSC, and Server
   Standard/Datacenter editions, and reports any other product type as
   "Server" or "Unknown" plus its product type number.
+- `ResolveLogFileDir_CustomFolder` unit test failing on Linux: it used a
+  backslash-separated path, which is only a separator on Windows. The
+  backslash case is now checked on Windows only.
 
 ## [0.26.4] - 2026-09-21
 
