@@ -46,6 +46,43 @@ namespace
 const auto GroupBaseTempDir = std::filesystem::temp_directory_path() / "aswlog_tests";
 const auto TestTempDir = GroupBaseTempDir / "test";
 
+// A TASWFileLog whose clock the test sets, through TASWLogBase's NowUTC() hook
+class TFixedClockFileLog : public ASWLog::TASWFileLog
+{
+public:
+    std::chrono::system_clock::time_point CurrentTime{};
+
+protected:
+    std::chrono::system_clock::time_point NowUTC() const noexcept override
+    {
+        return CurrentTime;
+    }
+};
+
+// A config for the rotation tests, with no line metadata or startup info, so each line is just its message
+ASWLog::TASWLogConfig MakeRotationTestConfig(const std::filesystem::path& logFile)
+{
+    ASWLog::TASWLogConfig config;
+    config.LogsFolderPath = TestTempDir;
+    config.LogFilePath = logFile;
+    config.InitialMinimumLevel = ASWLog::Level::Trace;
+    config.LogUTCDateTime = false;
+    config.LogLevelStr = false;
+    config.LogProcessId = false;
+    config.LogThreadId = false;
+    config.LogMethodName = false;
+    config.LogSourceLine = false;
+    config.Init_LogTimeInfo = false;
+    config.Init_LogOSInfo = false;
+    config.Init_LogDriveInfo = false;
+    config.Init_LogSysMemInfo = false;
+    config.Init_LogApplicationInfo = false;
+    config.Init_LogMemoryUsage = false;
+    config.OpenRetryCount = 1;
+    config.WriteShutdownLog = false;
+    return config;
+}
+
 std::string ReadFileText(const std::filesystem::path& path)
 {
     std::ifstream stream(path, std::ios::binary);
@@ -63,6 +100,8 @@ std::string ReadFileText(const std::filesystem::path& path)
 TTest_ASWLog_FileLog::TTest_ASWLog_FileLog()
     : inherited("ASWLog_FileLog_Tests")
 {
+    RegisterTest(&TTest_ASWLog_FileLog::Test_DailyRolling_KeepsExistingBackupForSameDate, "DailyRolling_KeepsExistingBackupForSameDate");
+    RegisterTest(&TTest_ASWLog_FileLog::Test_DailyRolling_NamesBackupForContentDate, "DailyRolling_NamesBackupForContentDate");
     RegisterTest(&TTest_ASWLog_FileLog::Test_DeleteOldLogs_RemovesOldFiles, "DeleteOldLogs_RemovesOldFiles");
     RegisterTest(&TTest_ASWLog_FileLog::Test_InitializeAndLogInfo_WritesText, "InitializeAndLogInfo_WritesText");
     RegisterTest(&TTest_ASWLog_FileLog::Test_Initialize_SuppressesInfoBannersBelowMinimumLevel, "Initialize_SuppressesInfoBannersBelowMinimumLevel");
@@ -76,6 +115,7 @@ TTest_ASWLog_FileLog::TTest_ASWLog_FileLog()
     RegisterTest(&TTest_ASWLog_FileLog::Test_OnLogEntry_ReentrantCallbackDoesNotDeadlock, "OnLogEntry_ReentrantCallbackDoesNotDeadlock");
     RegisterTest(&TTest_ASWLog_FileLog::Test_RetentionMaxAge_DefaultDisabledPreservesOldBackups, "RetentionMaxAge_DefaultDisabledPreservesOldBackups");
     RegisterTest(&TTest_ASWLog_FileLog::Test_RetentionMaxAge_DeletesExpiredBackupsAfterRotation, "RetentionMaxAge_DeletesExpiredBackupsAfterRotation");
+    RegisterTest(&TTest_ASWLog_FileLog::Test_RotateLogFiles_KeepsEveryBackup, "RotateLogFiles_KeepsEveryBackup");
 }
 //---------------------------------------------------------------------------
 TTest_ASWLog_FileLog::~TTest_ASWLog_FileLog()
@@ -109,6 +149,69 @@ void TTest_ASWLog_FileLog::TearDown_Test(ITestCase& testCase)
 
 // /////// Begin tests after this line ///////////////////////
 
+//---------------------------------------------------------------------------
+void TTest_ASWLog_FileLog::Test_DailyRolling_KeepsExistingBackupForSameDate()
+{
+    // Arrange
+    using namespace std::chrono_literals;
+    const auto logFile = TestTempDir / "rolling_existing.log";
+    auto config = MakeRotationTestConfig(logFile);
+    config.EnableDailyRolling = true;
+
+    // A backup for the same day already exists, e.g. left by an earlier run
+    const auto existingBackup = TestTempDir / "rolling_existing.daily.2026-01-15.bak";
+    {
+        std::ofstream existingStream(existingBackup);
+        existingStream << "earlier_backup";
+    }
+
+    const auto dayOne = std::chrono::sys_days{ 2026y / 1 / 15 };
+    TFixedClockFileLog logger;
+    logger.CurrentTime = dayOne + 23h + 59min;
+
+    // Act
+    const bool initialized = logger.Initialize(config);
+    logger.LogInfo("day_one_entry");
+    logger.CurrentTime = dayOne + 24h + 30s;
+    logger.LogInfo("day_two_entry");
+    logger.Close();
+
+    // Assert
+    const auto newBackupContents = ReadFileText(TestTempDir / "rolling_existing.daily.2026-01-15_1.bak");
+    CheckTrue(initialized, __func__, __LINE__, "Initialize should succeed");
+    CheckEquals(std::string("earlier_backup"), ReadFileText(existingBackup), __func__, __LINE__, "Daily rolling should not replace an existing backup for the same day");
+    CheckTrue(newBackupContents.find("day_one_entry") != std::string::npos, __func__, __LINE__, "Daily rolling should add _1 to the name when the day's backup already exists");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_FileLog::Test_DailyRolling_NamesBackupForContentDate()
+{
+    // Arrange
+    using namespace std::chrono_literals;
+    const auto logFile = TestTempDir / "rolling.log";
+    auto config = MakeRotationTestConfig(logFile);
+    config.EnableDailyRolling = true;
+
+    const auto dayOne = std::chrono::sys_days{ 2026y / 1 / 15 };
+    TFixedClockFileLog logger;
+    logger.CurrentTime = dayOne + 23h + 59min;
+
+    // Act: log just before and just after UTC midnight
+    const bool initialized = logger.Initialize(config);
+    logger.LogInfo("day_one_entry");
+    logger.CurrentTime = dayOne + 24h + 30s;
+    logger.LogInfo("day_two_entry");
+    logger.Close();
+
+    // Assert
+    const auto backupContents = ReadFileText(TestTempDir / "rolling.daily.2026-01-15.bak");
+    const auto currentContents = ReadFileText(logFile);
+    CheckTrue(initialized, __func__, __LINE__, "Initialize should succeed");
+    CheckTrue(backupContents.find("day_one_entry") != std::string::npos, __func__, __LINE__, "The daily backup should be named for the day its entries are from");
+    CheckTrue(backupContents.find("day_two_entry") == std::string::npos, __func__, __LINE__, "The daily backup should not contain entries from the new day");
+    CheckFalse(std::filesystem::exists(TestTempDir / "rolling.daily.2026-01-16.bak"), __func__, __LINE__, "The daily backup should not be named for the day that just started");
+    CheckTrue(currentContents.find("day_two_entry") != std::string::npos, __func__, __LINE__, "The new day's entries should go to the reopened log file");
+    CheckTrue(currentContents.find("day_one_entry") == std::string::npos, __func__, __LINE__, "The reopened log file should not contain the previous day's entries");
+}
 //---------------------------------------------------------------------------
 void TTest_ASWLog_FileLog::Test_DeleteOldLogs_RemovesOldFiles()
 {
@@ -667,6 +770,37 @@ void TTest_ASWLog_FileLog::Test_RetentionMaxAge_DeletesExpiredBackupsAfterRotati
     CheckTrue(rotated, __func__, __LINE__, "RotateLogFiles should succeed");
     CheckFalse(std::filesystem::exists(staleBackup), __func__, __LINE__, "Stale backup older than RetentionMaxAge should be deleted automatically after rotation");
     CheckTrue(std::filesystem::exists(logFile), __func__, __LINE__, "Log file should be recreated after rotation");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_FileLog::Test_RotateLogFiles_KeepsEveryBackup()
+{
+    // Arrange: a fixed clock makes both rotations want the same backup name
+    using namespace std::chrono_literals;
+    const auto logFile = TestTempDir / "rotate.log";
+    const auto config = MakeRotationTestConfig(logFile);
+
+    TFixedClockFileLog logger;
+    logger.CurrentTime = std::chrono::sys_days{ 2026y / 1 / 15 } + 10h + 30min + 5s + 250ms;
+
+    // Act
+    const bool initialized = logger.Initialize(config);
+    logger.LogInfo("first_segment");
+    const bool rotatedFirst = logger.RotateLogFiles("manual");
+    logger.LogInfo("second_segment");
+    const bool rotatedSecond = logger.RotateLogFiles("manual");
+    logger.LogInfo("third_segment");
+    logger.Close();
+
+    // Assert
+    const auto firstContents = ReadFileText(TestTempDir / "rotate.manual.2026-01-15_103005_250.bak");
+    const auto secondContents = ReadFileText(TestTempDir / "rotate.manual.2026-01-15_103005_250_1.bak");
+    CheckTrue(initialized, __func__, __LINE__, "Initialize should succeed");
+    CheckTrue(rotatedFirst, __func__, __LINE__, "The first RotateLogFiles should succeed");
+    CheckTrue(rotatedSecond, __func__, __LINE__, "The second RotateLogFiles should succeed");
+    CheckTrue(firstContents.find("first_segment") != std::string::npos, __func__, __LINE__, "The backup should be named <stem>.<reason>.<YYYY-MM-DD_HHMMSS_mmm>.bak and keep the first segment");
+    CheckTrue(firstContents.find("second_segment") == std::string::npos, __func__, __LINE__, "A second rotation should not replace the first backup");
+    CheckTrue(secondContents.find("second_segment") != std::string::npos, __func__, __LINE__, "A second rotation with a taken name should add _1 to the name");
+    CheckTrue(ReadFileText(logFile).find("third_segment") != std::string::npos, __func__, __LINE__, "Entries after the last rotation should go to the reopened log file");
 }
 //---------------------------------------------------------------------------
 

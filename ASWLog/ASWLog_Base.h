@@ -28,6 +28,7 @@ limitations under the License.
 #define ASWLog_BaseH
 //---------------------------------------------------------------------------
 #include <atomic>
+#include <chrono>
 //---------------------------------------------------------------------------
 #include "ASWLog_Interface.h"
 //---------------------------------------------------------------------------
@@ -53,6 +54,13 @@ protected:
 protected:
     // Pure virtual helper so the base class knows what implementation name to print
     virtual std::string_view GetLoggerClassName() const noexcept = 0;
+
+    // The current time, used for log line timestamps, daily rolling, and backup file names. Override it to control
+    // the logger's clock, e.g. in tests. A system_clock time point has no time zone (it counts from the UTC epoch).
+    virtual std::chrono::system_clock::time_point NowUTC() const noexcept
+    {
+        return std::chrono::system_clock::now();
+    }
 
 public:
     std::string_view GetVersionStr() const noexcept final

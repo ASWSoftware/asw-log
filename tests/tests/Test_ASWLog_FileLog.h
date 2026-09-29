@@ -36,6 +36,8 @@ private:
     typedef TTestGroupBase inherited;
 
 private: // Test methods
+    void Test_DailyRolling_KeepsExistingBackupForSameDate();
+    void Test_DailyRolling_NamesBackupForContentDate();
     void Test_DeleteOldLogs_RemovesOldFiles();
     void Test_InitializeAndLogInfo_WritesText();
     void Test_Initialize_SuppressesInfoBannersBelowMinimumLevel();
@@ -49,6 +51,7 @@ private: // Test methods
     void Test_OnLogEntry_ReentrantCallbackDoesNotDeadlock();
     void Test_RetentionMaxAge_DefaultDisabledPreservesOldBackups();
     void Test_RetentionMaxAge_DeletesExpiredBackupsAfterRotation();
+    void Test_RotateLogFiles_KeepsEveryBackup();
 
 public:
     TTest_ASWLog_FileLog();

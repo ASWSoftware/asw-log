@@ -134,7 +134,7 @@ void TASWConsoleLog::Finalize()
 
     if (m_Config.WriteShutdownLog)
     {
-        std::string msg = "Logger shutdown: " + Time::ToISO8601String(std::chrono::system_clock::now());
+        std::string msg = "Logger shutdown: " + Time::ToISO8601String(NowUTC());
 
         if (!m_Config.BannerMessage_Shutdown.empty())
             msg += ", " + m_Config.BannerMessage_Shutdown;
@@ -405,7 +405,7 @@ std::string TASWConsoleLog::WriteLogEntry(
     }
     else
     {
-        const auto now = std::chrono::system_clock::now();
+        const auto now = NowUTC();
 
         if (m_Config.LogUTCDateTime)
             std::format_to(std::back_inserter(line), "[{}]", Time::ToISO8601String(now));

@@ -25,6 +25,9 @@ see [0.26.1](#0261---2026-09-17) for the initial versioned baseline.
 - `.gitattributes`, normalizing line endings.
 - `GetWindowsEditionName()` (Windows only), naming the Windows edition for a
   `GetProductInfo()` product type, as used by `GetOSInfoString()`.
+- `TASWLogBase::NowUTC()`, a protected virtual returning the time the logger
+  uses for line timestamps, daily rolling, and backup names. A custom logger
+  or a test can override it to control the logger's clock.
 
 ### Changed
 
@@ -50,6 +53,15 @@ see [0.26.1](#0261---2026-09-17) for the initial versioned baseline.
 - `ResolveLogFileDir_CustomFolder` unit test failing on Linux: it used a
   backslash-separated path, which is only a separator on Windows. The
   backslash case is now checked on Windows only.
+- `TASWFileLog` rotation deleting an earlier backup when it rotated twice for
+  the same reason on the same day. Backups are now named
+  `<stem>.<reason>.YYYY-MM-DD_HHMMSS_mmm.bak` (UTC), with `_1`, `_2`, ...
+  added if that name is taken, and an existing backup is never replaced.
+- Daily rolling (`EnableDailyRolling`) naming the backup for the day that had
+  just started instead of the day its entries are from. Daily backups keep the
+  `<stem>.daily.YYYY-MM-DD.bak` form, with `_1`, `_2`, ... added if that day's
+  backup already exists. The day changes at UTC midnight, as it always has;
+  the `EnableDailyRolling` comment now says so.
 
 ## [0.26.4] - 2026-09-21
 

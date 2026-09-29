@@ -119,7 +119,7 @@ private:
     bool FlushUnlocked();
     void MaybeFlush(bool isNewLine);
     bool OpenUnlocked();
-    bool RotateLogFilesUnlocked(std::string_view reasonTag);
+    bool RotateLogFilesUnlocked(std::string_view reasonTag, std::string_view timeLabel);
     void WriteApplicationInfo();
     void WriteDriveInfo();
     void WriteInitializationInfo();
@@ -150,6 +150,8 @@ public:
     bool IsOpen() const noexcept override;
     bool Flush();
 
+    // Renames the log file to "<stem>.<reasonTag>.<YYYY-MM-DD_HHMMSS_mmm>.bak" (UTC), adding "_1", "_2", ... to the
+    // time if that name is taken, so an existing backup is never replaced. Then reopens the log if it was open.
     bool RotateLogFiles(std::string_view reasonTag = "manual");
 
     void Log(Level level, std::string_view message, std::source_location loc = std::source_location::current()) override;

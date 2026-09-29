@@ -83,7 +83,7 @@ struct TASWLogConfig
     // --- Log Rotation and Rolling Options ---
     bool EnableRotation       = false;
     std::uintmax_t MaxFileSizeBytes = 10 * 1024 * 1024; // Default 10MB
-    bool EnableDailyRolling   = false; // Rolls file over at midnight
+    bool EnableDailyRolling   = false; // Rolls the file over at UTC midnight; the backup is named for the day it holds
 
     // --- Log Retention Options (applied automatically after a successful rotation) ---
     std::chrono::hours RetentionMaxAge{ 0 }; // 0 = disabled. When > 0, backups for this log older than this age are deleted after each rotation.

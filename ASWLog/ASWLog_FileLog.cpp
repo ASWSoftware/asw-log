@@ -27,11 +27,13 @@ limitations under the License.
 // System includes here
 #include <algorithm>
 #include <filesystem>
+#include <format>
 #include <fstream>
 #include <iomanip>
 #include <iostream>
 #include <iterator>
 #include <sstream>
+#include <system_error>
 #include <thread>
 
 #if defined(_WIN32)
@@ -48,6 +50,50 @@ limitations under the License.
 
 namespace ASWLog
 {
+
+namespace
+{
+
+// How many "_N" suffixes are tried when a backup name is taken, before rotation gives up.
+constexpr int MaxBackupNameSuffix = 1000;
+
+// Returns the first unused backup path for 'logPath': "<stem>.<reasonTag>.<timeLabel>.bak", or with "_1", "_2", ...
+// appended to the time label if that is taken. Returns an empty path if every name is taken or the file system
+// can't be checked, so an existing backup is never replaced.
+std::filesystem::path FindFreeBackupPath(
+    const std::filesystem::path& logPath, std::string_view reasonTag, std::string_view timeLabel)
+{
+    for (int suffix = 0; suffix <= MaxBackupNameSuffix; ++suffix)
+    {
+        auto candidate = logPath;
+        if (suffix == 0)
+            candidate.replace_extension(std::format(".{}.{}.bak", reasonTag, timeLabel));
+        else
+            candidate.replace_extension(std::format(".{}.{}_{}.bak", reasonTag, timeLabel, suffix));
+
+        std::error_code errorCode;
+        const bool taken = std::filesystem::exists(candidate, errorCode);
+        if (errorCode)
+            return {};
+
+        if (!taken)
+            return candidate;
+    }
+
+    return {};
+}
+
+// Formats a UTC time for a backup file name: "YYYY-MM-DD_HHMMSS_mmm".
+std::string ToBackupTimeLabel(std::chrono::system_clock::time_point timePoint)
+{
+    // Cut from the ISO 8601 form "YYYY-MM-DDTHH:mm:ss.mmmZ", leaving out the characters not wanted in a file name
+    const auto isoTime = Time::ToISO8601String(timePoint);
+    const std::string_view iso(isoTime);
+    return std::format("{}_{}{}{}_{}", iso.substr(0, 10), iso.substr(11, 2), iso.substr(14, 2), iso.substr(17, 2),
+        iso.substr(20, 3));
+}
+
+} // namespace
 
 //---------------------------------------------------------------------------
 
@@ -275,7 +321,7 @@ void TASWFileLog::Finalize()
 
     if (m_Config.WriteShutdownLog)
     {
-        std::string msg = "Logger shutdown: " + Time::ToISO8601String(std::chrono::system_clock::now());
+        std::string msg = "Logger shutdown: " + Time::ToISO8601String(NowUTC());
 
         if (!m_Config.BannerMessage_Shutdown.empty())
             msg += ", " + m_Config.BannerMessage_Shutdown;
@@ -328,7 +374,7 @@ bool TASWFileLog::Initialize(const TASWLogConfig& config)
         return false;
     }
 
-    m_LastLogDateStr = Time::ToDateString(std::chrono::system_clock::now());
+    m_LastLogDateStr = Time::ToDateString(NowUTC());
 
     if (!m_Config.BannerMessage_Init.empty())
     {
@@ -533,7 +579,7 @@ bool TASWFileLog::OpenUnlocked()
 
     if (m_LastLogDateStr.empty())
     {
-        m_LastLogDateStr = Time::ToDateString(std::chrono::system_clock::now());
+        m_LastLogDateStr = Time::ToDateString(NowUTC());
     }
 
     m_IsOpen.store(true, std::memory_order_release);
@@ -546,11 +592,11 @@ bool TASWFileLog::OpenUnlocked()
 bool TASWFileLog::RotateLogFiles(std::string_view reasonTag)
 {
     std::lock_guard<std::mutex> lock(m_FileMutex);
-    return RotateLogFilesUnlocked(reasonTag);
+    return RotateLogFilesUnlocked(reasonTag, ToBackupTimeLabel(NowUTC()));
 }
 
 //---------------------------------------------------------------------------
-bool TASWFileLog::RotateLogFilesUnlocked(std::string_view reasonTag)
+bool TASWFileLog::RotateLogFilesUnlocked(std::string_view reasonTag, std::string_view timeLabel)
 {
     const bool wasOpen = m_FileStream.IsOpen();
     if (wasOpen)
@@ -559,17 +605,16 @@ bool TASWFileLog::RotateLogFilesUnlocked(std::string_view reasonTag)
         m_IsOpen.store(false, std::memory_order_release);
     }
 
-    const auto now = std::chrono::system_clock::now();
-    const auto timeStr = Time::ToDateString(now);
-    auto backupPath = m_Config.ResolveLogFilePath();
-    backupPath.replace_extension(std::format(".{}.{}.bak", reasonTag, timeStr));
+    const auto logPath = m_Config.ResolveLogFilePath();
 
     std::error_code errorCode;
-    std::filesystem::remove(backupPath, errorCode);
-    errorCode.clear();
-    if (std::filesystem::exists(m_Config.ResolveLogFilePath(), errorCode))
+    if (std::filesystem::exists(logPath, errorCode))
     {
-        std::filesystem::rename(m_Config.ResolveLogFilePath(), backupPath, errorCode);
+        const auto backupPath = FindFreeBackupPath(logPath, reasonTag, timeLabel);
+        if (backupPath.empty())
+            errorCode = std::make_error_code(std::errc::file_exists);
+        else
+            std::filesystem::rename(logPath, backupPath, errorCode);
     }
 
     if (errorCode)
@@ -654,14 +699,15 @@ std::string TASWFileLog::WriteLogEntry(
     if (!force && level < GetMinimumLevel())
         return {};
 
-    auto now = std::chrono::system_clock::now();
+    const auto now = NowUTC();
 
     if (m_Config.EnableDailyRolling)
     {
         const auto currentDateStr = Time::ToDateString(now);
         if (currentDateStr != m_LastLogDateStr)
         {
-            RotateLogFilesUnlocked("daily");
+            // Name the backup for the day its content is from, not the day that just started
+            RotateLogFilesUnlocked("daily", m_LastLogDateStr);
             m_LastLogDateStr = currentDateStr;
         }
     }
@@ -672,7 +718,7 @@ std::string TASWFileLog::WriteLogEntry(
     {
         if (std::filesystem::file_size(effectivePath) >= m_Config.MaxFileSizeBytes)
         {
-            RotateLogFilesUnlocked("size");
+            RotateLogFilesUnlocked("size", ToBackupTimeLabel(now));
         }
     }
 
