@@ -39,6 +39,7 @@ private: // Test methods
     void Test_GenerateLogFileName_ContainsExpectedFields();
     void Test_GenerateLogFileName_PrefixAndPostfixAreOptional();
     void Test_GetOSInfoString_ContainsEdition();
+    void Test_GetWindowsEditionName_ProductTypes();
     void Test_MatchesWildcard_Patterns();
     void Test_Time_ToDateString();
     void Test_Time_ToISO8601String();

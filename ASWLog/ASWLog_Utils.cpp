@@ -221,14 +221,16 @@ std::string GetOSInfoString()
     // Cast through the generic function pointer type void (*)() so GCC's -Wcast-function-type accepts converting
     // GetProcAddress()'s FARPROC to the real signature.
     const auto rtlGetVersion = reinterpret_cast<RtlGetVersionFunction>(reinterpret_cast<void (*)()>(rtlGetVersionProc));
-    RTL_OSVERSIONINFOW versionInfo{};
+    // The EX form (accepted by RtlGetVersion when dwOSVersionInfoSize says so) adds wProductType, used below to
+    // recognize a server edition that the product type table doesn't name.
+    RTL_OSVERSIONINFOEXW versionInfo{};
 #endif
     versionInfo.dwOSVersionInfoSize = sizeof(versionInfo);
 
 #if defined(USE_GET_VERSION_EX)
     if (GetVersionExW(reinterpret_cast<LPOSVERSIONINFOW>(&versionInfo)))
 #else
-    if (rtlGetVersion != nullptr && rtlGetVersion(&versionInfo) == 0)
+    if (rtlGetVersion != nullptr && rtlGetVersion(reinterpret_cast<PRTL_OSVERSIONINFOW>(&versionInfo)) == 0)
 #endif
     {
         const auto major = versionInfo.dwMajorVersion;
@@ -253,56 +255,11 @@ std::string GetOSInfoString()
                 break;
         }
 
-        DWORD editionId = 0;
-        std::string edition = "Unknown";
+        DWORD productType = 0;
+        if (!GetProductInfo(major, minor, 0, 0, &productType))
+            productType = 0; // PRODUCT_UNDEFINED
 
-        if (GetProductInfo(major, minor, 0, 0, &editionId))
-        {
-#if defined(PRODUCT_ULTIMATE)
-            if (editionId == PRODUCT_ULTIMATE)
-                edition = "Ultimate";
-#endif
-#if defined(PRODUCT_HOME_BASIC)
-            if (editionId == PRODUCT_HOME_BASIC)
-                edition = "Home";
-#endif
-#if defined(PRODUCT_HOME_PREMIUM)
-            if (editionId == PRODUCT_HOME_PREMIUM)
-                edition = "Home";
-#endif
-#if defined(PRODUCT_PROFESSIONAL)
-            if (editionId == PRODUCT_PROFESSIONAL)
-                edition = "Pro";
-#endif
-#if defined(PRODUCT_PROFESSIONAL_N)
-            if (editionId == PRODUCT_PROFESSIONAL_N)
-                edition = "Pro N";
-#endif
-#if defined(PRODUCT_ENTERPRISE)
-            if (editionId == PRODUCT_ENTERPRISE)
-                edition = "Enterprise";
-#endif
-#if defined(PRODUCT_ENTERPRISE_N)
-            if (editionId == PRODUCT_ENTERPRISE_N)
-                edition = "Enterprise N";
-#endif
-#if defined(PRODUCT_EDUCATION)
-            if (editionId == PRODUCT_EDUCATION)
-                edition = "Education";
-#endif
-#if defined(PRODUCT_EDUCATION_N)
-            if (editionId == PRODUCT_EDUCATION_N)
-                edition = "Education N";
-#endif
-#if defined(PRODUCT_SERVER)
-            if (editionId == PRODUCT_SERVER)
-                edition = "Server";
-#endif
-#if defined(PRODUCT_SERVER_CORE)
-            if (editionId == PRODUCT_SERVER_CORE)
-                edition = "Server Core";
-#endif
-        }
+        const auto edition = GetWindowsEditionName(productType, versionInfo.wProductType != VER_NT_WORKSTATION);
 
         return std::format("Windows {}.{} {} (build {}), arch={}", major, minor, edition, build, arch);
     }
@@ -385,6 +342,118 @@ std::string GetTimeInfoString()
             localTime.tm_sec),
         offsetMinutes);
 }
+
+//---------------------------------------------------------------------------
+#if defined(_WIN32)
+std::string GetWindowsEditionName(std::uint32_t productType, bool isServer)
+{
+    std::string edition;
+
+#if defined(PRODUCT_ULTIMATE)
+    if (productType == PRODUCT_ULTIMATE)
+        edition = "Ultimate";
+#endif
+#if defined(PRODUCT_HOME_BASIC)
+    if (productType == PRODUCT_HOME_BASIC)
+        edition = "Home";
+#endif
+#if defined(PRODUCT_HOME_PREMIUM)
+    if (productType == PRODUCT_HOME_PREMIUM)
+        edition = "Home";
+#endif
+#if defined(PRODUCT_CORE)
+    if (productType == PRODUCT_CORE)
+        edition = "Home";
+#endif
+#if defined(PRODUCT_CORE_N)
+    if (productType == PRODUCT_CORE_N)
+        edition = "Home N";
+#endif
+#if defined(PRODUCT_CORE_SINGLELANGUAGE)
+    if (productType == PRODUCT_CORE_SINGLELANGUAGE)
+        edition = "Home Single Language";
+#endif
+#if defined(PRODUCT_CORE_COUNTRYSPECIFIC)
+    if (productType == PRODUCT_CORE_COUNTRYSPECIFIC)
+        edition = "Home China";
+#endif
+#if defined(PRODUCT_PROFESSIONAL)
+    if (productType == PRODUCT_PROFESSIONAL)
+        edition = "Pro";
+#endif
+#if defined(PRODUCT_PROFESSIONAL_N)
+    if (productType == PRODUCT_PROFESSIONAL_N)
+        edition = "Pro N";
+#endif
+#if defined(PRODUCT_PRO_WORKSTATION)
+    if (productType == PRODUCT_PRO_WORKSTATION)
+        edition = "Pro for Workstations";
+#endif
+#if defined(PRODUCT_PRO_WORKSTATION_N)
+    if (productType == PRODUCT_PRO_WORKSTATION_N)
+        edition = "Pro for Workstations N";
+#endif
+#if defined(PRODUCT_ENTERPRISE)
+    if (productType == PRODUCT_ENTERPRISE)
+        edition = "Enterprise";
+#endif
+#if defined(PRODUCT_ENTERPRISE_N)
+    if (productType == PRODUCT_ENTERPRISE_N)
+        edition = "Enterprise N";
+#endif
+#if defined(PRODUCT_ENTERPRISE_S)
+    if (productType == PRODUCT_ENTERPRISE_S)
+        edition = "Enterprise LTSC";
+#endif
+#if defined(PRODUCT_ENTERPRISE_S_N)
+    if (productType == PRODUCT_ENTERPRISE_S_N)
+        edition = "Enterprise N LTSC";
+#endif
+#if defined(PRODUCT_EDUCATION)
+    if (productType == PRODUCT_EDUCATION)
+        edition = "Education";
+#endif
+#if defined(PRODUCT_EDUCATION_N)
+    if (productType == PRODUCT_EDUCATION_N)
+        edition = "Education N";
+#endif
+#if defined(PRODUCT_STANDARD_SERVER)
+    if (productType == PRODUCT_STANDARD_SERVER)
+        edition = "Server Standard";
+#endif
+#if defined(PRODUCT_STANDARD_SERVER_CORE)
+    if (productType == PRODUCT_STANDARD_SERVER_CORE)
+        edition = "Server Standard Core";
+#endif
+#if defined(PRODUCT_STANDARD_EVALUATION_SERVER)
+    if (productType == PRODUCT_STANDARD_EVALUATION_SERVER)
+        edition = "Server Standard Evaluation";
+#endif
+#if defined(PRODUCT_DATACENTER_SERVER)
+    if (productType == PRODUCT_DATACENTER_SERVER)
+        edition = "Server Datacenter";
+#endif
+#if defined(PRODUCT_DATACENTER_SERVER_CORE)
+    if (productType == PRODUCT_DATACENTER_SERVER_CORE)
+        edition = "Server Datacenter Core";
+#endif
+#if defined(PRODUCT_DATACENTER_EVALUATION_SERVER)
+    if (productType == PRODUCT_DATACENTER_EVALUATION_SERVER)
+        edition = "Server Datacenter Evaluation";
+#endif
+#if defined(PRODUCT_DATACENTER_SERVER_AZURE_EDITION)
+    if (productType == PRODUCT_DATACENTER_SERVER_AZURE_EDITION)
+        edition = "Server Datacenter: Azure Edition";
+#endif
+
+    // Product types not listed above (there are many niche ones) still say whether this is a server, plus the raw
+    // product type so the exact edition can be looked up.
+    if (edition.empty())
+        edition = std::format("{} (product type 0x{:X})", isServer ? "Server" : "Unknown", productType);
+
+    return edition;
+}
+#endif
 
 //---------------------------------------------------------------------------
 bool MatchesWildcard(std::string_view value, std::string_view pattern)

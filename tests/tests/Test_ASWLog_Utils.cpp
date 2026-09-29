@@ -28,6 +28,10 @@ limitations under the License.
 //---------------------------------------------------------------------------
 #include <chrono>
 #include <string>
+
+#if defined(_WIN32)
+#include <windows.h>
+#endif
 //---------------------------------------------------------------------------
 #include "ASWUnitTests_Registry.h"
 //---------------------------------------------------------------------------
@@ -42,6 +46,7 @@ TTest_ASWLog_Utils::TTest_ASWLog_Utils()
     RegisterTest(&TTest_ASWLog_Utils::Test_GenerateLogFileName_ContainsExpectedFields, "GenerateLogFileName_ContainsExpectedFields");
     RegisterTest(&TTest_ASWLog_Utils::Test_GenerateLogFileName_PrefixAndPostfixAreOptional, "GenerateLogFileName_PrefixAndPostfixAreOptional");
     RegisterTest(&TTest_ASWLog_Utils::Test_GetOSInfoString_ContainsEdition, "GetOSInfoString_ContainsEdition");
+    RegisterTest(&TTest_ASWLog_Utils::Test_GetWindowsEditionName_ProductTypes, "GetWindowsEditionName_ProductTypes");
     RegisterTest(&TTest_ASWLog_Utils::Test_MatchesWildcard_Patterns, "MatchesWildcard_Patterns");
     RegisterTest(&TTest_ASWLog_Utils::Test_Time_ToDateString, "Time_ToDateString");
     RegisterTest(&TTest_ASWLog_Utils::Test_Time_ToISO8601String, "Time_ToISO8601String");
@@ -127,6 +132,27 @@ void TTest_ASWLog_Utils::Test_GetOSInfoString_ContainsEdition()
     CheckTrue(hasEdition, __func__, __LINE__, "Windows OS info should include the edition name (Home, Pro, Enterprise, etc.)");
 #else
     CheckTrue(!osInfo.empty(), __func__, __LINE__, "OS info string should not be empty");
+#endif
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_Utils::Test_GetWindowsEditionName_ProductTypes()
+{
+#if defined(_WIN32)
+    // Act & Assert
+    CheckEquals(std::string("Home"), ASWLog::GetWindowsEditionName(PRODUCT_CORE, false), __func__, __LINE__,
+        "Windows 10/11 Home should be named");
+    CheckEquals(std::string("Pro"), ASWLog::GetWindowsEditionName(PRODUCT_PROFESSIONAL, false), __func__, __LINE__,
+        "Pro should be named");
+    CheckEquals(std::string("Server Standard"), ASWLog::GetWindowsEditionName(PRODUCT_STANDARD_SERVER, true),
+        __func__, __LINE__, "Server Standard should be named");
+    CheckEquals(std::string("Server Datacenter"), ASWLog::GetWindowsEditionName(PRODUCT_DATACENTER_SERVER, true),
+        __func__, __LINE__, "Server Datacenter (e.g. GitHub's Windows runners) should be named");
+    CheckEquals(std::string("Server (product type 0xABCD)"), ASWLog::GetWindowsEditionName(0xABCD, true), __func__,
+        __LINE__, "An unlisted server product type should still say Server");
+    CheckEquals(std::string("Unknown (product type 0xABCD)"), ASWLog::GetWindowsEditionName(0xABCD, false), __func__,
+        __LINE__, "An unlisted workstation product type should be Unknown");
+#else
+    Skip(__func__, __LINE__, "GetWindowsEditionName() is Windows-only");
 #endif
 }
 //---------------------------------------------------------------------------

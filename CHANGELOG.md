@@ -23,6 +23,8 @@ see [0.26.1](#0261---2026-09-17) for the initial versioned baseline.
   project.
 - This CHANGELOG.md file.
 - `.gitattributes`, normalizing line endings.
+- `GetWindowsEditionName()` (Windows only), naming the Windows edition for a
+  `GetProductInfo()` product type, as used by `GetOSInfoString()`.
 
 ### Changed
 
@@ -39,6 +41,12 @@ see [0.26.1](#0261---2026-09-17) for the initial versioned baseline.
 
 - MinGW `-Wcast-function-type` warning in `GetOSInfoString()`, when casting
   `GetProcAddress()`'s result to the `RtlGetVersion` signature.
+- `GetOSInfoString()` reporting the edition as "Unknown" on Windows 10/11 Home
+  and on every Windows Server edition. The Server checks used product type
+  constants that no Windows SDK defines, so they never compiled in. It now
+  names the Home, Pro for Workstations, Enterprise LTSC, and Server
+  Standard/Datacenter editions, and reports any other product type as
+  "Server" or "Unknown" plus its product type number.
 
 ## [0.26.4] - 2026-09-21
 
