@@ -30,6 +30,7 @@ limitations under the License.
 #include <atomic>
 #include <chrono>
 #include <cstddef>
+#include <cstdint>
 #include <cstdio>
 #include <filesystem>
 #include <mutex>
@@ -56,6 +57,7 @@ private:
 
 private:
     std::FILE* m_File = nullptr;
+    std::uintmax_t m_Size = 0; // See GetSize()
 
 protected:
     int_type overflow(int_type character = traits_type::eof()) override;
@@ -65,6 +67,9 @@ protected:
 public:
     bool Open(const std::filesystem::path& path);
     bool Close();
+    // The file's size: its size when opened plus the bytes written since. Tracked here because on Windows the size
+    // read through the file's path (e.g. std::filesystem::file_size) isn't updated while the file is open.
+    std::uintmax_t GetSize() const noexcept;
     bool IsOpen() const noexcept;
     bool Write(std::string_view data);
 };
@@ -90,6 +95,7 @@ public:
     bool Close();
     bool IsOpen() const noexcept;
     void Flush();
+    std::uintmax_t GetSize() const noexcept; // See TASWFileStreamBuf::GetSize()
     bool Write(std::string_view data);
 };
 

@@ -38,10 +38,12 @@ limitations under the License.
 
 #if defined(_WIN32)
 #include <share.h>
+#include <sys/stat.h>
 #include <windows.h>
 #undef min
 #undef max
 #else
+#include <sys/stat.h>
 #include <unistd.h>
 #endif
 //---------------------------------------------------------------------------
@@ -83,6 +85,23 @@ std::filesystem::path FindFreeBackupPath(
     return {};
 }
 
+// Returns the size of an open file, read through its handle, or 0 if that fails. Unlike the size read through the
+// file's path, this is current on Windows while the file is open.
+std::uintmax_t GetOpenFileSize(std::FILE* file)
+{
+#if defined(_WIN32)
+    struct _stat64 fileStatus {};
+    if (_fstat64(_fileno(file), &fileStatus) == 0)
+        return static_cast<std::uintmax_t>(fileStatus.st_size);
+#else
+    struct stat fileStatus {};
+    if (fstat(fileno(file), &fileStatus) == 0)
+        return static_cast<std::uintmax_t>(fileStatus.st_size);
+#endif
+
+    return 0;
+}
+
 // Formats a UTC time for a backup file name: "YYYY-MM-DD_HHMMSS_mmm".
 std::string ToBackupTimeLabel(std::chrono::system_clock::time_point timePoint)
 {
@@ -110,7 +129,14 @@ bool TASWFileStreamBuf::Close()
     const auto flushResult = std::fflush(m_File);
     const auto closeResult = std::fclose(m_File);
     m_File = nullptr;
+    m_Size = 0;
     return flushResult == 0 && closeResult == 0;
+}
+
+//---------------------------------------------------------------------------
+std::uintmax_t TASWFileStreamBuf::GetSize() const noexcept
+{
+    return m_Size;
 }
 
 //---------------------------------------------------------------------------
@@ -128,7 +154,11 @@ bool TASWFileStreamBuf::Open(const std::filesystem::path& path)
 #else
     m_File = std::fopen(path.c_str(), "ab");
 #endif
-    return m_File != nullptr;
+    if (m_File == nullptr)
+        return false;
+
+    m_Size = GetOpenFileSize(m_File);
+    return true;
 }
 
 //---------------------------------------------------------------------------
@@ -137,7 +167,9 @@ bool TASWFileStreamBuf::Write(std::string_view data)
     if (m_File == nullptr)
         return false;
 
-    return std::fwrite(data.data(), 1, data.size(), m_File) == data.size();
+    const auto written = std::fwrite(data.data(), 1, data.size(), m_File);
+    m_Size += written;
+    return written == data.size();
 }
 
 //---------------------------------------------------------------------------
@@ -146,8 +178,13 @@ TASWFileStreamBuf::int_type TASWFileStreamBuf::overflow(int_type character)
     if (m_File == nullptr)
         return traits_type::eof();
 
-    if (character != traits_type::eof() && std::fputc(character, m_File) == EOF)
-        return traits_type::eof();
+    if (character != traits_type::eof())
+    {
+        if (std::fputc(character, m_File) == EOF)
+            return traits_type::eof();
+
+        ++m_Size;
+    }
 
     return character;
 }
@@ -164,7 +201,9 @@ std::streamsize TASWFileStreamBuf::xsputn(const char* data, std::streamsize size
     if (m_File == nullptr || size <= 0)
         return 0;
 
-    return static_cast<std::streamsize>(std::fwrite(data, 1, static_cast<std::size_t>(size), m_File));
+    const auto written = std::fwrite(data, 1, static_cast<std::size_t>(size), m_File);
+    m_Size += written;
+    return static_cast<std::streamsize>(written);
 }
 
 //---------------------------------------------------------------------------
@@ -198,6 +237,12 @@ bool TASWFileStream::Close()
 void TASWFileStream::Flush()
 {
     flush();
+}
+
+//---------------------------------------------------------------------------
+std::uintmax_t TASWFileStream::GetSize() const noexcept
+{
+    return m_Buffer.GetSize();
 }
 
 //---------------------------------------------------------------------------
@@ -712,14 +757,10 @@ std::string TASWFileLog::WriteLogEntry(
         }
     }
 
-    const auto effectivePath = m_Config.ResolveLogFilePath();
-
-    if (m_Config.EnableRotation && std::filesystem::exists(effectivePath))
+    // Uses the size tracked by the stream, since on Windows the size read through the path isn't current while open
+    if (m_Config.EnableRotation && m_FileStream.IsOpen() && m_FileStream.GetSize() >= m_Config.MaxFileSizeBytes)
     {
-        if (std::filesystem::file_size(effectivePath) >= m_Config.MaxFileSizeBytes)
-        {
-            RotateLogFilesUnlocked("size", ToBackupTimeLabel(now));
-        }
+        RotateLogFilesUnlocked("size", ToBackupTimeLabel(now));
     }
 
     if (!m_FileStream.IsOpen())

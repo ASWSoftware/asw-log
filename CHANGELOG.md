@@ -62,6 +62,13 @@ see [0.26.1](#0261---2026-09-17) for the initial versioned baseline.
   `<stem>.daily.YYYY-MM-DD.bak` form, with `_1`, `_2`, ... added if that day's
   backup already exists. The day changes at UTC midnight, as it always has;
   the `EnableDailyRolling` comment now says so.
+- Size-based rotation (`EnableRotation` with `MaxFileSizeBytes`) never
+  rotating on Windows while the log was open, so the file grew without limit.
+  The size is now tracked by the logger (the file's size when opened plus
+  what it writes) instead of being read from the file's path, which Windows
+  doesn't update while the file is open. With `AutoOpenClosePerWrite`, the
+  size is read again at every write, so other processes' writes to a shared
+  log still count toward the limit.
 
 ## [0.26.4] - 2026-09-21
 

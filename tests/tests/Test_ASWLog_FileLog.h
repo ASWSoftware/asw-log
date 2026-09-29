@@ -52,6 +52,9 @@ private: // Test methods
     void Test_RetentionMaxAge_DefaultDisabledPreservesOldBackups();
     void Test_RetentionMaxAge_DeletesExpiredBackupsAfterRotation();
     void Test_RotateLogFiles_KeepsEveryBackup();
+    void Test_SizeRotation_AutoOpenCloseCountsOtherWriters();
+    void Test_SizeRotation_CountsExistingFileSize();
+    void Test_SizeRotation_RotatesWhenLimitReached();
 
 public:
     TTest_ASWLog_FileLog();

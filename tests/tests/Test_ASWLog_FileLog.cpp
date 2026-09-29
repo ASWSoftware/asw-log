@@ -116,6 +116,9 @@ TTest_ASWLog_FileLog::TTest_ASWLog_FileLog()
     RegisterTest(&TTest_ASWLog_FileLog::Test_RetentionMaxAge_DefaultDisabledPreservesOldBackups, "RetentionMaxAge_DefaultDisabledPreservesOldBackups");
     RegisterTest(&TTest_ASWLog_FileLog::Test_RetentionMaxAge_DeletesExpiredBackupsAfterRotation, "RetentionMaxAge_DeletesExpiredBackupsAfterRotation");
     RegisterTest(&TTest_ASWLog_FileLog::Test_RotateLogFiles_KeepsEveryBackup, "RotateLogFiles_KeepsEveryBackup");
+    RegisterTest(&TTest_ASWLog_FileLog::Test_SizeRotation_AutoOpenCloseCountsOtherWriters, "SizeRotation_AutoOpenCloseCountsOtherWriters");
+    RegisterTest(&TTest_ASWLog_FileLog::Test_SizeRotation_CountsExistingFileSize, "SizeRotation_CountsExistingFileSize");
+    RegisterTest(&TTest_ASWLog_FileLog::Test_SizeRotation_RotatesWhenLimitReached, "SizeRotation_RotatesWhenLimitReached");
 }
 //---------------------------------------------------------------------------
 TTest_ASWLog_FileLog::~TTest_ASWLog_FileLog()
@@ -801,6 +804,139 @@ void TTest_ASWLog_FileLog::Test_RotateLogFiles_KeepsEveryBackup()
     CheckTrue(firstContents.find("second_segment") == std::string::npos, __func__, __LINE__, "A second rotation should not replace the first backup");
     CheckTrue(secondContents.find("second_segment") != std::string::npos, __func__, __LINE__, "A second rotation with a taken name should add _1 to the name");
     CheckTrue(ReadFileText(logFile).find("third_segment") != std::string::npos, __func__, __LINE__, "Entries after the last rotation should go to the reopened log file");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_FileLog::Test_SizeRotation_AutoOpenCloseCountsOtherWriters()
+{
+    // Arrange: in AutoOpenClosePerWrite mode the log is closed between writes, so other processes can append to it
+    const auto logFile = TestTempDir / "sized_shared.log";
+    auto config = MakeRotationTestConfig(logFile);
+    config.AutoOpenClosePerWrite = true;
+    config.EnableRotation = true;
+    config.MaxFileSizeBytes = 100;
+
+    const std::string otherWriterContents(150, 'x');
+    ASWLog::TASWFileLog logger;
+
+    // Act
+    const bool initialized = logger.Initialize(config);
+    logger.LogInfo("own_first");
+    {
+        // Stands in for another process writing to the shared log between this logger's writes
+        std::ofstream otherWriter(logFile, std::ios::binary | std::ios::app);
+        otherWriter << otherWriterContents;
+    }
+    logger.LogInfo("own_second");
+    logger.Close();
+
+    // Assert
+    std::size_t backupCount = 0;
+    std::string backupContents;
+    for (const auto& entry : std::filesystem::directory_iterator(TestTempDir))
+    {
+        const auto name = entry.path().filename().string();
+        if (name.starts_with("sized_shared.size.") && name.ends_with(".bak"))
+        {
+            ++backupCount;
+            backupContents = ReadFileText(entry.path());
+        }
+    }
+
+    const auto currentContents = ReadFileText(logFile);
+    CheckTrue(initialized, __func__, __LINE__, "Initialize should succeed");
+    CheckEquals(static_cast<size_t>(1), backupCount, __func__, __LINE__, "Another writer's bytes should count toward MaxFileSizeBytes, since the size is read again at each open");
+    CheckTrue(backupContents.find("own_first") != std::string::npos, __func__, __LINE__, "The backup should hold this logger's earlier entry");
+    CheckTrue(backupContents.find(otherWriterContents) != std::string::npos, __func__, __LINE__, "The backup should hold the other writer's entry");
+    CheckTrue(currentContents.find("own_second") != std::string::npos, __func__, __LINE__, "The entry that triggered the rotation should go to the new log file");
+    CheckTrue(currentContents.find('x') == std::string::npos, __func__, __LINE__, "The new log file should not contain the other writer's earlier entry");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_FileLog::Test_SizeRotation_CountsExistingFileSize()
+{
+    // Arrange: a log left over from an earlier run is already over the limit
+    const auto logFile = TestTempDir / "sized_existing.log";
+    const std::string earlierContents(150, 'x');
+    {
+        std::ofstream earlierStream(logFile, std::ios::binary);
+        earlierStream << earlierContents;
+    }
+
+    auto config = MakeRotationTestConfig(logFile);
+    config.EnableRotation = true;
+    config.MaxFileSizeBytes = 100;
+
+    ASWLog::TASWFileLog logger;
+
+    // Act
+    const bool initialized = logger.Initialize(config);
+    logger.LogInfo("after_restart");
+    logger.Close();
+
+    // Assert
+    std::size_t backupCount = 0;
+    std::string backupContents;
+    for (const auto& entry : std::filesystem::directory_iterator(TestTempDir))
+    {
+        const auto name = entry.path().filename().string();
+        if (name.starts_with("sized_existing.size.") && name.ends_with(".bak"))
+        {
+            ++backupCount;
+            backupContents = ReadFileText(entry.path());
+        }
+    }
+
+    const auto currentContents = ReadFileText(logFile);
+    CheckTrue(initialized, __func__, __LINE__, "Initialize should succeed");
+    CheckEquals(static_cast<size_t>(1), backupCount, __func__, __LINE__, "The first write should rotate a log that was already over MaxFileSizeBytes when opened");
+    CheckEquals(earlierContents, backupContents, __func__, __LINE__, "The backup should hold the earlier run's contents");
+    CheckTrue(currentContents.find("after_restart") != std::string::npos, __func__, __LINE__, "The new entry should go to the reopened log file");
+    CheckTrue(currentContents.find('x') == std::string::npos, __func__, __LINE__, "The reopened log file should not contain the earlier run's contents");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_FileLog::Test_SizeRotation_RotatesWhenLimitReached()
+{
+    // Arrange: ten lines of about 18 bytes each against a 50-byte limit need several rotations
+    const auto logFile = TestTempDir / "sized.log";
+    auto config = MakeRotationTestConfig(logFile);
+    config.EnableRotation = true;
+    config.MaxFileSizeBytes = 50;
+
+    constexpr int LineCount = 10;
+    ASWLog::TASWFileLog logger;
+
+    // Act
+    const bool initialized = logger.Initialize(config);
+    for (int index = 0; index < LineCount; ++index)
+        logger.LogInfo("size_line_" + std::to_string(index) + "_end");
+    logger.Close();
+
+    // Assert
+    std::size_t backupCount = 0;
+    std::string allContents;
+    for (const auto& entry : std::filesystem::directory_iterator(TestTempDir))
+    {
+        const auto name = entry.path().filename().string();
+        if (name.starts_with("sized.size.") && name.ends_with(".bak"))
+        {
+            ++backupCount;
+            allContents += ReadFileText(entry.path());
+        }
+    }
+
+    const auto currentContents = ReadFileText(logFile);
+    allContents += currentContents;
+
+    CheckTrue(initialized, __func__, __LINE__, "Initialize should succeed");
+    CheckTrue(backupCount >= 2, __func__, __LINE__, "Reaching MaxFileSizeBytes should rotate the open log to a .size. backup each time");
+    CheckTrue(currentContents.find("size_line_0_end") == std::string::npos, __func__, __LINE__, "The first lines should have been rotated out of the current log");
+
+    for (int index = 0; index < LineCount; ++index)
+    {
+        const auto marker = "size_line_" + std::to_string(index) + "_end";
+        const auto first = allContents.find(marker);
+        const bool foundOnce = first != std::string::npos && allContents.find(marker, first + 1) == std::string::npos;
+        CheckTrue(foundOnce, __func__, __LINE__, "Each line should be in exactly one of the log and its backups: " + marker);
+    }
 }
 //---------------------------------------------------------------------------
 
