@@ -38,11 +38,14 @@ private:
 private: // Test methods
     void Test_AddLogger_RejectsDuplicateRegistration();
     void Test_AddLogger_RejectsSelfRegistration();
+    void Test_Close_AllowsInitializeAgain();
     void Test_Contains_ReflectsRegistrationState();
     void Test_GetLoggerCount_ReflectsAddAndRemove();
     void Test_GetLoggers_ReturnsSnapshotOfRegisteredSinks();
+    void Test_Initialize_ConcurrentCallsSucceedOnce();
     void Test_IsOpen_RequiresAllSinksOpen();
     void Test_Log_FansOutToAllRegisteredSinks();
+    void Test_Log_ThrowingSinkDoesNotStopOtherSinks();
     void Test_LogForce_BypassesCompositeGate();
     void Test_RemoveAllLoggers_ClearsRegistrationAndReturnsCount();
     void Test_RemoveLogger_StopsReceivingEntries();

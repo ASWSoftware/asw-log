@@ -38,11 +38,19 @@ private:
 private: // Test methods
     void Test_GenerateLogFileName_ContainsExpectedFields();
     void Test_GenerateLogFileName_PrefixAndPostfixAreOptional();
+    void Test_GetCurrentOSProcessId_MatchesOS();
+    void Test_GetCurrentOSThreadId_IdentifiesCallingThread();
     void Test_GetOSInfoString_ContainsEdition();
+    void Test_GetTimeInfoString_ReportsCurrentOffset();
     void Test_GetWindowsEditionName_ProductTypes();
+    void Test_IsRootFolder_DetectsRootFolders();
+    void Test_IsRootFolder_ResolvesRelativePaths();
     void Test_MatchesWildcard_Patterns();
+    void Test_RenameWithoutReplacing_KeepsExistingTarget();
+    void Test_Time_GetUTCOffsetMinutes_FollowsDaylightSavingTime();
     void Test_Time_ToDateString();
     void Test_Time_ToISO8601String();
+    void Test_Time_ToLocalISO8601String_IncludesOffset();
 
 public:
     TTest_ASWLog_Utils();

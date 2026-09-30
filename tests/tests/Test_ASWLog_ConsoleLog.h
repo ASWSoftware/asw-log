@@ -36,11 +36,17 @@ private:
     typedef TTestGroupBase inherited;
 
 private: // Test methods
-    void Test_GetUseColor_ReflectsSetUseColor();
+    void Test_ColorModeAlways_WrapsOutputWithAnsiCodes();
+    void Test_ColorModeAuto_ColorsOnlyStreamsThatSupportIt();
+    void Test_ColorModeAuto_HonorsNoColor();
+    void Test_ColorModeNever_SuppressesAnsiCodes();
+    void Test_GetColorMode_ReflectsSetColorMode();
+    void Test_GetInstance_ReturnsSameInstance();
     void Test_Initialize_SuppressesInfoBannersBelowMinimumLevel();
     void Test_Initialize_WritesDriveInfoWhenEnabled();
-    void Test_IsColorSupported_ReflectsPlatformState();
+    void Test_IsColorSupported_ReflectsDetectedStreams();
     void Test_LogLineMetadata_Options();
+    void Test_LogProcessAndThreadIds_AreOSIds();
     void Test_LogRawAndForceOptions();
     void Test_LogRespectsMinimumLevel();
     void Test_OnLogEntry_FiresForQualifyingLevelsOnly();
@@ -48,8 +54,6 @@ private: // Test methods
     void Test_ResetLevelColors_RestoresAllDefaults();
     void Test_SetLevelColor_EmptyStringDisablesColorForLevel();
     void Test_SetLevelColor_OverridesDefaultColor();
-    void Test_UseColor_False_SuppressesAnsiCodes();
-    void Test_UseColor_WrapsOutputWithAnsiCodes();
     void Test_WarnAndAboveWriteToStdErr();
 
 public:

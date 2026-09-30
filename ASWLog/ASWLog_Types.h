@@ -38,6 +38,45 @@ namespace ASWLog
 
 //---------------------------------------------------------------------------
 
+/*
+  ColorMode enum
+
+  Whether TASWConsoleLog wraps its lines in ANSI color codes.
+*/
+enum class ColorMode
+{
+    // Color a stream (stdout or stderr) only if it's a console or terminal that shows colors (not a file or a pipe),
+    // and the NO_COLOR environment variable isn't set (see https://no-color.org).
+    Auto,
+
+    // Always write color codes, e.g. for a viewer that shows them although it isn't detected as a terminal.
+    Always,
+
+    // Never write color codes.
+    Never,
+};
+
+[[nodiscard]] std::optional<ColorMode> ColorMode_FromString(std::string_view str) noexcept;
+
+[[nodiscard]] constexpr std::string_view ColorMode_ToString(ColorMode colorMode) noexcept
+{
+    switch (colorMode)
+    {
+        case ColorMode::Auto:
+            return "AUTO";
+
+        case ColorMode::Always:
+            return "ALWAYS";
+
+        case ColorMode::Never:
+            return "NEVER";
+    }
+
+    return "UNKNOWN";
+}
+
+//---------------------------------------------------------------------------
+
 enum class FlushMode
 {
     EveryWrite,

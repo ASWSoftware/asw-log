@@ -36,12 +36,27 @@ private:
     typedef TTestGroupBase inherited;
 
 private: // Test methods
+    void Test_ChildProcess_DoesNotInheritLogFile();
+    void Test_DailyRolling_KeepsExistingBackupForSameDate();
+    void Test_DailyRolling_KeepsLeftoverLogFromSameDay();
+    void Test_DailyRolling_NamesBackupForContentDate();
+    void Test_DailyRolling_RotatesLeftoverLogFromEarlierDay();
+    void Test_DailyRolling_SharedLogRollsOverOnce();
+    void Test_DeleteOldLogs_AcceptsShortRelativeFolder();
+    void Test_DeleteOldLogs_EmptyPatternDeletesNothing();
+    void Test_DeleteOldLogs_MatchesNonASCIIFileNames();
     void Test_DeleteOldLogs_RemovesOldFiles();
+    void Test_FailedReopen_RetriesAndResumesLogging();
+    void Test_FailedReopen_ZeroResetDelayRetriesOnNextWrite();
+    void Test_FailedSizeRotation_WaitsBeforeRetrying();
+    void Test_GetInstance_ReturnsSameInstance();
     void Test_InitializeAndLogInfo_WritesText();
     void Test_Initialize_SuppressesInfoBannersBelowMinimumLevel();
     void Test_LogFormatMethods_FormatsMessage();
+    void Test_LogFormatMethods_WriteCallerSourceLine();
     void Test_LogLineMetadata_Options();
     void Test_LogNewLineAndForceOptions();
+    void Test_LogProcessAndThreadIds_AreOSIds();
     void Test_LogRawOptions();
     void Test_MultiThreadedStress_WritesAllMessagesToDisk();
     void Test_MultiThreadedStress_WritesAllMessagesToDisk_OpenClose();
@@ -49,6 +64,10 @@ private: // Test methods
     void Test_OnLogEntry_ReentrantCallbackDoesNotDeadlock();
     void Test_RetentionMaxAge_DefaultDisabledPreservesOldBackups();
     void Test_RetentionMaxAge_DeletesExpiredBackupsAfterRotation();
+    void Test_RotateLogFiles_KeepsEveryBackup();
+    void Test_SizeRotation_AutoOpenCloseCountsOtherWriters();
+    void Test_SizeRotation_CountsExistingFileSize();
+    void Test_SizeRotation_RotatesWhenLimitReached();
 
 public:
     TTest_ASWLog_FileLog();

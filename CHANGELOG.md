@@ -25,6 +25,35 @@ see [0.26.1](#0261---2026-09-17) for the initial versioned baseline.
 - `.gitattributes`, normalizing line endings.
 - `GetWindowsEditionName()` (Windows only), naming the Windows edition for a
   `GetProductInfo()` product type, as used by `GetOSInfoString()`.
+- `TASWLogBase::NowUTC()`, a protected virtual returning the time the logger
+  uses for line timestamps, daily rolling, and backup names. A custom logger
+  or a test can override it to control the logger's clock.
+- `TASWLogConfig::CircuitBreakerResetDelay` (default 500 ms), how long
+  `TASWFileLog` drops entries without trying to reopen a log file that
+  couldn't be reopened, before trying again. Each try still uses
+  `OpenRetryCount`/`OpenRetryDelay`; 0 tries on every entry.
+- `TASWLogConfig::RotationRetryDelay` (default 500 ms), how long
+  `TASWFileLog` waits after a failed size rotation before trying to rotate
+  again; 0 tries on every entry.
+- `PathToUTF8String()`, converting a `std::filesystem::path` to a UTF-8
+  string without throwing.
+- `ColorMode` (`Auto`, `Always`, `Never`), with `ColorMode_ToString()` and
+  `ColorMode_FromString()`, and `TASWConsoleLog::SetColorMode()`/
+  `GetColorMode()` to choose it (default `Auto`).
+- `TASWConsoleLog::DetectStreamColorSupport()`, a protected virtual deciding
+  whether stdout or stderr shows colors; override it to change the detection.
+- `IsRootFolder()`, telling whether a folder is the root of a drive, network
+  share, volume, or file system (e.g. `C:\`, `\\server\share\`, `/`), as
+  used by `DeleteOldLogs`.
+- `Time::GetUTCOffsetMinutes()`, the local time zone's offset from UTC at a
+  given time, including daylight saving time, and
+  `Time::ToLocalISO8601String()`, formatting a local time with milliseconds
+  and that offset (e.g. `2026-09-28T21:02:44.123-05:00`).
+- `GetCurrentOSProcessId()` and `GetCurrentOSThreadId()`, the operating
+  system's ids for the current process and the calling thread.
+- `RenameWithoutReplacing()`, renaming a file only if the new name isn't
+  taken, even when another process creates it at the same moment (unlike
+  `std::filesystem::rename`, which replaces it).
 
 ### Changed
 
@@ -36,6 +65,29 @@ see [0.26.1](#0261---2026-09-17) for the initial versioned baseline.
   `tests/rad370/`. Building the tests requires the submodule
   (`git clone --recurse-submodules`, or `git submodule update --init`); using
   the logger itself does not.
+- `TASWConsoleLog::IsColorSupported()` now reports whether stdout or stderr
+  is a console or terminal that shows colors. On Linux it used to be always
+  true; it's now false when both streams are redirected.
+- `TASWFileLog::DeleteOldLogs` with an empty `pattern` now deletes nothing;
+  it used to delete every file in the folder older than `maxAge`. To keep
+  that behavior, pass `"*"`.
+- The startup "Time:" line (and `GetTimeInfoString()`) now shows the local
+  time with milliseconds and its UTC offset, e.g.
+  `local=2026-09-28T21:02:44.123-05:00`.
+- The thread id in log lines (`[T:...]`, with `LogThreadId`) and in
+  `GenerateLogFileName()` names (`_TID...`) is now the OS thread id, as shown
+  by debuggers, crash dumps, Process Explorer, and `top -H`, instead of a hash
+  of `std::thread::id` (e.g. `[T:12608]` instead of
+  `[T:15729502191765196471]`). Anything that parses these values sees
+  smaller numbers.
+
+### Removed
+
+- `TASWConsoleLog::SetUseColor()` and `GetUseColor()`, replaced by
+  `SetColorMode()`/`GetColorMode()`. Replace `SetUseColor(false)` with
+  `SetColorMode(ASWLog::ColorMode::Never)`. `SetUseColor(true)` (the old
+  default) becomes `ColorMode::Auto`, or `ColorMode::Always` to keep writing
+  color codes to output that isn't a terminal.
 
 ### Fixed
 
@@ -50,6 +102,103 @@ see [0.26.1](#0261---2026-09-17) for the initial versioned baseline.
 - `ResolveLogFileDir_CustomFolder` unit test failing on Linux: it used a
   backslash-separated path, which is only a separator on Windows. The
   backslash case is now checked on Windows only.
+- `TASWFileLog` rotation deleting an earlier backup when it rotated twice for
+  the same reason on the same day. Backups are now named
+  `<stem>.<reason>.YYYY-MM-DD_HHMMSS_mmm.bak` (UTC), with `_1`, `_2`, ...
+  added if that name is taken, and an existing backup is never replaced.
+- Daily rolling (`EnableDailyRolling`) naming the backup for the day that had
+  just started instead of the day its entries are from. Daily backups keep the
+  `<stem>.daily.YYYY-MM-DD.bak` form, with `_1`, `_2`, ... added if that day's
+  backup already exists. The day changes at UTC midnight, as it always has;
+  the `EnableDailyRolling` comment now says so.
+- Size-based rotation (`EnableRotation` with `MaxFileSizeBytes`) never
+  rotating on Windows while the log was open, so the file grew without limit.
+  The size is now tracked by the logger (the file's size when opened plus
+  what it writes) instead of being read from the file's path, which Windows
+  doesn't update while the file is open. With `AutoOpenClosePerWrite`, the
+  size is read again at every write, so other processes' writes to a shared
+  log still count toward the limit.
+- `TASWFileLog` silently stopping for the rest of the process when the log
+  file couldn't be reopened, e.g. after a rotation while another program
+  briefly held the file. Later entries now retry the open once
+  `CircuitBreakerResetDelay` has passed since the last failed attempt, and
+  logging resumes as soon as it succeeds (entries logged while the file can't
+  be opened are dropped). A size rotation that fails is retried once
+  `RotationRetryDelay` has passed, instead of on every entry; entries keep
+  going to the current file meanwhile.
+- `LogSourceLine`/`LogMethodName` reporting a location inside
+  `ASWLog_Interface.h` for every `*Fmt` call (`LogInfoFmt`, `LogFmt`,
+  `LogForceRawFmt`, etc.) instead of the caller's file, line, and function.
+  The format string parameter is now a `TASWFormatString`, which captures the
+  caller's location; string literals, `std::string`, and `std::string_view`
+  format strings convert to it automatically.
+- Logging calls throwing exceptions into the application:
+  - A `*Fmt` call whose format string doesn't match its arguments, or whose
+    argument's formatter throws, now logs
+    `[ASWLog format error: <reason>] <format string>` instead of throwing
+    `std::format_error`.
+  - `TASWFileLog` and `TASWConsoleLog` drop an entry they fail to write
+    (e.g. out of memory) instead of throwing, and an exception while writing
+    the shutdown entry in their destructors can no longer terminate the
+    program.
+  - `TASWMultiLog` catches an exception from one of its loggers (e.g. a
+    custom `IASWLog`) and still logs to the others.
+- `DeleteOldLogs` (also run by `RetentionMaxAge` after a rotation) throwing
+  on file-system errors, and on file names the Windows ANSI code page can't
+  represent (seen with RAD Studio's library). It now skips entries it can't
+  read, and matches `pattern` against UTF-8 file names.
+- `Initialize()` able to throw on Windows when the executable's path has
+  characters the ANSI code page can't represent. The startup "App:" line and
+  `GetApplicationInfoString()` now write the path as UTF-8.
+- On Linux, reading unexpected `/proc/self/status` contents for the memory
+  information could throw.
+- `TASWConsoleLog` writing ANSI color codes into redirected output (files and
+  pipes) and into Windows consoles that can't show them. With the default
+  `ColorMode::Auto`, stdout and stderr are each colored only if they show
+  colors, and not at all when the `NO_COLOR` environment variable is set
+  (https://no-color.org).
+- Undefined behavior when logging through `TASWFileLog::GetInstance()` or
+  `TASWConsoleLog::GetInstance()` during static destruction, e.g. from another
+  static object's destructor or a thread still running at exit, since the
+  instance could already be destroyed. The instance is now never destroyed;
+  at exit it only writes the shutdown entry and closes, in the same order as
+  before. A static object constructed after the first `GetInstance()` call
+  can still log from its destructor; one constructed before it has its
+  entries dropped. Leak checkers that list memory still allocated at exit
+  (e.g. the MSVC debug heap's report) now include the instance.
+- `TASWMultiLog::Initialize()` returning false after `Close()`, so a closed
+  composite couldn't be initialized again, unlike the other loggers.
+  Concurrent `Initialize()` calls could also all succeed and write the
+  configuration at the same time; now exactly one succeeds.
+- `DeleteOldLogs` refusing any folder path of 3 characters or fewer, such
+  as the relative folders `log` or `.`, which it mistook for a root folder.
+  It now refuses only an actual root folder, which it also didn't recognize
+  in forms such as `\\server\share\` or `C:\logs\..`.
+- The startup "Time:" line (`GetTimeInfoString()`) reporting `offset_minutes`
+  an hour off while daylight saving time was in effect (e.g. -360 instead of
+  -300 for US Central daylight time).
+- Child processes inheriting `TASWFileLog`'s open log file. On Windows, a
+  child started with handle inheritance (e.g. `CreateProcess` with
+  `bInheritHandles`) kept the file open and made rotation fail until it
+  exited. On Linux, a program started with `fork()` and `exec()` kept the file
+  open. The file is now opened non-inheritable on Windows and close-on-exec
+  on Linux.
+- With daily rolling (`EnableDailyRolling`), a log left over from an earlier
+  UTC day (e.g. the app was restarted the next morning) was appended to, so
+  its old entries ended up in the backup for the following day. `Initialize()`
+  now rotates such a file to the daily backup named for the day it was last
+  written.
+- Two processes rotating a shared log at the same moment could overwrite one
+  of the backups. Rotation now renames the log only to a name that isn't
+  taken, and tries the next `_1`, `_2`, ... name if another process takes it
+  first.
+- With daily rolling on a log shared by several processes
+  (`AutoOpenClosePerWrite`), each process rolled the log over at its first
+  entry after midnight, so a later process also moved the new file (with
+  today's entries from the earlier one) into a backup for the previous day.
+  In that mode, the log is now rolled over only if it was last written on an
+  earlier day. The `AutoOpenClosePerWrite` comment now says it's required for
+  sharing a log between processes.
 
 ## [0.26.4] - 2026-09-21
 

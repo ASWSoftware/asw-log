@@ -35,6 +35,7 @@ limitations under the License.
 #include <filesystem>
 #include <string>
 #include <string_view>
+#include <system_error>
 //---------------------------------------------------------------------------
 
 namespace ASWLog
@@ -65,13 +66,22 @@ struct TSystemMemoryUsage
     Param 'customPostfix': A user supplied string attached to the end (e.g., "TraceLog.txt").
         Pass an empty string_view to omit it.
 
-    returns a string formatted as: [prefix_]YYYYMMDD_HHMMSS_mmm_PID_TID[_customPostfix]
-    (each bracketed segment, and its separating underscore, is left out entirely when empty)
+    returns a string formatted as: [prefix_]YYYYMMDD_HHMMSS_mmm_PID<pid>_TID<tid>[_customPostfix]
+    (each bracketed segment, and its separating underscore, is left out entirely when empty), where <pid> and <tid>
+    are the OS process and thread ids (see GetCurrentOSProcessId() and GetCurrentOSThreadId())
 */
 [[nodiscard]] std::string GenerateLogFileName(std::string_view prefix, std::string_view customPostfix);
 
 [[nodiscard]] std::string GetApplicationInfoString();
 [[nodiscard]] std::string GetCommandLineString();
+
+// The operating system's id for the current process, as shown by Task Manager, ps, and debuggers.
+[[nodiscard]] std::uint32_t GetCurrentOSProcessId() noexcept;
+
+// The operating system's id for the calling thread, as shown by debuggers, crash dumps, Process Explorer, and top -H
+// (unlike std::thread::id, which has no numeric value outside the program).
+[[nodiscard]] std::uint32_t GetCurrentOSThreadId() noexcept;
+
 [[nodiscard]] std::string GetDriveInfoString();
 [[nodiscard]] std::filesystem::path GetExecutablePath();
 [[nodiscard]] TMemoryUsage GetMemoryUsage();
@@ -95,10 +105,46 @@ struct TSystemMemoryUsage
 [[nodiscard]] std::string GetWindowsEditionName(std::uint32_t productType, bool isServer);
 #endif
 
+/*
+    IsRootFolder
+
+    True if 'folder' is the root of a drive, network share, volume or file system (e.g. "C:\", "\\server\share\", "/"),
+    or if that can't be determined (e.g. the path is empty or its server can't be reached). A relative path is resolved
+    against the current folder, so "." is a root folder when the current folder is. Never throws.
+*/
+[[nodiscard]] bool IsRootFolder(const std::filesystem::path& folder) noexcept;
+
 [[nodiscard]] bool MatchesWildcard(std::string_view value, std::string_view pattern);
+
+/*
+    PathToUTF8String
+
+    Converts a path to a UTF-8 string. Unlike std::filesystem::path::string(), which converts to the Windows ANSI code
+    page and can throw for characters it can't represent, this never throws; it returns an empty string if the path
+    can't be converted.
+*/
+[[nodiscard]] std::string PathToUTF8String(const std::filesystem::path& path) noexcept;
+
+/*
+    RenameWithoutReplacing
+
+    Renames the file 'from' to 'to', unless 'to' already exists: unlike std::filesystem::rename, it never replaces an
+    existing file, even when another process creates 'to' at the same moment. Returns std::errc::file_exists in that
+    case, another error if the rename fails, or an empty error_code on success. Never throws.
+*/
+[[nodiscard]] std::error_code RenameWithoutReplacing(const std::filesystem::path& from, const std::filesystem::path& to) noexcept;
 
 namespace Time
 {
+
+/*
+    GetUTCOffsetMinutes
+
+    How many minutes the local time zone is ahead of UTC at 'timePoint' (negative west of UTC), including daylight
+    saving time if it is in effect then, e.g. -300 for US Central daylight time. Returns 0 if the local time can't be
+    determined.
+*/
+[[nodiscard]] int GetUTCOffsetMinutes(std::chrono::system_clock::time_point timePoint);
 
 /*
     ToISO8601String
@@ -115,6 +161,15 @@ namespace Time
         Format: YYYY-MM-DD
 */
 [[nodiscard]] std::string ToDateString(std::chrono::system_clock::time_point timePoint);
+
+/*
+    ToLocalISO8601String
+
+    Converts a system time point into an ISO 8601 local time string with the local time zone's offset from UTC (see
+    GetUTCOffsetMinutes()), with milliseconds like ToISO8601String().
+        Format: YYYY-MM-DDTHH:mm:ss.mmm+hh:mm (e.g. 2026-09-28T21:02:44.123-05:00)
+*/
+[[nodiscard]] std::string ToLocalISO8601String(std::chrono::system_clock::time_point timePoint);
 
 } // namespace Time
 

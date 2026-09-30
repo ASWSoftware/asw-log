@@ -54,6 +54,21 @@ bool iequals(std::string_view a, std::string_view b) noexcept
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
+std::optional<ColorMode> ColorMode_FromString(std::string_view str) noexcept
+{
+    if (iequals(str, "AUTO"))
+        return ColorMode::Auto;
+
+    if (iequals(str, "ALWAYS"))
+        return ColorMode::Always;
+
+    if (iequals(str, "NEVER"))
+        return ColorMode::Never;
+
+    return std::nullopt; // Return empty optional if the string is not recognized
+}
+
+//---------------------------------------------------------------------------
 std::optional<FlushMode> FlushMode_FromString(std::string_view str) noexcept
 {
     if (iequals(str, "EVERY_WRITE") || iequals(str, "EVERYWRITE"))
