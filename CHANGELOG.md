@@ -51,6 +51,9 @@ see [0.26.1](#0261---2026-09-17) for the initial versioned baseline.
   and that offset (e.g. `2026-09-28T21:02:44.123-05:00`).
 - `GetCurrentOSProcessId()` and `GetCurrentOSThreadId()`, the operating
   system's ids for the current process and the calling thread.
+- `RenameWithoutReplacing()`, renaming a file only if the new name isn't
+  taken, even when another process creates it at the same moment (unlike
+  `std::filesystem::rename`, which replaces it).
 
 ### Changed
 
@@ -185,6 +188,17 @@ see [0.26.1](#0261---2026-09-17) for the initial versioned baseline.
   its old entries ended up in the backup for the following day. `Initialize()`
   now rotates such a file to the daily backup named for the day it was last
   written.
+- Two processes rotating a shared log at the same moment could overwrite one
+  of the backups. Rotation now renames the log only to a name that isn't
+  taken, and tries the next `_1`, `_2`, ... name if another process takes it
+  first.
+- With daily rolling on a log shared by several processes
+  (`AutoOpenClosePerWrite`), each process rolled the log over at its first
+  entry after midnight, so a later process also moved the new file (with
+  today's entries from the earlier one) into a backup for the previous day.
+  In that mode, the log is now rolled over only if it was last written on an
+  earlier day. The `AutoOpenClosePerWrite` comment now says it's required for
+  sharing a log between processes.
 
 ## [0.26.4] - 2026-09-21
 

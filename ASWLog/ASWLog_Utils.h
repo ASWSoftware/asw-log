@@ -35,6 +35,7 @@ limitations under the License.
 #include <filesystem>
 #include <string>
 #include <string_view>
+#include <system_error>
 //---------------------------------------------------------------------------
 
 namespace ASWLog
@@ -123,6 +124,15 @@ struct TSystemMemoryUsage
     can't be converted.
 */
 [[nodiscard]] std::string PathToUTF8String(const std::filesystem::path& path) noexcept;
+
+/*
+    RenameWithoutReplacing
+
+    Renames the file 'from' to 'to', unless 'to' already exists: unlike std::filesystem::rename, it never replaces an
+    existing file, even when another process creates 'to' at the same moment. Returns std::errc::file_exists in that
+    case, another error if the rename fails, or an empty error_code on success. Never throws.
+*/
+[[nodiscard]] std::error_code RenameWithoutReplacing(const std::filesystem::path& from, const std::filesystem::path& to) noexcept;
 
 namespace Time
 {

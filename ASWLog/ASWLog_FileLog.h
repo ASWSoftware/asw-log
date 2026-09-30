@@ -128,7 +128,7 @@ private:
     void LogEntry(Level level, std::string_view message, bool force, bool raw, bool includeNewLine, std::source_location loc) noexcept;
     void MaybeFlush(bool isNewLine);
     bool OpenUnlocked();
-    void RotateLeftoverDailyLogUnlocked();
+    void RotateDailyLogFromEarlierDayUnlocked();
     bool RotateLogFilesUnlocked(std::string_view reasonTag, std::string_view timeLabel);
     void WriteApplicationInfo();
     void WriteDriveInfo();

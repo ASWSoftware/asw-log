@@ -57,6 +57,10 @@ namespace ASWLog
 namespace
 {
 
+// How many times rotation picks a free backup name and tries to rename the log to it, if another process takes that
+// name first each time.
+constexpr int MaxBackupRenameAttempts = 10;
+
 // How many "_N" suffixes are tried when a backup name is taken, before rotation gives up.
 constexpr int MaxBackupNameSuffix = 1000;
 
@@ -465,7 +469,7 @@ bool TASWFileLog::Initialize(const TASWLogConfig& config)
     m_MinimumLevel.store(m_Config.InitialMinimumLevel, std::memory_order_release);
 
     if (m_Config.EnableDailyRolling)
-        RotateLeftoverDailyLogUnlocked();
+        RotateDailyLogFromEarlierDayUnlocked();
 
     if (!OpenUnlocked())
     {
@@ -636,14 +640,18 @@ bool TASWFileLog::RotateLogFiles(std::string_view reasonTag)
 
 //---------------------------------------------------------------------------
 /*
-    TASWFileLog::RotateLeftoverDailyLogUnlocked
+    TASWFileLog::RotateDailyLogFromEarlierDayUnlocked
 
-    Called by Initialize() with daily rolling on, before the log file is opened. If the file already has entries from
-    an earlier UTC day (e.g. the app was restarted the next morning), rotates it to a daily backup named for that day,
-    as the midnight rollover would have, so they aren't mixed into today's file. If the rotation fails, logging still
-    appends to the file.
+    For daily rolling: if the log file has entries from an earlier UTC day than today, going by its last write time,
+    rotates it to a daily backup named for that day, so they aren't mixed into today's file. If the rotation fails,
+    logging still appends to the file.
+
+    Called by Initialize() before the file is opened (e.g. the app was restarted the next morning), and at the midnight
+    rollover when the log may be shared with other processes (AutoOpenClosePerWrite): if one of them has already rolled
+    it over and written today, the file is from today, and it is left alone. The file is closed between writes in that
+    mode, so its last write time read through the path is current, also on Windows.
 */
-void TASWFileLog::RotateLeftoverDailyLogUnlocked()
+void TASWFileLog::RotateDailyLogFromEarlierDayUnlocked()
 {
     const auto logPath = m_Config.ResolveLogFilePath();
 
@@ -684,11 +692,20 @@ bool TASWFileLog::RotateLogFilesUnlocked(std::string_view reasonTag, std::string
     std::error_code errorCode;
     if (std::filesystem::exists(logPath, errorCode))
     {
-        const auto backupPath = FindFreeBackupPath(logPath, reasonTag, timeLabel);
-        if (backupPath.empty())
-            errorCode = std::make_error_code(std::errc::file_exists);
-        else
-            std::filesystem::rename(logPath, backupPath, errorCode);
+        // Another process sharing the log may take the free name first, so on "already exists" the next one is tried
+        for (int attempt = 0; attempt < MaxBackupRenameAttempts; ++attempt)
+        {
+            const auto backupPath = FindFreeBackupPath(logPath, reasonTag, timeLabel);
+            if (backupPath.empty())
+            {
+                errorCode = std::make_error_code(std::errc::file_exists);
+                break;
+            }
+
+            errorCode = RenameWithoutReplacing(logPath, backupPath);
+            if (errorCode != std::errc::file_exists)
+                break;
+        }
     }
 
     if (errorCode)
@@ -781,8 +798,13 @@ std::string TASWFileLog::WriteLogEntry(
         const auto currentDateStr = Time::ToDateString(now);
         if (currentDateStr != m_LastLogDateStr)
         {
-            // Name the backup for the day its content is from, not the day that just started
-            RotateLogFilesUnlocked("daily", m_LastLogDateStr);
+            // Name the backup for the day its content is from, not the day that just started. A log shared with other
+            // processes may already have been rolled over by one of them, so there the file's last write decides.
+            if (m_Config.AutoOpenClosePerWrite)
+                RotateDailyLogFromEarlierDayUnlocked();
+            else
+                RotateLogFilesUnlocked("daily", m_LastLogDateStr);
+
             m_LastLogDateStr = currentDateStr;
         }
     }

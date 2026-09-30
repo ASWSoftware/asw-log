@@ -51,6 +51,9 @@ struct TASWLogConfig
     std::filesystem::path LogFilePath = "aswlog.txt";
     std::string BannerMessage_Init;
     std::string BannerMessage_Shutdown;
+    // Opens and closes the log file for every entry. Required when several processes write to one log file: with the
+    // file kept open, other processes can't open it on Windows, and on POSIX they keep appending to the renamed backup
+    // after a rotation.
     bool AutoOpenClosePerWrite = false;
     bool WriteShutdownLog = true;
 

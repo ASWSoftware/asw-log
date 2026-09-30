@@ -41,6 +41,7 @@ private: // Test methods
     void Test_DailyRolling_KeepsLeftoverLogFromSameDay();
     void Test_DailyRolling_NamesBackupForContentDate();
     void Test_DailyRolling_RotatesLeftoverLogFromEarlierDay();
+    void Test_DailyRolling_SharedLogRollsOverOnce();
     void Test_DeleteOldLogs_AcceptsShortRelativeFolder();
     void Test_DeleteOldLogs_EmptyPatternDeletesNothing();
     void Test_DeleteOldLogs_MatchesNonASCIIFileNames();

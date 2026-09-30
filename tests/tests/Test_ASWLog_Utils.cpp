@@ -31,6 +31,8 @@ limitations under the License.
 #include <cstdlib>
 #include <ctime>
 #include <filesystem>
+#include <fstream>
+#include <iterator>
 #include <string>
 #include <system_error>
 #include <thread>
@@ -113,6 +115,12 @@ public:
     TScopedTimeZone& operator=(const TScopedTimeZone&) = delete;
 };
 
+std::string ReadText(const std::filesystem::path& path)
+{
+    std::ifstream stream(path, std::ios::binary);
+    return std::string((std::istreambuf_iterator<char>(stream)), std::istreambuf_iterator<char>());
+}
+
 } // namespace
 
 //---------------------------------------------------------------------------
@@ -131,6 +139,7 @@ TTest_ASWLog_Utils::TTest_ASWLog_Utils()
     RegisterTest(&TTest_ASWLog_Utils::Test_IsRootFolder_DetectsRootFolders, "IsRootFolder_DetectsRootFolders");
     RegisterTest(&TTest_ASWLog_Utils::Test_IsRootFolder_ResolvesRelativePaths, "IsRootFolder_ResolvesRelativePaths");
     RegisterTest(&TTest_ASWLog_Utils::Test_MatchesWildcard_Patterns, "MatchesWildcard_Patterns");
+    RegisterTest(&TTest_ASWLog_Utils::Test_RenameWithoutReplacing_KeepsExistingTarget, "RenameWithoutReplacing_KeepsExistingTarget");
     RegisterTest(&TTest_ASWLog_Utils::Test_Time_GetUTCOffsetMinutes_FollowsDaylightSavingTime, "Time_GetUTCOffsetMinutes_FollowsDaylightSavingTime");
     RegisterTest(&TTest_ASWLog_Utils::Test_Time_ToDateString, "Time_ToDateString");
     RegisterTest(&TTest_ASWLog_Utils::Test_Time_ToISO8601String, "Time_ToISO8601String");
@@ -380,6 +389,43 @@ void TTest_ASWLog_Utils::Test_MatchesWildcard_Patterns()
     CheckTrue(ASWLog::MatchesWildcard(fileName2, "n?tes.*"), __func__, __LINE__, "Question mark wildcard should match a single character");
     CheckFalse(ASWLog::MatchesWildcard(fileName, "*.txt"), __func__, __LINE__, "Wildcard should reject non-matching files");
     CheckTrue(ASWLog::MatchesWildcard("no_extension", "*"), __func__, __LINE__, "A lone '*' should match any name, with or without a dot");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_Utils::Test_RenameWithoutReplacing_KeepsExistingTarget()
+{
+    // Arrange
+    const auto folder = std::filesystem::temp_directory_path() / "aswlog_utils_rename_test";
+    std::filesystem::remove_all(folder);
+    std::filesystem::create_directories(folder);
+
+    const auto source = folder / "source.log";
+    const auto existingTarget = folder / "existing.bak";
+    const auto freeTarget = folder / "free.bak";
+    {
+        std::ofstream sourceStream(source);
+        sourceStream << "source_content";
+        std::ofstream targetStream(existingTarget);
+        targetStream << "existing_content";
+    }
+
+    // Act
+    const auto existingResult = ASWLog::RenameWithoutReplacing(source, existingTarget);
+    const bool sourceKept = std::filesystem::exists(source);
+    const auto existingContent = ReadText(existingTarget);
+    const auto freeResult = ASWLog::RenameWithoutReplacing(source, freeTarget);
+    const auto missingResult = ASWLog::RenameWithoutReplacing(folder / "missing.log", folder / "other.bak");
+
+    // Assert
+    CheckTrue(existingResult == std::errc::file_exists, __func__, __LINE__, "Renaming onto an existing file should fail with file_exists");
+    CheckEquals(std::string("existing_content"), existingContent, __func__, __LINE__, "The existing file should not be replaced");
+    CheckTrue(sourceKept, __func__, __LINE__, "The source should stay when the rename is refused");
+    CheckFalse(static_cast<bool>(freeResult), __func__, __LINE__, "Renaming to a free name should succeed");
+    CheckEquals(std::string("source_content"), ReadText(freeTarget), __func__, __LINE__, "The renamed file should keep its content");
+    CheckFalse(std::filesystem::exists(source), __func__, __LINE__, "The source name should be gone after the rename");
+    CheckTrue(static_cast<bool>(missingResult) && missingResult != std::errc::file_exists, __func__, __LINE__, "Renaming a missing file should fail with another error");
+
+    std::error_code errorCode;
+    std::filesystem::remove_all(folder, errorCode);
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_Utils::Test_Time_GetUTCOffsetMinutes_FollowsDaylightSavingTime()

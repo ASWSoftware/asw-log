@@ -26,6 +26,7 @@ limitations under the License.
 //---------------------------------------------------------------------------
 // System includes here
 #include <algorithm>
+#include <cerrno>
 #include <charconv>
 #include <chrono>
 #include <ctime>
@@ -561,6 +562,56 @@ std::string PathToUTF8String(const std::filesystem::path& path) noexcept
     {
         return {};
     }
+}
+
+//---------------------------------------------------------------------------
+std::error_code RenameWithoutReplacing(const std::filesystem::path& from, const std::filesystem::path& to) noexcept
+{
+#if defined(_WIN32)
+    // Without MOVEFILE_REPLACE_EXISTING, the move fails if the target exists, checked by Windows as part of the move
+    if (MoveFileExW(from.c_str(), to.c_str(), 0))
+        return {};
+
+    const DWORD error = GetLastError();
+    if (error == ERROR_ALREADY_EXISTS || error == ERROR_FILE_EXISTS)
+        return std::make_error_code(std::errc::file_exists);
+
+    return std::error_code(static_cast<int>(error), std::system_category());
+#else
+    // rename() replaces an existing target, but link() fails if it exists, as one step. Then the old name is removed.
+    if (link(from.c_str(), to.c_str()) == 0)
+    {
+        if (unlink(from.c_str()) == 0)
+            return {};
+
+        // Two names for one file would keep the backup growing with the log, so undo the link
+        const int unlinkError = errno;
+        unlink(to.c_str());
+
+        return std::error_code(unlinkError, std::generic_category());
+    }
+
+    const int linkError = errno;
+    if (linkError == EEXIST)
+        return std::make_error_code(std::errc::file_exists);
+
+    // A file system without hard links (e.g. FAT or some network shares): check, then rename. Another process could
+    // still create the target in between there.
+    if (linkError == EPERM || linkError == ENOTSUP || linkError == EOPNOTSUPP)
+    {
+        std::error_code errorCode;
+        if (std::filesystem::exists(to, errorCode))
+            return std::make_error_code(std::errc::file_exists);
+
+        if (errorCode)
+            return errorCode;
+
+        std::filesystem::rename(from, to, errorCode);
+        return errorCode;
+    }
+
+    return std::error_code(linkError, std::generic_category());
+#endif
 }
 
 //---------------------------------------------------------------------------

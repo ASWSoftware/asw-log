@@ -46,6 +46,7 @@ private: // Test methods
     void Test_IsRootFolder_DetectsRootFolders();
     void Test_IsRootFolder_ResolvesRelativePaths();
     void Test_MatchesWildcard_Patterns();
+    void Test_RenameWithoutReplacing_KeepsExistingTarget();
     void Test_Time_GetUTCOffsetMinutes_FollowsDaylightSavingTime();
     void Test_Time_ToDateString();
     void Test_Time_ToISO8601String();

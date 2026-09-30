@@ -198,6 +198,7 @@ TTest_ASWLog_FileLog::TTest_ASWLog_FileLog()
     RegisterTest(&TTest_ASWLog_FileLog::Test_DailyRolling_KeepsLeftoverLogFromSameDay, "DailyRolling_KeepsLeftoverLogFromSameDay");
     RegisterTest(&TTest_ASWLog_FileLog::Test_DailyRolling_NamesBackupForContentDate, "DailyRolling_NamesBackupForContentDate");
     RegisterTest(&TTest_ASWLog_FileLog::Test_DailyRolling_RotatesLeftoverLogFromEarlierDay, "DailyRolling_RotatesLeftoverLogFromEarlierDay");
+    RegisterTest(&TTest_ASWLog_FileLog::Test_DailyRolling_SharedLogRollsOverOnce, "DailyRolling_SharedLogRollsOverOnce");
     RegisterTest(&TTest_ASWLog_FileLog::Test_DeleteOldLogs_AcceptsShortRelativeFolder, "DeleteOldLogs_AcceptsShortRelativeFolder");
     RegisterTest(&TTest_ASWLog_FileLog::Test_DeleteOldLogs_EmptyPatternDeletesNothing, "DeleteOldLogs_EmptyPatternDeletesNothing");
     RegisterTest(&TTest_ASWLog_FileLog::Test_DeleteOldLogs_MatchesNonASCIIFileNames, "DeleteOldLogs_MatchesNonASCIIFileNames");
@@ -442,6 +443,46 @@ void TTest_ASWLog_FileLog::Test_DailyRolling_RotatesLeftoverLogFromEarlierDay()
     CheckTrue(backupContents.find("today_entry") == std::string::npos, __func__, __LINE__, "The backup should not contain today's entries");
     CheckTrue(currentContents.find("today_entry") != std::string::npos, __func__, __LINE__, "Today's entries should go to a new log file");
     CheckTrue(currentContents.find("yesterday_entry") == std::string::npos, __func__, __LINE__, "The new log file should not contain the earlier day's entries");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_FileLog::Test_DailyRolling_SharedLogRollsOverOnce()
+{
+    // Arrange: two loggers sharing one log, as two processes would (AutoOpenClosePerWrite), both logging at 23:59 UTC
+    using namespace std::chrono_literals;
+    const auto logFile = TestTempDir / "shared.log";
+    auto config = MakeRotationTestConfig(logFile);
+    config.EnableDailyRolling = true;
+    config.AutoOpenClosePerWrite = true;
+
+    const auto dayOne = std::chrono::sys_days{ 2026y / 1 / 15 };
+    TFixedClockFileLog firstLogger;
+    TFixedClockFileLog secondLogger;
+    firstLogger.CurrentTime = dayOne + 23h + 59min;
+    secondLogger.CurrentTime = dayOne + 23h + 59min;
+
+    const bool firstInitialized = firstLogger.Initialize(config);
+    const bool secondInitialized = secondLogger.Initialize(config);
+    firstLogger.LogInfo("first_day_one_entry");
+    secondLogger.LogInfo("second_day_one_entry");
+
+    // The file was written at 23:59; make its age match the clocks' jump past midnight below
+    std::filesystem::last_write_time(logFile, std::chrono::file_clock::now() - 2min);
+    firstLogger.CurrentTime = dayOne + 24h + 30s;
+    secondLogger.CurrentTime = dayOne + 24h + 40s;
+
+    // Act: the first logger rolls the log over; the second then finds a log from today
+    firstLogger.LogInfo("first_day_two_entry");
+    secondLogger.LogInfo("second_day_two_entry");
+    firstLogger.Close();
+    secondLogger.Close();
+
+    // Assert
+    const auto backupContents = ReadFileText(TestTempDir / "shared.daily.2026-01-15.bak");
+    const auto currentContents = ReadFileText(logFile);
+    CheckTrue(firstInitialized && secondInitialized, __func__, __LINE__, "Initialize should succeed");
+    CheckTrue(backupContents.find("first_day_one_entry") != std::string::npos && backupContents.find("second_day_one_entry") != std::string::npos, __func__, __LINE__, "The daily backup should hold both loggers' entries from the first day");
+    CheckFalse(std::filesystem::exists(TestTempDir / "shared.daily.2026-01-15_1.bak"), __func__, __LINE__, "The log should be rolled over only once");
+    CheckTrue(currentContents.find("first_day_two_entry") != std::string::npos && currentContents.find("second_day_two_entry") != std::string::npos, __func__, __LINE__, "Both loggers' entries from the second day should be in the current log");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_FileLog::Test_DeleteOldLogs_AcceptsShortRelativeFolder()
