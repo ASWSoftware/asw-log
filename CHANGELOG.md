@@ -49,6 +49,8 @@ see [0.26.1](#0261---2026-09-17) for the initial versioned baseline.
   given time, including daylight saving time, and
   `Time::ToLocalISO8601String()`, formatting a local time with milliseconds
   and that offset (e.g. `2026-09-28T21:02:44.123-05:00`).
+- `GetCurrentOSProcessId()` and `GetCurrentOSThreadId()`, the operating
+  system's ids for the current process and the calling thread.
 
 ### Changed
 
@@ -69,6 +71,12 @@ see [0.26.1](#0261---2026-09-17) for the initial versioned baseline.
 - The startup "Time:" line (and `GetTimeInfoString()`) now shows the local
   time with milliseconds and its UTC offset, e.g.
   `local=2026-09-28T21:02:44.123-05:00`.
+- The thread id in log lines (`[T:...]`, with `LogThreadId`) and in
+  `GenerateLogFileName()` names (`_TID...`) is now the OS thread id, as shown
+  by debuggers, crash dumps, Process Explorer, and `top -H`, instead of a hash
+  of `std::thread::id` (e.g. `[T:12608]` instead of
+  `[T:15729502191765196471]`). Anything that parses these values sees
+  smaller numbers.
 
 ### Removed
 

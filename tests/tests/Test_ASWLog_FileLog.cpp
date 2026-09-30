@@ -25,6 +25,7 @@ limitations under the License.
 #include "Test_ASWLog_FileLog.h"
 //---------------------------------------------------------------------------
 #include <chrono>
+#include <cstdint>
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
@@ -42,6 +43,7 @@ limitations under the License.
 #include "ASWUnitTests_Registry.h"
 //---------------------------------------------------------------------------
 #include "ASWLog_FileLog.h"
+#include "ASWLog_Utils.h"
 //---------------------------------------------------------------------------
 
 namespace ASWUnitTests
@@ -203,6 +205,7 @@ TTest_ASWLog_FileLog::TTest_ASWLog_FileLog()
     RegisterTest(&TTest_ASWLog_FileLog::Test_LogFormatMethods_WriteCallerSourceLine, "LogFormatMethods_WriteCallerSourceLine");
     RegisterTest(&TTest_ASWLog_FileLog::Test_LogLineMetadata_Options, "LogLineMetadata_Options");
     RegisterTest(&TTest_ASWLog_FileLog::Test_LogNewLineAndForceOptions, "LogNewLineAndForceOptions");
+    RegisterTest(&TTest_ASWLog_FileLog::Test_LogProcessAndThreadIds_AreOSIds, "LogProcessAndThreadIds_AreOSIds");
     RegisterTest(&TTest_ASWLog_FileLog::Test_LogRawOptions, "LogRawOptions");
     RegisterTest(&TTest_ASWLog_FileLog::Test_MultiThreadedStress_WritesAllMessagesToDisk, "MultiThreadedStress_WritesAllMessagesToDisk");
     RegisterTest(&TTest_ASWLog_FileLog::Test_MultiThreadedStress_WritesAllMessagesToDisk_OpenClose, "MultiThreadedStress_WritesAllMessagesToDisk_OpenClose");
@@ -777,6 +780,39 @@ void TTest_ASWLog_FileLog::Test_LogNewLineAndForceOptions()
     CheckTrue(contents.find("forced_message") != std::string::npos, __func__, __LINE__, "LogForce should bypass the minimum level");
     CheckTrue(contents.find("forced_message\n") != std::string::npos, __func__, __LINE__, "LogForce should append a newline by default");
     CheckTrue(contents.find("ignored_message") == std::string::npos, __func__, __LINE__, "Log should not write a message below the configured minimum level");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_FileLog::Test_LogProcessAndThreadIds_AreOSIds()
+{
+    // Arrange
+    const auto logFile = TestTempDir / "os_ids.log";
+    auto config = MakeRotationTestConfig(logFile);
+    config.LogProcessId = true;
+    config.LogThreadId = true;
+
+    ASWLog::TASWFileLog logger;
+    const bool initialized = logger.Initialize(config);
+
+    // Act: log from this thread and from another one
+    const auto processId = ASWLog::GetCurrentOSProcessId();
+    const auto mainThreadId = ASWLog::GetCurrentOSThreadId();
+    logger.LogInfo("main_thread_entry");
+
+    std::uint32_t workerThreadId = 0;
+    std::thread worker([&] {
+        workerThreadId = ASWLog::GetCurrentOSThreadId();
+        logger.LogInfo("worker_thread_entry");
+            });
+    worker.join();
+    logger.Close();
+
+    // Assert
+    const auto contents = ReadFileText(logFile);
+    const auto processTag = "[P:" + std::to_string(processId) + "]";
+    CheckTrue(initialized, __func__, __LINE__, "Initialize should succeed");
+    CheckTrue(mainThreadId != workerThreadId, __func__, __LINE__, "Two threads should have different OS thread ids");
+    CheckTrue(contents.find(processTag + "[T:" + std::to_string(mainThreadId) + "]: main_thread_entry") != std::string::npos, __func__, __LINE__, "The entry should show the OS process id and the logging thread's OS thread id");
+    CheckTrue(contents.find(processTag + "[T:" + std::to_string(workerThreadId) + "]: worker_thread_entry") != std::string::npos, __func__, __LINE__, "An entry from another thread should show that thread's OS thread id");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_FileLog::Test_LogRawOptions()

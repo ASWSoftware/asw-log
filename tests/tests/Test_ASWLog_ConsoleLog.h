@@ -46,6 +46,7 @@ private: // Test methods
     void Test_Initialize_WritesDriveInfoWhenEnabled();
     void Test_IsColorSupported_ReflectsDetectedStreams();
     void Test_LogLineMetadata_Options();
+    void Test_LogProcessAndThreadIds_AreOSIds();
     void Test_LogRawAndForceOptions();
     void Test_LogRespectsMinimumLevel();
     void Test_OnLogEntry_FiresForQualifyingLevelsOnly();

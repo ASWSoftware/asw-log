@@ -27,11 +27,13 @@ limitations under the License.
 #include "ASWLog_Utils.h"
 //---------------------------------------------------------------------------
 #include <chrono>
+#include <cstdint>
 #include <cstdlib>
 #include <ctime>
 #include <filesystem>
 #include <string>
 #include <system_error>
+#include <thread>
 
 #if defined(_WIN32)
 #include <windows.h>
@@ -121,6 +123,8 @@ TTest_ASWLog_Utils::TTest_ASWLog_Utils()
 {
     RegisterTest(&TTest_ASWLog_Utils::Test_GenerateLogFileName_ContainsExpectedFields, "GenerateLogFileName_ContainsExpectedFields");
     RegisterTest(&TTest_ASWLog_Utils::Test_GenerateLogFileName_PrefixAndPostfixAreOptional, "GenerateLogFileName_PrefixAndPostfixAreOptional");
+    RegisterTest(&TTest_ASWLog_Utils::Test_GetCurrentOSProcessId_MatchesOS, "GetCurrentOSProcessId_MatchesOS");
+    RegisterTest(&TTest_ASWLog_Utils::Test_GetCurrentOSThreadId_IdentifiesCallingThread, "GetCurrentOSThreadId_IdentifiesCallingThread");
     RegisterTest(&TTest_ASWLog_Utils::Test_GetOSInfoString_ContainsEdition, "GetOSInfoString_ContainsEdition");
     RegisterTest(&TTest_ASWLog_Utils::Test_GetTimeInfoString_ReportsCurrentOffset, "GetTimeInfoString_ReportsCurrentOffset");
     RegisterTest(&TTest_ASWLog_Utils::Test_GetWindowsEditionName_ProductTypes, "GetWindowsEditionName_ProductTypes");
@@ -168,6 +172,9 @@ void TTest_ASWLog_Utils::Test_GenerateLogFileName_ContainsExpectedFields()
     CheckTrue(logName.find("_PID") != std::string::npos, __func__, __LINE__, "Generated file name should include process id");
     CheckTrue(logName.find("_TID") != std::string::npos, __func__, __LINE__, "Generated file name should include thread id");
     CheckTrue(logName.find("ExampleLog.txt") != std::string::npos, __func__, __LINE__, "Generated file name should include the custom postfix");
+
+    const auto idsPart = "_PID" + std::to_string(ASWLog::GetCurrentOSProcessId()) + "_TID" + std::to_string(ASWLog::GetCurrentOSThreadId()) + "_";
+    CheckTrue(logName.find(idsPart) != std::string::npos, __func__, __LINE__, "Generated file name should use the OS process and thread ids");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_Utils::Test_GenerateLogFileName_PrefixAndPostfixAreOptional()
@@ -192,6 +199,54 @@ void TTest_ASWLog_Utils::Test_GenerateLogFileName_PrefixAndPostfixAreOptional()
     CheckFalse(neither.empty(), __func__, __LINE__, "The name should still contain the timestamp/PID/TID segments when both are empty");
     CheckFalse(neither.starts_with("_"), __func__, __LINE__, "An empty prefix should not leave a leading separator when the postfix is also empty");
     CheckFalse(neither.ends_with("_"), __func__, __LINE__, "An empty postfix should not leave a trailing separator when the prefix is also empty");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_Utils::Test_GetCurrentOSProcessId_MatchesOS()
+{
+    // Act
+    const auto processId = ASWLog::GetCurrentOSProcessId();
+
+    // Assert
+#if defined(_WIN32)
+    CheckEquals(static_cast<std::uint32_t>(GetCurrentProcessId()), processId, __func__, __LINE__, "The id should be the Windows process id");
+#else
+    // "/proc/self" is a link named for this process's id
+    std::error_code errorCode;
+    const auto selfLink = std::filesystem::read_symlink("/proc/self", errorCode);
+    CheckEquals(std::to_string(processId), selfLink.string(), __func__, __LINE__, "The id should be the one /proc/self names");
+#endif
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_Utils::Test_GetCurrentOSThreadId_IdentifiesCallingThread()
+{
+    // Act
+    const auto mainThreadId = ASWLog::GetCurrentOSThreadId();
+    const auto mainThreadIdAgain = ASWLog::GetCurrentOSThreadId();
+
+    std::uint32_t workerThreadId = 0;
+    std::thread worker([&] {
+        workerThreadId = ASWLog::GetCurrentOSThreadId();
+            });
+    worker.join();
+
+    // Assert
+    CheckEquals(mainThreadId, mainThreadIdAgain, __func__, __LINE__, "The id should stay the same on one thread");
+    CheckTrue(mainThreadId != workerThreadId, __func__, __LINE__, "Two threads should have different ids");
+
+#if defined(_WIN32)
+    // The id should name a live thread of this process
+    const HANDLE thread = OpenThread(THREAD_QUERY_LIMITED_INFORMATION, FALSE, mainThreadId);
+    CheckTrue(thread != nullptr, __func__, __LINE__, "The id should open a thread");
+    if (thread != nullptr)
+    {
+        CheckEquals(static_cast<std::uint32_t>(GetCurrentProcessId()), static_cast<std::uint32_t>(GetProcessIdOfThread(thread)), __func__, __LINE__, "The thread should belong to this process");
+        CloseHandle(thread);
+    }
+#else
+    // Each of this process's threads has a /proc/self/task/<id> folder
+    std::error_code errorCode;
+    CheckTrue(std::filesystem::is_directory("/proc/self/task/" + std::to_string(mainThreadId), errorCode), __func__, __LINE__, "The id should name a thread of this process");
+#endif
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_Utils::Test_GetOSInfoString_ContainsEdition()

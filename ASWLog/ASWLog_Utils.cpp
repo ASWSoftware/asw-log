@@ -32,14 +32,13 @@ limitations under the License.
 #include <filesystem>
 #include <format>
 #include <fstream>
-#include <thread>
 #include <vector>
 
 #if defined(_WIN32)
 #include <windows.h>
 #include <psapi.h>
-#include <process.h>
 #else
+#include <sys/syscall.h>
 #include <sys/sysinfo.h>
 #include <sys/utsname.h>
 #include <unistd.h>
@@ -88,15 +87,6 @@ std::string GenerateLogFileName(std::string_view prefix, std::string_view custom
     localtime_r(&timeTimeT, &localCalendarTime);
 #endif
 
-    // Get platform Process ID
-#if defined(_WIN32)
-    auto processId = _getpid();
-#else
-    auto processId = getpid();
-#endif
-
-    auto threadId = std::hash<std::thread::id>{}(std::this_thread::get_id());
-
     // Format target layout: YYYYMMDD_HHMMSS_mmm
     std::string timeStr = std::format("{:04}{:02}{:02}_{:02}{:02}{:02}_{:03}",
         localCalendarTime.tm_year + 1900,
@@ -108,7 +98,7 @@ std::string GenerateLogFileName(std::string_view prefix, std::string_view custom
         millisecondsFraction);
 
     std::string name = prefix.empty() ? std::string() : std::format("{}_", prefix);
-    name += std::format("{}_PID{}_TID{}", timeStr, processId, threadId);
+    name += std::format("{}_PID{}_TID{}", timeStr, GetCurrentOSProcessId(), GetCurrentOSThreadId());
 
     if (!customPostfix.empty())
         name += std::format("_{}", customPostfix);
@@ -153,6 +143,27 @@ std::string GetCommandLineString()
     }
 
     return commandLine;
+#endif
+}
+
+//---------------------------------------------------------------------------
+std::uint32_t GetCurrentOSProcessId() noexcept
+{
+#if defined(_WIN32)
+    return static_cast<std::uint32_t>(GetCurrentProcessId());
+#else
+    return static_cast<std::uint32_t>(getpid());
+#endif
+}
+
+//---------------------------------------------------------------------------
+std::uint32_t GetCurrentOSThreadId() noexcept
+{
+#if defined(_WIN32)
+    return static_cast<std::uint32_t>(GetCurrentThreadId());
+#else
+    // gettid() itself needs glibc 2.30 or later. Not cached per thread, since a forked child's thread gets a new id.
+    return static_cast<std::uint32_t>(syscall(SYS_gettid));
 #endif
 }
 

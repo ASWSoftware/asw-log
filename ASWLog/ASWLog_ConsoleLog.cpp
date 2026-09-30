@@ -29,7 +29,6 @@ limitations under the License.
 #include <filesystem>
 #include <iostream>
 #include <iterator>
-#include <thread>
 
 #if defined(_WIN32)
 #include <windows.h>
@@ -449,19 +448,10 @@ std::string TASWConsoleLog::WriteLogEntry(
             std::format_to(std::back_inserter(line), "[{}]", Level_ToString(level));
 
         if (m_Config.LogProcessId)
-        {
-#if defined(_WIN32)
-            std::format_to(std::back_inserter(line), "[P:{}]", GetCurrentProcessId());
-#else
-            std::format_to(std::back_inserter(line), "[P:{}]", getpid());
-#endif
-        }
+            std::format_to(std::back_inserter(line), "[P:{}]", GetCurrentOSProcessId());
 
         if (m_Config.LogThreadId)
-        {
-            auto numericThreadId = std::hash<std::thread::id>{}(std::this_thread::get_id());
-            std::format_to(std::back_inserter(line), "[T:{}]", numericThreadId);
-        }
+            std::format_to(std::back_inserter(line), "[T:{}]", GetCurrentOSThreadId());
 
         if (m_Config.LogAppMem_WorkingSet || m_Config.LogAppMem_PeakWorkingSet)
         {

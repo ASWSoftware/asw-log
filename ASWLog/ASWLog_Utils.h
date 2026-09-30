@@ -65,13 +65,22 @@ struct TSystemMemoryUsage
     Param 'customPostfix': A user supplied string attached to the end (e.g., "TraceLog.txt").
         Pass an empty string_view to omit it.
 
-    returns a string formatted as: [prefix_]YYYYMMDD_HHMMSS_mmm_PID_TID[_customPostfix]
-    (each bracketed segment, and its separating underscore, is left out entirely when empty)
+    returns a string formatted as: [prefix_]YYYYMMDD_HHMMSS_mmm_PID<pid>_TID<tid>[_customPostfix]
+    (each bracketed segment, and its separating underscore, is left out entirely when empty), where <pid> and <tid>
+    are the OS process and thread ids (see GetCurrentOSProcessId() and GetCurrentOSThreadId())
 */
 [[nodiscard]] std::string GenerateLogFileName(std::string_view prefix, std::string_view customPostfix);
 
 [[nodiscard]] std::string GetApplicationInfoString();
 [[nodiscard]] std::string GetCommandLineString();
+
+// The operating system's id for the current process, as shown by Task Manager, ps, and debuggers.
+[[nodiscard]] std::uint32_t GetCurrentOSProcessId() noexcept;
+
+// The operating system's id for the calling thread, as shown by debuggers, crash dumps, Process Explorer, and top -H
+// (unlike std::thread::id, which has no numeric value outside the program).
+[[nodiscard]] std::uint32_t GetCurrentOSThreadId() noexcept;
+
 [[nodiscard]] std::string GetDriveInfoString();
 [[nodiscard]] std::filesystem::path GetExecutablePath();
 [[nodiscard]] TMemoryUsage GetMemoryUsage();

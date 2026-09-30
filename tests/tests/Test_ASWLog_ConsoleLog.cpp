@@ -24,11 +24,13 @@ limitations under the License.
 // Module header
 #include "Test_ASWLog_ConsoleLog.h"
 //---------------------------------------------------------------------------
+#include <cstdint>
 #include <cstdlib>
 #include <iostream>
 #include <optional>
 #include <sstream>
 #include <string>
+#include <thread>
 #include <utility>
 #include <vector>
 
@@ -41,6 +43,7 @@ limitations under the License.
 #include "ASWUnitTests_Registry.h"
 //---------------------------------------------------------------------------
 #include "ASWLog_ConsoleLog.h"
+#include "ASWLog_Utils.h"
 //---------------------------------------------------------------------------
 
 namespace ASWUnitTests
@@ -194,6 +197,7 @@ TTest_ASWLog_ConsoleLog::TTest_ASWLog_ConsoleLog()
     RegisterTest(&TTest_ASWLog_ConsoleLog::Test_Initialize_WritesDriveInfoWhenEnabled, "Initialize_WritesDriveInfoWhenEnabled");
     RegisterTest(&TTest_ASWLog_ConsoleLog::Test_IsColorSupported_ReflectsDetectedStreams, "IsColorSupported_ReflectsDetectedStreams");
     RegisterTest(&TTest_ASWLog_ConsoleLog::Test_LogLineMetadata_Options, "LogLineMetadata_Options");
+    RegisterTest(&TTest_ASWLog_ConsoleLog::Test_LogProcessAndThreadIds_AreOSIds, "LogProcessAndThreadIds_AreOSIds");
     RegisterTest(&TTest_ASWLog_ConsoleLog::Test_LogRawAndForceOptions, "LogRawAndForceOptions");
     RegisterTest(&TTest_ASWLog_ConsoleLog::Test_LogRespectsMinimumLevel, "LogRespectsMinimumLevel");
     RegisterTest(&TTest_ASWLog_ConsoleLog::Test_OnLogEntry_FiresForQualifyingLevelsOnly, "OnLogEntry_FiresForQualifyingLevelsOnly");
@@ -479,6 +483,43 @@ void TTest_ASWLog_ConsoleLog::Test_LogLineMetadata_Options()
     CheckTrue(contents.find("[T:") != std::string::npos, __func__, __LINE__, "LogThreadId should include the thread id");
     CheckTrue(contents.find("Test_LogLineMetadata_Options") != std::string::npos, __func__, __LINE__, "LogMethodName should include the calling method name");
     CheckTrue(contents.find("metadata_message") != std::string::npos, __func__, __LINE__, "Metadata log line should still contain the message");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_ConsoleLog::Test_LogProcessAndThreadIds_AreOSIds()
+{
+    // Arrange
+    auto config = MakeQuietConfig();
+    config.LogProcessId = true;
+    config.LogThreadId = true;
+
+    ASWLog::TASWConsoleLog logger;
+    logger.SetColorMode(ASWLog::ColorMode::Never);
+    const auto processId = ASWLog::GetCurrentOSProcessId();
+    const auto mainThreadId = ASWLog::GetCurrentOSThreadId();
+    std::uint32_t workerThreadId = 0;
+    std::string contents;
+
+    // Act: log from this thread and from another one. The capture ends before the checks, so their messages aren't
+    // captured.
+    {
+        TStreamCapture captureOut(std::cout);
+        logger.Initialize(config);
+        logger.LogInfo("main_thread_entry");
+
+        std::thread worker([&] {
+            workerThreadId = ASWLog::GetCurrentOSThreadId();
+            logger.LogInfo("worker_thread_entry");
+                });
+        worker.join();
+        logger.Close();
+        contents = captureOut.Str();
+    }
+
+    // Assert
+    const auto processTag = "[P:" + std::to_string(processId) + "]";
+    CheckTrue(mainThreadId != workerThreadId, __func__, __LINE__, "Two threads should have different OS thread ids");
+    CheckTrue(contents.find(processTag + "[T:" + std::to_string(mainThreadId) + "]: main_thread_entry") != std::string::npos, __func__, __LINE__, "The entry should show the OS process id and the logging thread's OS thread id");
+    CheckTrue(contents.find(processTag + "[T:" + std::to_string(workerThreadId) + "]: worker_thread_entry") != std::string::npos, __func__, __LINE__, "An entry from another thread should show that thread's OS thread id");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_ConsoleLog::Test_LogRawAndForceOptions()

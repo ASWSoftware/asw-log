@@ -52,6 +52,7 @@ private: // Test methods
     void Test_LogFormatMethods_WriteCallerSourceLine();
     void Test_LogLineMetadata_Options();
     void Test_LogNewLineAndForceOptions();
+    void Test_LogProcessAndThreadIds_AreOSIds();
     void Test_LogRawOptions();
     void Test_MultiThreadedStress_WritesAllMessagesToDisk();
     void Test_MultiThreadedStress_WritesAllMessagesToDisk_OpenClose();

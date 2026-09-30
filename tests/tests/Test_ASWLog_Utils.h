@@ -38,6 +38,8 @@ private:
 private: // Test methods
     void Test_GenerateLogFileName_ContainsExpectedFields();
     void Test_GenerateLogFileName_PrefixAndPostfixAreOptional();
+    void Test_GetCurrentOSProcessId_MatchesOS();
+    void Test_GetCurrentOSThreadId_IdentifiesCallingThread();
     void Test_GetOSInfoString_ContainsEdition();
     void Test_GetTimeInfoString_ReportsCurrentOffset();
     void Test_GetWindowsEditionName_ProductTypes();
