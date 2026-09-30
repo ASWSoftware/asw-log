@@ -92,7 +92,9 @@ struct TASWLogConfig
     // After a failed size rotation (e.g. another program holds the file), entries keep going to the current file, and
     // rotating isn't tried again until this long after the failure. 0 = try on every entry.
     std::chrono::milliseconds RotationRetryDelay{ 500 };
-    bool EnableDailyRolling   = false; // Rolls the file over at UTC midnight; the backup is named for the day it holds
+    // Rolls the file over at UTC midnight, and at Initialize() if the file was last written on an earlier UTC day. The
+    // backup is named for the day it holds.
+    bool EnableDailyRolling   = false;
 
     // --- Log Retention Options (applied automatically after a successful rotation) ---
     std::chrono::hours RetentionMaxAge{ 0 }; // 0 = disabled. When > 0, backups for this log older than this age are deleted after each rotation.

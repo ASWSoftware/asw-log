@@ -195,7 +195,9 @@ TTest_ASWLog_FileLog::TTest_ASWLog_FileLog()
 {
     RegisterTest(&TTest_ASWLog_FileLog::Test_ChildProcess_DoesNotInheritLogFile, "ChildProcess_DoesNotInheritLogFile");
     RegisterTest(&TTest_ASWLog_FileLog::Test_DailyRolling_KeepsExistingBackupForSameDate, "DailyRolling_KeepsExistingBackupForSameDate");
+    RegisterTest(&TTest_ASWLog_FileLog::Test_DailyRolling_KeepsLeftoverLogFromSameDay, "DailyRolling_KeepsLeftoverLogFromSameDay");
     RegisterTest(&TTest_ASWLog_FileLog::Test_DailyRolling_NamesBackupForContentDate, "DailyRolling_NamesBackupForContentDate");
+    RegisterTest(&TTest_ASWLog_FileLog::Test_DailyRolling_RotatesLeftoverLogFromEarlierDay, "DailyRolling_RotatesLeftoverLogFromEarlierDay");
     RegisterTest(&TTest_ASWLog_FileLog::Test_DeleteOldLogs_AcceptsShortRelativeFolder, "DeleteOldLogs_AcceptsShortRelativeFolder");
     RegisterTest(&TTest_ASWLog_FileLog::Test_DeleteOldLogs_EmptyPatternDeletesNothing, "DeleteOldLogs_EmptyPatternDeletesNothing");
     RegisterTest(&TTest_ASWLog_FileLog::Test_DeleteOldLogs_MatchesNonASCIIFileNames, "DeleteOldLogs_MatchesNonASCIIFileNames");
@@ -348,6 +350,37 @@ void TTest_ASWLog_FileLog::Test_DailyRolling_KeepsExistingBackupForSameDate()
     CheckTrue(newBackupContents.find("day_one_entry") != std::string::npos, __func__, __LINE__, "Daily rolling should add _1 to the name when the day's backup already exists");
 }
 //---------------------------------------------------------------------------
+void TTest_ASWLog_FileLog::Test_DailyRolling_KeepsLeftoverLogFromSameDay()
+{
+    // Arrange: a log last written 2 hours before the logger starts at 10:00 UTC, i.e. earlier the same UTC day
+    using namespace std::chrono_literals;
+    const auto logFile = TestTempDir / "same_day.log";
+    {
+        std::ofstream leftoverStream(logFile);
+        leftoverStream << "earlier_today_entry\n";
+    }
+
+    std::filesystem::last_write_time(logFile, std::chrono::file_clock::now() - 2h);
+
+    auto config = MakeRotationTestConfig(logFile);
+    config.EnableDailyRolling = true;
+
+    TFixedClockFileLog logger;
+    logger.CurrentTime = std::chrono::sys_days{ 2026y / 1 / 15 } + 10h;
+
+    // Act
+    const bool initialized = logger.Initialize(config);
+    logger.LogInfo("new_entry");
+    logger.Close();
+
+    // Assert
+    const auto contents = ReadFileText(logFile);
+    CheckTrue(initialized, __func__, __LINE__, "Initialize should succeed");
+    CheckFalse(std::filesystem::exists(TestTempDir / "same_day.daily.2026-01-15.bak"), __func__, __LINE__, "A log from the same day should not be rotated");
+    CheckTrue(contents.find("earlier_today_entry") != std::string::npos, __func__, __LINE__, "Today's earlier entries should stay in the log");
+    CheckTrue(contents.find("new_entry") != std::string::npos, __func__, __LINE__, "New entries should be appended to the log");
+}
+//---------------------------------------------------------------------------
 void TTest_ASWLog_FileLog::Test_DailyRolling_NamesBackupForContentDate()
 {
     // Arrange
@@ -376,6 +409,39 @@ void TTest_ASWLog_FileLog::Test_DailyRolling_NamesBackupForContentDate()
     CheckFalse(std::filesystem::exists(TestTempDir / "rolling.daily.2026-01-16.bak"), __func__, __LINE__, "The daily backup should not be named for the day that just started");
     CheckTrue(currentContents.find("day_two_entry") != std::string::npos, __func__, __LINE__, "The new day's entries should go to the reopened log file");
     CheckTrue(currentContents.find("day_one_entry") == std::string::npos, __func__, __LINE__, "The reopened log file should not contain the previous day's entries");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_FileLog::Test_DailyRolling_RotatesLeftoverLogFromEarlierDay()
+{
+    // Arrange: a log last written 30 hours before the logger starts at 10:00 UTC on 2026-01-15, i.e. on 2026-01-14
+    using namespace std::chrono_literals;
+    const auto logFile = TestTempDir / "leftover.log";
+    {
+        std::ofstream leftoverStream(logFile);
+        leftoverStream << "yesterday_entry\n";
+    }
+
+    std::filesystem::last_write_time(logFile, std::chrono::file_clock::now() - 30h);
+
+    auto config = MakeRotationTestConfig(logFile);
+    config.EnableDailyRolling = true;
+
+    TFixedClockFileLog logger;
+    logger.CurrentTime = std::chrono::sys_days{ 2026y / 1 / 15 } + 10h;
+
+    // Act
+    const bool initialized = logger.Initialize(config);
+    logger.LogInfo("today_entry");
+    logger.Close();
+
+    // Assert
+    const auto backupContents = ReadFileText(TestTempDir / "leftover.daily.2026-01-14.bak");
+    const auto currentContents = ReadFileText(logFile);
+    CheckTrue(initialized, __func__, __LINE__, "Initialize should succeed");
+    CheckTrue(backupContents.find("yesterday_entry") != std::string::npos, __func__, __LINE__, "The leftover log should be rotated to a backup named for the day it was written");
+    CheckTrue(backupContents.find("today_entry") == std::string::npos, __func__, __LINE__, "The backup should not contain today's entries");
+    CheckTrue(currentContents.find("today_entry") != std::string::npos, __func__, __LINE__, "Today's entries should go to a new log file");
+    CheckTrue(currentContents.find("yesterday_entry") == std::string::npos, __func__, __LINE__, "The new log file should not contain the earlier day's entries");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_FileLog::Test_DeleteOldLogs_AcceptsShortRelativeFolder()

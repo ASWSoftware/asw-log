@@ -464,6 +464,9 @@ bool TASWFileLog::Initialize(const TASWLogConfig& config)
     m_Config = config;
     m_MinimumLevel.store(m_Config.InitialMinimumLevel, std::memory_order_release);
 
+    if (m_Config.EnableDailyRolling)
+        RotateLeftoverDailyLogUnlocked();
+
     if (!OpenUnlocked())
     {
         return false;
@@ -629,6 +632,41 @@ bool TASWFileLog::RotateLogFiles(std::string_view reasonTag)
 {
     std::lock_guard<std::mutex> lock(m_FileMutex);
     return RotateLogFilesUnlocked(reasonTag, ToBackupTimeLabel(NowUTC()));
+}
+
+//---------------------------------------------------------------------------
+/*
+    TASWFileLog::RotateLeftoverDailyLogUnlocked
+
+    Called by Initialize() with daily rolling on, before the log file is opened. If the file already has entries from
+    an earlier UTC day (e.g. the app was restarted the next morning), rotates it to a daily backup named for that day,
+    as the midnight rollover would have, so they aren't mixed into today's file. If the rotation fails, logging still
+    appends to the file.
+*/
+void TASWFileLog::RotateLeftoverDailyLogUnlocked()
+{
+    const auto logPath = m_Config.ResolveLogFilePath();
+
+    std::error_code errorCode;
+    const auto fileSize = std::filesystem::file_size(logPath, errorCode);
+    if (errorCode || fileSize == 0)
+        return;
+
+    const auto lastWriteTime = std::filesystem::last_write_time(logPath, errorCode);
+    if (errorCode)
+        return;
+
+    // Converts the file time to the logger's UTC clock through the file's age, since the standard libraries don't share
+    // a file_clock conversion (clock_cast is missing from libc++, to_sys from MSVC's library). This also follows the
+    // NowUTC() override.
+    const auto now = NowUTC();
+    const auto fileAge = std::filesystem::file_time_type::clock::now() - lastWriteTime;
+    const auto lastWriteUTC = now - std::chrono::duration_cast<std::chrono::system_clock::duration>(fileAge);
+
+    // YYYY-MM-DD strings compare in date order
+    const auto lastWriteDateStr = Time::ToDateString(lastWriteUTC);
+    if (lastWriteDateStr < Time::ToDateString(now))
+        RotateLogFilesUnlocked("daily", lastWriteDateStr);
 }
 
 //---------------------------------------------------------------------------

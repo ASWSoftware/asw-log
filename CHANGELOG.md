@@ -180,6 +180,11 @@ see [0.26.1](#0261---2026-09-17) for the initial versioned baseline.
   exited. On Linux, a program started with `fork()` and `exec()` kept the file
   open. The file is now opened non-inheritable on Windows and close-on-exec
   on Linux.
+- With daily rolling (`EnableDailyRolling`), a log left over from an earlier
+  UTC day (e.g. the app was restarted the next morning) was appended to, so
+  its old entries ended up in the backup for the following day. `Initialize()`
+  now rotates such a file to the daily backup named for the day it was last
+  written.
 
 ## [0.26.4] - 2026-09-21
 
