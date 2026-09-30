@@ -10,6 +10,8 @@ see [0.26.1](#0261---2026-09-17) for the initial versioned baseline.
 
 ## [Unreleased]
 
+## [0.43.0] - 2026-09-29
+
 ### Added
 
 - CI workflow (`.github/workflows/ci.yml`), building and running the unit
@@ -252,7 +254,8 @@ Everything already present in the logger at this point (`TASWFileLog`,
 and CMake example projects, unit tests, `Deploy.bat`, etc.) is treated as the
 baseline and is not itemized commit-by-commit.
 
-[Unreleased]: https://github.com/ASWSoftware/asw-log/compare/v0.26.4...HEAD
+[Unreleased]: https://github.com/ASWSoftware/asw-log/compare/v0.43.0...HEAD
+[0.43.0]: https://github.com/ASWSoftware/asw-log/compare/v0.26.4...v0.43.0
 [0.26.4]: https://github.com/ASWSoftware/asw-log/compare/v0.26.3...v0.26.4
 [0.26.3]: https://github.com/ASWSoftware/asw-log/compare/v0.26.1...v0.26.3
 [0.26.1]: https://github.com/ASWSoftware/asw-log/releases/tag/v0.26.1
