@@ -27,6 +27,8 @@ limitations under the License.
 #include "ASWLog_Utils.h"
 //---------------------------------------------------------------------------
 #include <chrono>
+#include <cstdlib>
+#include <ctime>
 #include <filesystem>
 #include <string>
 #include <system_error>
@@ -41,6 +43,78 @@ limitations under the License.
 namespace ASWUnitTests
 {
 
+namespace
+{
+
+// While alive, sets the C runtime's local time zone through the TZ environment variable (POSIX format, e.g. "EST5EDT",
+// which the Windows C runtime also reads), then restores the previous value.
+class TScopedTimeZone
+{
+private:
+    bool m_HadValue = false;
+    std::string m_PreviousValue;
+
+    // Sets TZ to 'value', or removes it if 'value' is null, and makes the C runtime read it again
+    static void Apply(const char* value)
+    {
+#if defined(_WIN32)
+        _putenv_s("TZ", value != nullptr ? value : ""); // An empty value removes the variable
+        _tzset();
+
+        // Once the Windows C runtime has read a system time zone without daylight saving time (e.g. UTC on CI machines,
+        // or Arizona), it keeps that zone's daylight saving bias of 0 even when TZ then names a zone that has daylight
+        // saving time, so summer would be flagged as daylight saving time without moving the clock. TZ can't give the
+        // bias, so set the usual hour.
+        int hasDaylightSavingTime = 0;
+        if (value != nullptr && _get_daylight(&hasDaylightSavingTime) == 0 && hasDaylightSavingTime != 0)
+        {
+#if defined(_MSC_VER)
+#pragma warning(suppress : 4996) // __dstbias() is deprecated in favor of _get_dstbias(), which can't set it
+#endif
+            *__dstbias() = -3600;
+        }
+#else
+        if (value != nullptr)
+            setenv("TZ", value, 1);
+        else
+            unsetenv("TZ");
+        tzset();
+#endif
+    }
+
+public:
+    explicit TScopedTimeZone(const char* timeZone)
+    {
+#if defined(_WIN32)
+        // _putenv_s also updates the process environment, which GetEnvironmentVariableA reads (avoids getenv(), which
+        // MSVC warns about)
+        char buffer[256]{};
+        const DWORD length = GetEnvironmentVariableA("TZ", buffer, sizeof(buffer));
+        m_HadValue = length > 0 && length < sizeof(buffer);
+        if (m_HadValue)
+            m_PreviousValue.assign(buffer, length);
+#else
+        const char* previous = std::getenv("TZ");
+        m_HadValue = previous != nullptr;
+        if (m_HadValue)
+            m_PreviousValue = previous;
+#endif
+        Apply(timeZone);
+    }
+
+    ~TScopedTimeZone()
+    {
+        Apply(m_HadValue ? m_PreviousValue.c_str() : nullptr);
+    }
+
+    TScopedTimeZone(const TScopedTimeZone&) = delete;
+    TScopedTimeZone& operator=(const TScopedTimeZone&) = delete;
+};
+
+} // namespace
+
+//---------------------------------------------------------------------------
+
 //---------------------------------------------------------------------------
 TTest_ASWLog_Utils::TTest_ASWLog_Utils()
     : inherited("ASWLog_Utils_Tests")
@@ -48,12 +122,15 @@ TTest_ASWLog_Utils::TTest_ASWLog_Utils()
     RegisterTest(&TTest_ASWLog_Utils::Test_GenerateLogFileName_ContainsExpectedFields, "GenerateLogFileName_ContainsExpectedFields");
     RegisterTest(&TTest_ASWLog_Utils::Test_GenerateLogFileName_PrefixAndPostfixAreOptional, "GenerateLogFileName_PrefixAndPostfixAreOptional");
     RegisterTest(&TTest_ASWLog_Utils::Test_GetOSInfoString_ContainsEdition, "GetOSInfoString_ContainsEdition");
+    RegisterTest(&TTest_ASWLog_Utils::Test_GetTimeInfoString_ReportsCurrentOffset, "GetTimeInfoString_ReportsCurrentOffset");
     RegisterTest(&TTest_ASWLog_Utils::Test_GetWindowsEditionName_ProductTypes, "GetWindowsEditionName_ProductTypes");
     RegisterTest(&TTest_ASWLog_Utils::Test_IsRootFolder_DetectsRootFolders, "IsRootFolder_DetectsRootFolders");
     RegisterTest(&TTest_ASWLog_Utils::Test_IsRootFolder_ResolvesRelativePaths, "IsRootFolder_ResolvesRelativePaths");
     RegisterTest(&TTest_ASWLog_Utils::Test_MatchesWildcard_Patterns, "MatchesWildcard_Patterns");
+    RegisterTest(&TTest_ASWLog_Utils::Test_Time_GetUTCOffsetMinutes_FollowsDaylightSavingTime, "Time_GetUTCOffsetMinutes_FollowsDaylightSavingTime");
     RegisterTest(&TTest_ASWLog_Utils::Test_Time_ToDateString, "Time_ToDateString");
     RegisterTest(&TTest_ASWLog_Utils::Test_Time_ToISO8601String, "Time_ToISO8601String");
+    RegisterTest(&TTest_ASWLog_Utils::Test_Time_ToLocalISO8601String_IncludesOffset, "Time_ToLocalISO8601String_IncludesOffset");
 }
 //---------------------------------------------------------------------------
 TTest_ASWLog_Utils::~TTest_ASWLog_Utils()
@@ -139,6 +216,34 @@ void TTest_ASWLog_Utils::Test_GetOSInfoString_ContainsEdition()
 #endif
 }
 //---------------------------------------------------------------------------
+void TTest_ASWLog_Utils::Test_GetTimeInfoString_ReportsCurrentOffset()
+{
+    // Arrange: US Eastern time, which is -300 minutes from UTC, or -240 while daylight saving time is in effect. The
+    // C runtime's tm_isdst says which applies now.
+    const TScopedTimeZone timeZone("EST5EDT");
+    const auto timeValue = std::time(nullptr);
+    std::tm localTime{};
+#if defined(_WIN32)
+    localtime_s(&localTime, &timeValue);
+#else
+    localtime_r(&timeValue, &localTime);
+#endif
+    const bool isDaylightSavingTime = localTime.tm_isdst > 0;
+    const std::string expectedOffset = isDaylightSavingTime ? "-240" : "-300";
+    const std::string expectedLocalSuffix = isDaylightSavingTime ? "-04:00" : "-05:00";
+
+    // Act
+    const auto timeInfo = ASWLog::GetTimeInfoString();
+
+    // Assert
+    const std::string offsetLabel = "offset_minutes=";
+    const auto offsetPos = timeInfo.find(offsetLabel);
+    CheckTrue(offsetPos != std::string::npos, __func__, __LINE__, "The time info should include offset_minutes");
+    if (offsetPos != std::string::npos)
+        CheckEquals(expectedOffset, timeInfo.substr(offsetPos + offsetLabel.size()), __func__, __LINE__, "offset_minutes should include daylight saving time when it is in effect");
+    CheckTrue(timeInfo.find(expectedLocalSuffix + ", " + offsetLabel) != std::string::npos, __func__, __LINE__, "The local time should end with the zone's current offset");
+}
+//---------------------------------------------------------------------------
 void TTest_ASWLog_Utils::Test_GetWindowsEditionName_ProductTypes()
 {
 #if defined(_WIN32)
@@ -222,6 +327,25 @@ void TTest_ASWLog_Utils::Test_MatchesWildcard_Patterns()
     CheckTrue(ASWLog::MatchesWildcard("no_extension", "*"), __func__, __LINE__, "A lone '*' should match any name, with or without a dot");
 }
 //---------------------------------------------------------------------------
+void TTest_ASWLog_Utils::Test_Time_GetUTCOffsetMinutes_FollowsDaylightSavingTime()
+{
+    // Arrange: noon UTC on a summer and a winter day
+    using namespace std::chrono_literals;
+    const auto summer = std::chrono::sys_days{ 2026y / 7 / 1 } + 12h;
+    const auto winter = std::chrono::sys_days{ 2026y / 1 / 15 } + 12h;
+
+    // Act & Assert
+    {
+        const TScopedTimeZone timeZone("EST5EDT");
+        CheckEquals(-240, ASWLog::Time::GetUTCOffsetMinutes(summer), __func__, __LINE__, "US Eastern daylight time should be 4 hours behind UTC");
+        CheckEquals(-300, ASWLog::Time::GetUTCOffsetMinutes(winter), __func__, __LINE__, "US Eastern standard time should be 5 hours behind UTC");
+    }
+    {
+        const TScopedTimeZone timeZone("IST-5:30");
+        CheckEquals(330, ASWLog::Time::GetUTCOffsetMinutes(summer), __func__, __LINE__, "India Standard Time should be 5 hours 30 minutes ahead of UTC");
+    }
+}
+//---------------------------------------------------------------------------
 void TTest_ASWLog_Utils::Test_Time_ToDateString()
 {
     // Arrange
@@ -247,6 +371,30 @@ void TTest_ASWLog_Utils::Test_Time_ToISO8601String()
     CheckTrue(iso.find('T') != std::string::npos, __func__, __LINE__, "ISO string should include the T separator");
     CheckTrue(iso.find('Z') == iso.size() - 1, __func__, __LINE__, "ISO string should end with Z");
     CheckTrue(iso.size() >= 24, __func__, __LINE__, "ISO string should include date and time");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_Utils::Test_Time_ToLocalISO8601String_IncludesOffset()
+{
+    // Arrange: just after noon UTC on a summer and a winter day
+    using namespace std::chrono_literals;
+    const auto summer = std::chrono::sys_days{ 2026y / 7 / 1 } + 12h + 123ms;
+    const auto winter = std::chrono::sys_days{ 2026y / 1 / 15 } + 12h + 7ms;
+
+    // Act & Assert
+    {
+        const TScopedTimeZone timeZone("EST5EDT");
+        CheckEquals(std::string("2026-07-01T08:00:00.123-04:00"), ASWLog::Time::ToLocalISO8601String(summer), __func__, __LINE__, "Summer should show US Eastern daylight time with milliseconds and its offset");
+        CheckEquals(std::string("2026-01-15T07:00:00.007-05:00"), ASWLog::Time::ToLocalISO8601String(winter), __func__, __LINE__, "Winter should show US Eastern standard time with zero-padded milliseconds and its offset");
+    }
+    {
+        const TScopedTimeZone timeZone("IST-5:30");
+        CheckEquals(std::string("2026-07-01T17:30:00.123+05:30"), ASWLog::Time::ToLocalISO8601String(summer), __func__, __LINE__, "A zone ahead of UTC should show a '+' offset with its minutes");
+    }
+    {
+        const TScopedTimeZone timeZone("UTC0");
+        CheckEquals(std::string("2026-07-01T12:00:00.123+00:00"), ASWLog::Time::ToLocalISO8601String(summer), __func__, __LINE__, "UTC should show a +00:00 offset");
+        CheckEquals(std::string("2026-07-01T12:00:00.000+00:00"), ASWLog::Time::ToLocalISO8601String(std::chrono::sys_days{ 2026y / 7 / 1 } + 12h), __func__, __LINE__, "A whole second should show .000");
+    }
 }
 //---------------------------------------------------------------------------
 

@@ -45,6 +45,10 @@ see [0.26.1](#0261---2026-09-17) for the initial versioned baseline.
 - `IsRootFolder()`, telling whether a folder is the root of a drive, network
   share, volume, or file system (e.g. `C:\`, `\\server\share\`, `/`), as
   used by `DeleteOldLogs`.
+- `Time::GetUTCOffsetMinutes()`, the local time zone's offset from UTC at a
+  given time, including daylight saving time, and
+  `Time::ToLocalISO8601String()`, formatting a local time with milliseconds
+  and that offset (e.g. `2026-09-28T21:02:44.123-05:00`).
 
 ### Changed
 
@@ -62,6 +66,9 @@ see [0.26.1](#0261---2026-09-17) for the initial versioned baseline.
 - `TASWFileLog::DeleteOldLogs` with an empty `pattern` now deletes nothing;
   it used to delete every file in the folder older than `maxAge`. To keep
   that behavior, pass `"*"`.
+- The startup "Time:" line (and `GetTimeInfoString()`) now shows the local
+  time with milliseconds and its UTC offset, e.g.
+  `local=2026-09-28T21:02:44.123-05:00`.
 
 ### Removed
 
@@ -156,6 +163,9 @@ see [0.26.1](#0261---2026-09-17) for the initial versioned baseline.
   as the relative folders `log` or `.`, which it mistook for a root folder.
   It now refuses only an actual root folder, which it also didn't recognize
   in forms such as `\\server\share\` or `C:\logs\..`.
+- The startup "Time:" line (`GetTimeInfoString()`) reporting `offset_minutes`
+  an hour off while daylight saving time was in effect (e.g. -360 instead of
+  -300 for US Central daylight time).
 
 ## [0.26.4] - 2026-09-21
 

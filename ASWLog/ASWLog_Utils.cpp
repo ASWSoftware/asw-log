@@ -335,33 +335,9 @@ std::string GetSystemMemoryUsageString()
 std::string GetTimeInfoString()
 {
     const auto now = std::chrono::system_clock::now();
-    const auto timeValue = std::chrono::system_clock::to_time_t(now);
-
-    std::tm utcTime{};
-    std::tm localTime{};
-#if defined(_WIN32)
-    gmtime_s(&utcTime, &timeValue);
-    localtime_s(&localTime, &timeValue);
-#else
-    gmtime_r(&timeValue, &utcTime);
-    localtime_r(&timeValue, &localTime);
-#endif
-
-    const auto utcSeconds = std::mktime(&utcTime);
-    const auto localSeconds = std::mktime(&localTime);
-    const auto offsetSeconds = localSeconds - utcSeconds;
-    const auto offsetMinutes = offsetSeconds / 60;
 
     return std::format("utc={}, local={}, offset_minutes={}",
-        Time::ToISO8601String(now),
-        std::format("{:04}-{:02}-{:02}T{:02}:{:02}:{:02}",
-            localTime.tm_year + 1900,
-            localTime.tm_mon + 1,
-            localTime.tm_mday,
-            localTime.tm_hour,
-            localTime.tm_min,
-            localTime.tm_sec),
-        offsetMinutes);
+        Time::ToISO8601String(now), Time::ToLocalISO8601String(now), Time::GetUTCOffsetMinutes(now));
 }
 
 //---------------------------------------------------------------------------
@@ -582,6 +558,29 @@ namespace Time
 {
 
 //---------------------------------------------------------------------------
+int GetUTCOffsetMinutes(std::chrono::system_clock::time_point timePoint)
+{
+    const auto timeValue = std::chrono::system_clock::to_time_t(timePoint);
+    std::tm localTime{};
+#if defined(_WIN32)
+    if (localtime_s(&localTime, &timeValue) != 0)
+        return 0;
+#else
+    if (localtime_r(&timeValue, &localTime) == nullptr)
+        return 0;
+#endif
+
+    // The local date and time read as if they were UTC, minus the actual time. Not mktime(), which would read UTC
+    // fields as local time and apply this zone's daylight saving rules to them.
+    const std::chrono::sys_days localDate = std::chrono::year(localTime.tm_year + 1900) / (localTime.tm_mon + 1) / localTime.tm_mday;
+    const auto localAsUTC = localDate + std::chrono::hours(localTime.tm_hour) + std::chrono::minutes(localTime.tm_min) +
+        std::chrono::seconds(localTime.tm_sec);
+    const auto actualTime = std::chrono::time_point_cast<std::chrono::seconds>(std::chrono::system_clock::from_time_t(timeValue));
+
+    return static_cast<int>(std::chrono::duration_cast<std::chrono::minutes>(localAsUTC - actualTime).count());
+}
+
+//---------------------------------------------------------------------------
 std::string ToISO8601String(std::chrono::system_clock::time_point timePoint)
 {
     auto timeTimeT = std::chrono::system_clock::to_time_t(timePoint);
@@ -622,6 +621,37 @@ std::string ToDateString(std::chrono::system_clock::time_point timePoint)
         utcTime.tm_year + 1900,
         utcTime.tm_mon + 1,
         utcTime.tm_mday);
+}
+
+//---------------------------------------------------------------------------
+std::string ToLocalISO8601String(std::chrono::system_clock::time_point timePoint)
+{
+    const auto timeValue = std::chrono::system_clock::to_time_t(timePoint);
+    std::tm localTime{};
+#if defined(_WIN32)
+    localtime_s(&localTime, &timeValue);
+#else
+    localtime_r(&timeValue, &localTime);
+#endif
+
+    const auto durationSinceEpoch = timePoint.time_since_epoch();
+    const auto secondsSinceEpoch = std::chrono::duration_cast<std::chrono::seconds>(durationSinceEpoch);
+    const auto millisecondsFraction = std::chrono::duration_cast<std::chrono::milliseconds>(durationSinceEpoch - secondsSinceEpoch).count();
+
+    const auto offsetMinutes = GetUTCOffsetMinutes(timePoint);
+    const auto absoluteOffsetMinutes = offsetMinutes < 0 ? -offsetMinutes : offsetMinutes;
+
+    return std::format("{:04}-{:02}-{:02}T{:02}:{:02}:{:02}.{:03}{}{:02}:{:02}",
+        localTime.tm_year + 1900,
+        localTime.tm_mon + 1,
+        localTime.tm_mday,
+        localTime.tm_hour,
+        localTime.tm_min,
+        localTime.tm_sec,
+        millisecondsFraction,
+        offsetMinutes < 0 ? '-' : '+',
+        absoluteOffsetMinutes / 60,
+        absoluteOffsetMinutes % 60);
 }
 
 } // namespace Time

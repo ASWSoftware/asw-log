@@ -119,6 +119,15 @@ namespace Time
 {
 
 /*
+    GetUTCOffsetMinutes
+
+    How many minutes the local time zone is ahead of UTC at 'timePoint' (negative west of UTC), including daylight
+    saving time if it is in effect then, e.g. -300 for US Central daylight time. Returns 0 if the local time can't be
+    determined.
+*/
+[[nodiscard]] int GetUTCOffsetMinutes(std::chrono::system_clock::time_point timePoint);
+
+/*
     ToISO8601String
 
     Converts a high-precision system time point into a valid ISO 8601 UTC string.
@@ -133,6 +142,15 @@ namespace Time
         Format: YYYY-MM-DD
 */
 [[nodiscard]] std::string ToDateString(std::chrono::system_clock::time_point timePoint);
+
+/*
+    ToLocalISO8601String
+
+    Converts a system time point into an ISO 8601 local time string with the local time zone's offset from UTC (see
+    GetUTCOffsetMinutes()), with milliseconds like ToISO8601String().
+        Format: YYYY-MM-DDTHH:mm:ss.mmm+hh:mm (e.g. 2026-09-28T21:02:44.123-05:00)
+*/
+[[nodiscard]] std::string ToLocalISO8601String(std::chrono::system_clock::time_point timePoint);
 
 } // namespace Time
 
