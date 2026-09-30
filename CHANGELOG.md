@@ -174,6 +174,12 @@ see [0.26.1](#0261---2026-09-17) for the initial versioned baseline.
 - The startup "Time:" line (`GetTimeInfoString()`) reporting `offset_minutes`
   an hour off while daylight saving time was in effect (e.g. -360 instead of
   -300 for US Central daylight time).
+- Child processes inheriting `TASWFileLog`'s open log file. On Windows, a
+  child started with handle inheritance (e.g. `CreateProcess` with
+  `bInheritHandles`) kept the file open and made rotation fail until it
+  exited. On Linux, a program started with `fork()` and `exec()` kept the file
+  open. The file is now opened non-inheritable on Windows and close-on-exec
+  on Linux.
 
 ## [0.26.4] - 2026-09-21
 

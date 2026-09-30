@@ -158,10 +158,14 @@ bool TASWFileStreamBuf::IsOpen() const noexcept
 bool TASWFileStreamBuf::Open(const std::filesystem::path& path)
 {
     Close();
+
+    // Child processes don't get the file: 'N' makes the handle non-inheritable (on Windows an inherited handle would
+    // block renaming the file during rotation), and 'e' closes it when a child starts another program (O_CLOEXEC).
+    // Both are set as the file opens, so a child started by another thread meanwhile can't get it either.
 #if defined(_WIN32)
-    m_File = _wfsopen(path.c_str(), L"ab", _SH_DENYWR);
+    m_File = _wfsopen(path.c_str(), L"abN", _SH_DENYWR);
 #else
-    m_File = std::fopen(path.c_str(), "ab");
+    m_File = std::fopen(path.c_str(), "abe");
 #endif
     if (m_File == nullptr)
         return false;

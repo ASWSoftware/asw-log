@@ -36,7 +36,11 @@ limitations under the License.
 
 #if defined(_WIN32)
 #include <share.h>
+#include <windows.h>
+#undef min
+#undef max
 #else
+#include <fcntl.h>
 #include <unistd.h>
 #endif
 //---------------------------------------------------------------------------
@@ -189,6 +193,7 @@ std::string ReadFileText(const std::filesystem::path& path)
 TTest_ASWLog_FileLog::TTest_ASWLog_FileLog()
     : inherited("ASWLog_FileLog_Tests")
 {
+    RegisterTest(&TTest_ASWLog_FileLog::Test_ChildProcess_DoesNotInheritLogFile, "ChildProcess_DoesNotInheritLogFile");
     RegisterTest(&TTest_ASWLog_FileLog::Test_DailyRolling_KeepsExistingBackupForSameDate, "DailyRolling_KeepsExistingBackupForSameDate");
     RegisterTest(&TTest_ASWLog_FileLog::Test_DailyRolling_NamesBackupForContentDate, "DailyRolling_NamesBackupForContentDate");
     RegisterTest(&TTest_ASWLog_FileLog::Test_DeleteOldLogs_AcceptsShortRelativeFolder, "DeleteOldLogs_AcceptsShortRelativeFolder");
@@ -250,6 +255,65 @@ void TTest_ASWLog_FileLog::TearDown_Test(ITestCase& testCase)
 
 // /////// Begin tests after this line ///////////////////////
 
+//---------------------------------------------------------------------------
+void TTest_ASWLog_FileLog::Test_ChildProcess_DoesNotInheritLogFile()
+{
+    // Arrange
+    const auto logFile = TestTempDir / "not_inherited.log";
+    ASWLog::TASWFileLog logger;
+    const bool initialized = logger.Initialize(MakeRotationTestConfig(logFile));
+    logger.LogInfo("before_child");
+
+#if defined(_WIN32)
+    // A child process that inherits every inheritable handle, created suspended so it never runs. If it had the log
+    // file's handle, renaming the file would fail while the child exists.
+    std::wstring exePath(MAX_PATH, L'\0');
+    exePath.resize(GetModuleFileNameW(nullptr, exePath.data(), static_cast<DWORD>(exePath.size())));
+    std::wstring commandLine = L"\"" + exePath + L"\"";
+    STARTUPINFOW startupInfo{};
+    startupInfo.cb = sizeof(startupInfo);
+    PROCESS_INFORMATION processInfo{};
+    const bool childCreated = CreateProcessW(exePath.c_str(), commandLine.data(), nullptr, nullptr, TRUE,
+        CREATE_SUSPENDED, nullptr, nullptr, &startupInfo, &processInfo) != FALSE;
+
+    // Act
+    const bool rotated = logger.RotateLogFiles("manual");
+
+    if (childCreated)
+    {
+        TerminateProcess(processInfo.hProcess, 0);
+        WaitForSingleObject(processInfo.hProcess, 5000);
+        CloseHandle(processInfo.hThread);
+        CloseHandle(processInfo.hProcess);
+    }
+
+    logger.Close();
+
+    // Assert
+    CheckTrue(initialized, __func__, __LINE__, "Initialize should succeed");
+    CheckTrue(childCreated, __func__, __LINE__, "The child process should be created");
+    CheckTrue(rotated, __func__, __LINE__, "Rotation should succeed while a child process that inherited handles exists");
+#else
+    // Act: find the log file's descriptor among this process's open files
+    int logFileDescriptor = -1;
+    std::error_code errorCode;
+    for (const auto& entry : std::filesystem::directory_iterator("/proc/self/fd", errorCode))
+    {
+        std::error_code entryError;
+        const auto target = std::filesystem::read_symlink(entry.path(), entryError);
+        if (!entryError && std::filesystem::equivalent(target, logFile, entryError) && !entryError)
+            logFileDescriptor = std::stoi(entry.path().filename().string());
+    }
+
+    const int descriptorFlags = logFileDescriptor >= 0 ? fcntl(logFileDescriptor, F_GETFD) : -1;
+    logger.Close();
+
+    // Assert
+    CheckTrue(initialized, __func__, __LINE__, "Initialize should succeed");
+    CheckTrue(logFileDescriptor >= 0, __func__, __LINE__, "The log file should be open");
+    CheckTrue(descriptorFlags >= 0 && (descriptorFlags & FD_CLOEXEC) != 0, __func__, __LINE__, "The log file should be closed when a child process starts another program");
+#endif
+}
 //---------------------------------------------------------------------------
 void TTest_ASWLog_FileLog::Test_DailyRolling_KeepsExistingBackupForSameDate()
 {

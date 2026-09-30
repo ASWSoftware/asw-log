@@ -36,6 +36,7 @@ private:
     typedef TTestGroupBase inherited;
 
 private: // Test methods
+    void Test_ChildProcess_DoesNotInheritLogFile();
     void Test_DailyRolling_KeepsExistingBackupForSameDate();
     void Test_DailyRolling_NamesBackupForContentDate();
     void Test_DeleteOldLogs_AcceptsShortRelativeFolder();
