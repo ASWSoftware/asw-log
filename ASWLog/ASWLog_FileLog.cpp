@@ -26,20 +26,25 @@ limitations under the License.
 //---------------------------------------------------------------------------
 // System includes here
 #include <algorithm>
+#include <cstdlib>
 #include <filesystem>
+#include <format>
 #include <fstream>
 #include <iomanip>
 #include <iostream>
 #include <iterator>
 #include <sstream>
+#include <system_error>
 #include <thread>
 
 #if defined(_WIN32)
 #include <share.h>
+#include <sys/stat.h>
 #include <windows.h>
 #undef min
 #undef max
 #else
+#include <sys/stat.h>
 #include <unistd.h>
 #endif
 //---------------------------------------------------------------------------
@@ -48,6 +53,79 @@ limitations under the License.
 
 namespace ASWLog
 {
+
+namespace
+{
+
+// How many times rotation picks a free backup name and tries to rename the log to it, if another process takes that
+// name first each time.
+constexpr int MaxBackupRenameAttempts = 10;
+
+// How many "_N" suffixes are tried when a backup name is taken, before rotation gives up.
+constexpr int MaxBackupNameSuffix = 1000;
+
+// Returns the first unused backup path for 'logPath': "<stem>.<reasonTag>.<timeLabel>.bak", or with "_1", "_2", ...
+// appended to the time label if that is taken. Returns an empty path if every name is taken or the file system
+// can't be checked, so an existing backup is never replaced.
+std::filesystem::path FindFreeBackupPath(
+    const std::filesystem::path& logPath, std::string_view reasonTag, std::string_view timeLabel)
+{
+    for (int suffix = 0; suffix <= MaxBackupNameSuffix; ++suffix)
+    {
+        auto candidate = logPath;
+        if (suffix == 0)
+            candidate.replace_extension(std::format(".{}.{}.bak", reasonTag, timeLabel));
+        else
+            candidate.replace_extension(std::format(".{}.{}_{}.bak", reasonTag, timeLabel, suffix));
+
+        std::error_code errorCode;
+        const bool taken = std::filesystem::exists(candidate, errorCode);
+        if (errorCode)
+            return {};
+
+        if (!taken)
+            return candidate;
+    }
+
+    return {};
+}
+
+// Returns the size of an open file, read through its handle, or 0 if that fails. Unlike the size read through the
+// file's path, this is current on Windows while the file is open.
+std::uintmax_t GetOpenFileSize(std::FILE* file)
+{
+#if defined(_WIN32)
+    struct _stat64 fileStatus {};
+    if (_fstat64(_fileno(file), &fileStatus) == 0)
+        return static_cast<std::uintmax_t>(fileStatus.st_size);
+#else
+    struct stat fileStatus {};
+    if (fstat(fileno(file), &fileStatus) == 0)
+        return static_cast<std::uintmax_t>(fileStatus.st_size);
+#endif
+
+    return 0;
+}
+
+// True if an operation that last failed at 'lastFailure' may be tried again at 'now', 'retryDelay' later. Also true if
+// the clock went backwards, so that a clock change can't postpone the retry.
+bool IsRetryDue(std::chrono::system_clock::time_point lastFailure, std::chrono::system_clock::time_point now,
+    std::chrono::milliseconds retryDelay)
+{
+    return now < lastFailure || now - lastFailure >= retryDelay;
+}
+
+// Formats a UTC time for a backup file name: "YYYY-MM-DD_HHMMSS_mmm".
+std::string ToBackupTimeLabel(std::chrono::system_clock::time_point timePoint)
+{
+    // Cut from the ISO 8601 form "YYYY-MM-DDTHH:mm:ss.mmmZ", leaving out the characters not wanted in a file name
+    const auto isoTime = Time::ToISO8601String(timePoint);
+    const std::string_view iso(isoTime);
+    return std::format("{}_{}{}{}_{}", iso.substr(0, 10), iso.substr(11, 2), iso.substr(14, 2), iso.substr(17, 2),
+        iso.substr(20, 3));
+}
+
+} // namespace
 
 //---------------------------------------------------------------------------
 
@@ -64,7 +142,14 @@ bool TASWFileStreamBuf::Close()
     const auto flushResult = std::fflush(m_File);
     const auto closeResult = std::fclose(m_File);
     m_File = nullptr;
+    m_Size = 0;
     return flushResult == 0 && closeResult == 0;
+}
+
+//---------------------------------------------------------------------------
+std::uintmax_t TASWFileStreamBuf::GetSize() const noexcept
+{
+    return m_Size;
 }
 
 //---------------------------------------------------------------------------
@@ -77,12 +162,20 @@ bool TASWFileStreamBuf::IsOpen() const noexcept
 bool TASWFileStreamBuf::Open(const std::filesystem::path& path)
 {
     Close();
+
+    // Child processes don't get the file: 'N' makes the handle non-inheritable (on Windows an inherited handle would
+    // block renaming the file during rotation), and 'e' closes it when a child starts another program (O_CLOEXEC).
+    // Both are set as the file opens, so a child started by another thread meanwhile can't get it either.
 #if defined(_WIN32)
-    m_File = _wfsopen(path.c_str(), L"ab", _SH_DENYWR);
+    m_File = _wfsopen(path.c_str(), L"abN", _SH_DENYWR);
 #else
-    m_File = std::fopen(path.c_str(), "ab");
+    m_File = std::fopen(path.c_str(), "abe");
 #endif
-    return m_File != nullptr;
+    if (m_File == nullptr)
+        return false;
+
+    m_Size = GetOpenFileSize(m_File);
+    return true;
 }
 
 //---------------------------------------------------------------------------
@@ -91,7 +184,9 @@ bool TASWFileStreamBuf::Write(std::string_view data)
     if (m_File == nullptr)
         return false;
 
-    return std::fwrite(data.data(), 1, data.size(), m_File) == data.size();
+    const auto written = std::fwrite(data.data(), 1, data.size(), m_File);
+    m_Size += written;
+    return written == data.size();
 }
 
 //---------------------------------------------------------------------------
@@ -100,8 +195,13 @@ TASWFileStreamBuf::int_type TASWFileStreamBuf::overflow(int_type character)
     if (m_File == nullptr)
         return traits_type::eof();
 
-    if (character != traits_type::eof() && std::fputc(character, m_File) == EOF)
-        return traits_type::eof();
+    if (character != traits_type::eof())
+    {
+        if (std::fputc(character, m_File) == EOF)
+            return traits_type::eof();
+
+        ++m_Size;
+    }
 
     return character;
 }
@@ -118,7 +218,9 @@ std::streamsize TASWFileStreamBuf::xsputn(const char* data, std::streamsize size
     if (m_File == nullptr || size <= 0)
         return 0;
 
-    return static_cast<std::streamsize>(std::fwrite(data, 1, static_cast<std::size_t>(size), m_File));
+    const auto written = std::fwrite(data, 1, static_cast<std::size_t>(size), m_File);
+    m_Size += written;
+    return static_cast<std::streamsize>(written);
 }
 
 //---------------------------------------------------------------------------
@@ -152,6 +254,12 @@ bool TASWFileStream::Close()
 void TASWFileStream::Flush()
 {
     flush();
+}
+
+//---------------------------------------------------------------------------
+std::uintmax_t TASWFileStream::GetSize() const noexcept
+{
+    return m_Buffer.GetSize();
 }
 
 //---------------------------------------------------------------------------
@@ -225,31 +333,40 @@ bool TASWFileLog::CloseUnlocked()
 std::size_t TASWFileLog::DeleteOldLogs(
     const std::filesystem::path& logDir, std::string_view pattern, std::chrono::hours maxAge)
 {
-    if (!std::filesystem::exists(logDir) || !std::filesystem::is_directory(logDir))
+    // Never throws: uses the std::error_code overloads, skipping an entry it can't read and stopping if the folder can't
+    // be listed. File names are matched as UTF-8, since the ANSI code page conversion of path::string() can throw.
+
+    // An empty pattern would match every file; a caller who means that passes "*"
+    if (pattern.empty())
         return 0;
 
-    // Don't allow root directory, such as "C:\"
-    if (logDir.native().length() <= 3)
+    std::error_code errorCode;
+    if (!std::filesystem::is_directory(logDir, errorCode))
+        return 0;
+
+    // Never clean up a root folder, such as "C:\", "\\server\share\" or "/"
+    if (IsRootFolder(logDir))
         return 0;
 
     const auto cutoff = std::filesystem::file_time_type::clock::now() - maxAge;
     std::size_t deletedCount = 0;
 
-    for (const auto& entry : std::filesystem::directory_iterator(logDir))
+    std::filesystem::directory_iterator entries(logDir, errorCode);
+    for (const std::filesystem::directory_iterator end; !errorCode && entries != end; entries.increment(errorCode))
     {
-        if (!entry.is_regular_file())
+        const auto& entry = *entries;
+
+        std::error_code entryError;
+        if (!entry.is_regular_file(entryError))
             continue;
 
-        const auto filename = entry.path().filename().string();
-        const auto match = pattern.empty() || MatchesWildcard(filename, pattern);
-        if (!match)
+        if (!MatchesWildcard(PathToUTF8String(entry.path().filename()), pattern))
             continue;
 
-        const auto lastWrite = std::filesystem::last_write_time(entry.path());
-        if (lastWrite < cutoff)
+        const auto lastWrite = entry.last_write_time(entryError);
+        if (!entryError && lastWrite < cutoff)
         {
-            std::error_code errorCode;
-            if (std::filesystem::remove(entry.path(), errorCode) && !errorCode)
+            if (std::filesystem::remove(entry.path(), entryError) && !entryError)
                 ++deletedCount;
         }
     }
@@ -258,32 +375,55 @@ std::size_t TASWFileLog::DeleteOldLogs(
 }
 
 //---------------------------------------------------------------------------
-bool TASWFileLog::EnsureOpen()
+/*
+    TASWFileLog::EnsureOpenForWriteUnlocked
+
+    Makes sure the log file is open for the next write. Returns false if the entry can't be written.
+*/
+bool TASWFileLog::EnsureOpenForWriteUnlocked()
 {
-    if (m_FileStream.IsOpen())
+    const bool isInitialized = m_IsInitialized.load(std::memory_order_acquire);
+    if (isInitialized && m_FileStream.IsOpen())
         return true;
 
-    return OpenUnlocked();
+    // In this mode the file is opened for every write
+    if (m_Config.AutoOpenClosePerWrite)
+        return OpenUnlocked();
+
+    // Initialized but closed only happens when the file couldn't be reopened (e.g. after a rotation), since Close()
+    // also clears the initialized state. Circuit breaker: try again once CircuitBreakerResetDelay has passed since the
+    // last failed attempt, instead of paying for a failed open on every write while the file stays unavailable.
+    if (isInitialized && IsRetryDue(m_LastOpenFailure, NowUTC(), m_Config.CircuitBreakerResetDelay))
+        return OpenUnlocked();
+
+    return false;
 }
 
 //---------------------------------------------------------------------------
-void TASWFileLog::Finalize()
+void TASWFileLog::Finalize() noexcept
 {
-    std::lock_guard<std::mutex> lock(m_FileMutex);
-    if (!m_IsInitialized.load(std::memory_order_acquire))
-        return;
-
-    if (m_Config.WriteShutdownLog)
+    // Called from the destructor, where an exception would terminate the program
+    try
     {
-        std::string msg = "Logger shutdown: " + Time::ToISO8601String(std::chrono::system_clock::now());
+        std::lock_guard<std::mutex> lock(m_FileMutex);
+        if (!m_IsInitialized.load(std::memory_order_acquire))
+            return;
 
-        if (!m_Config.BannerMessage_Shutdown.empty())
-            msg += ", " + m_Config.BannerMessage_Shutdown;
+        if (m_Config.WriteShutdownLog)
+        {
+            std::string msg = "Logger shutdown: " + Time::ToISO8601String(NowUTC());
 
-        WriteLogEntry(Level::Info, msg, false, false, true, std::source_location::current());
+            if (!m_Config.BannerMessage_Shutdown.empty())
+                msg += ", " + m_Config.BannerMessage_Shutdown;
+
+            WriteLogEntry(Level::Info, msg, false, false, true, std::source_location::current());
+        }
+
+        CloseUnlocked();
     }
-
-    CloseUnlocked();
+    catch (...)
+    {
+    }
 }
 
 //---------------------------------------------------------------------------
@@ -307,8 +447,13 @@ bool TASWFileLog::FlushUnlocked()
 //---------------------------------------------------------------------------
 TASWFileLog& TASWFileLog::GetInstance()
 {
-    static TASWFileLog instance;
-    return instance;
+    // Never deleted, so the instance stays usable through static destruction. It is only finalized at exit, by a
+    // handler registered right after it is created, which runs where a static instance's destructor would have run.
+    static TASWFileLog* const instance = new TASWFileLog();
+    [[maybe_unused]] static const int atExitResult = std::atexit([] {
+            instance->Finalize();
+        });
+    return *instance;
 }
 
 //---------------------------------------------------------------------------
@@ -323,12 +468,15 @@ bool TASWFileLog::Initialize(const TASWLogConfig& config)
     m_Config = config;
     m_MinimumLevel.store(m_Config.InitialMinimumLevel, std::memory_order_release);
 
+    if (m_Config.EnableDailyRolling)
+        RotateDailyLogFromEarlierDayUnlocked();
+
     if (!OpenUnlocked())
     {
         return false;
     }
 
-    m_LastLogDateStr = Time::ToDateString(std::chrono::system_clock::now());
+    m_LastLogDateStr = Time::ToDateString(NowUTC());
 
     if (!m_Config.BannerMessage_Init.empty())
     {
@@ -355,88 +503,51 @@ void TASWFileLog::Log(Level level, std::string_view message, std::source_locatio
     if (level < GetMinimumLevel())
         return;
 
-    std::string writtenLine;
+    LogEntry(level, message, false, false, true, loc);
+}
+
+//---------------------------------------------------------------------------
+/*
+    TASWFileLog::LogEntry
+
+    Writes one entry for the public Log* methods, then calls OnLogEntry. Never throws, so that logging can't throw
+    into the application: if writing fails (e.g. out of memory), the entry is dropped.
+*/
+void TASWFileLog::LogEntry(
+    Level level, std::string_view message, bool force, bool raw, bool includeNewLine, std::source_location loc) noexcept
+{
+    try
     {
-        std::lock_guard<std::mutex> lock(m_FileMutex);
-        if (!m_IsInitialized.load(std::memory_order_acquire) || !m_FileStream.IsOpen())
+        std::string writtenLine;
         {
-            if (m_Config.AutoOpenClosePerWrite)
-            {
-                if (!OpenUnlocked())
-                    return;
-            }
-            else
-            {
+            std::lock_guard<std::mutex> lock(m_FileMutex);
+            if (!EnsureOpenForWriteUnlocked())
                 return;
-            }
+
+            writtenLine = WriteLogEntry(level, message, force, raw, includeNewLine, loc);
+
+            if (m_Config.AutoOpenClosePerWrite)
+                CloseUnlocked();
         }
 
-        writtenLine = WriteLogEntry(level, message, false, false, true, loc);
-
-        if (m_Config.AutoOpenClosePerWrite)
-            CloseUnlocked();
+        if (!writtenLine.empty())
+            DispatchLogCallback(level, writtenLine);
     }
-
-    if (!writtenLine.empty())
-        DispatchLogCallback(level, writtenLine);
+    catch (...)
+    {
+    }
 }
 
 //---------------------------------------------------------------------------
 void TASWFileLog::LogForce(Level level, std::string_view message, std::source_location loc)
 {
-    std::string writtenLine;
-    {
-        std::lock_guard<std::mutex> lock(m_FileMutex);
-        if (!m_IsInitialized.load(std::memory_order_acquire) || !m_FileStream.IsOpen())
-        {
-            if (m_Config.AutoOpenClosePerWrite)
-            {
-                if (!OpenUnlocked())
-                    return;
-            }
-            else
-            {
-                return;
-            }
-        }
-
-        writtenLine = WriteLogEntry(level, message, true, false, true, loc);
-
-        if (m_Config.AutoOpenClosePerWrite)
-            CloseUnlocked();
-    }
-
-    if (!writtenLine.empty())
-        DispatchLogCallback(level, writtenLine);
+    LogEntry(level, message, true, false, true, loc);
 }
 
 //---------------------------------------------------------------------------
 void TASWFileLog::LogForceRaw(Level level, std::string_view message, std::source_location loc)
 {
-    std::string writtenLine;
-    {
-        std::lock_guard<std::mutex> lock(m_FileMutex);
-        if (!m_IsInitialized.load(std::memory_order_acquire) || !m_FileStream.IsOpen())
-        {
-            if (m_Config.AutoOpenClosePerWrite)
-            {
-                if (!OpenUnlocked())
-                    return;
-            }
-            else
-            {
-                return;
-            }
-        }
-
-        writtenLine = WriteLogEntry(level, message, true, true, false, loc);
-
-        if (m_Config.AutoOpenClosePerWrite)
-            CloseUnlocked();
-    }
-
-    if (!writtenLine.empty())
-        DispatchLogCallback(level, writtenLine);
+    LogEntry(level, message, true, true, false, loc);
 }
 
 //---------------------------------------------------------------------------
@@ -445,30 +556,7 @@ void TASWFileLog::LogRaw(Level level, std::string_view message, std::source_loca
     if (level < GetMinimumLevel())
         return;
 
-    std::string writtenLine;
-    {
-        std::lock_guard<std::mutex> lock(m_FileMutex);
-        if (!m_IsInitialized.load(std::memory_order_acquire) || !m_FileStream.IsOpen())
-        {
-            if (m_Config.AutoOpenClosePerWrite)
-            {
-                if (!OpenUnlocked())
-                    return;
-            }
-            else
-            {
-                return;
-            }
-        }
-
-        writtenLine = WriteLogEntry(level, message, false, true, false, loc);
-
-        if (m_Config.AutoOpenClosePerWrite)
-            CloseUnlocked();
-    }
-
-    if (!writtenLine.empty())
-        DispatchLogCallback(level, writtenLine);
+    LogEntry(level, message, false, true, false, loc);
 }
 
 //---------------------------------------------------------------------------
@@ -528,12 +616,13 @@ bool TASWFileLog::OpenUnlocked()
     if (!m_FileStream.IsOpen())
     {
         m_IsOpen.store(false, std::memory_order_release);
+        m_LastOpenFailure = NowUTC();
         return false;
     }
 
     if (m_LastLogDateStr.empty())
     {
-        m_LastLogDateStr = Time::ToDateString(std::chrono::system_clock::now());
+        m_LastLogDateStr = Time::ToDateString(NowUTC());
     }
 
     m_IsOpen.store(true, std::memory_order_release);
@@ -546,11 +635,50 @@ bool TASWFileLog::OpenUnlocked()
 bool TASWFileLog::RotateLogFiles(std::string_view reasonTag)
 {
     std::lock_guard<std::mutex> lock(m_FileMutex);
-    return RotateLogFilesUnlocked(reasonTag);
+    return RotateLogFilesUnlocked(reasonTag, ToBackupTimeLabel(NowUTC()));
 }
 
 //---------------------------------------------------------------------------
-bool TASWFileLog::RotateLogFilesUnlocked(std::string_view reasonTag)
+/*
+    TASWFileLog::RotateDailyLogFromEarlierDayUnlocked
+
+    For daily rolling: if the log file has entries from an earlier UTC day than today, going by its last write time,
+    rotates it to a daily backup named for that day, so they aren't mixed into today's file. If the rotation fails,
+    logging still appends to the file.
+
+    Called by Initialize() before the file is opened (e.g. the app was restarted the next morning), and at the midnight
+    rollover when the log may be shared with other processes (AutoOpenClosePerWrite): if one of them has already rolled
+    it over and written today, the file is from today, and it is left alone. The file is closed between writes in that
+    mode, so its last write time read through the path is current, also on Windows.
+*/
+void TASWFileLog::RotateDailyLogFromEarlierDayUnlocked()
+{
+    const auto logPath = m_Config.ResolveLogFilePath();
+
+    std::error_code errorCode;
+    const auto fileSize = std::filesystem::file_size(logPath, errorCode);
+    if (errorCode || fileSize == 0)
+        return;
+
+    const auto lastWriteTime = std::filesystem::last_write_time(logPath, errorCode);
+    if (errorCode)
+        return;
+
+    // Converts the file time to the logger's UTC clock through the file's age, since the standard libraries don't share
+    // a file_clock conversion (clock_cast is missing from libc++, to_sys from MSVC's library). This also follows the
+    // NowUTC() override.
+    const auto now = NowUTC();
+    const auto fileAge = std::filesystem::file_time_type::clock::now() - lastWriteTime;
+    const auto lastWriteUTC = now - std::chrono::duration_cast<std::chrono::system_clock::duration>(fileAge);
+
+    // YYYY-MM-DD strings compare in date order
+    const auto lastWriteDateStr = Time::ToDateString(lastWriteUTC);
+    if (lastWriteDateStr < Time::ToDateString(now))
+        RotateLogFilesUnlocked("daily", lastWriteDateStr);
+}
+
+//---------------------------------------------------------------------------
+bool TASWFileLog::RotateLogFilesUnlocked(std::string_view reasonTag, std::string_view timeLabel)
 {
     const bool wasOpen = m_FileStream.IsOpen();
     if (wasOpen)
@@ -559,21 +687,30 @@ bool TASWFileLog::RotateLogFilesUnlocked(std::string_view reasonTag)
         m_IsOpen.store(false, std::memory_order_release);
     }
 
-    const auto now = std::chrono::system_clock::now();
-    const auto timeStr = Time::ToDateString(now);
-    auto backupPath = m_Config.ResolveLogFilePath();
-    backupPath.replace_extension(std::format(".{}.{}.bak", reasonTag, timeStr));
+    const auto logPath = m_Config.ResolveLogFilePath();
 
     std::error_code errorCode;
-    std::filesystem::remove(backupPath, errorCode);
-    errorCode.clear();
-    if (std::filesystem::exists(m_Config.ResolveLogFilePath(), errorCode))
+    if (std::filesystem::exists(logPath, errorCode))
     {
-        std::filesystem::rename(m_Config.ResolveLogFilePath(), backupPath, errorCode);
+        // Another process sharing the log may take the free name first, so on "already exists" the next one is tried
+        for (int attempt = 0; attempt < MaxBackupRenameAttempts; ++attempt)
+        {
+            const auto backupPath = FindFreeBackupPath(logPath, reasonTag, timeLabel);
+            if (backupPath.empty())
+            {
+                errorCode = std::make_error_code(std::errc::file_exists);
+                break;
+            }
+
+            errorCode = RenameWithoutReplacing(logPath, backupPath);
+            if (errorCode != std::errc::file_exists)
+                break;
+        }
     }
 
     if (errorCode)
     {
+        m_LastRotationFailure = NowUTC();
         if (wasOpen)
             OpenUnlocked();
         return false;
@@ -582,7 +719,7 @@ bool TASWFileLog::RotateLogFilesUnlocked(std::string_view reasonTag)
     if (m_Config.RetentionMaxAge.count() > 0)
     {
         DeleteOldLogs(m_Config.ResolveLogFileDir(),
-            std::format("{}.*.bak", m_Config.ResolveLogFilePath().stem().string()), m_Config.RetentionMaxAge);
+            std::format("{}.*.bak", PathToUTF8String(m_Config.ResolveLogFilePath().stem())), m_Config.RetentionMaxAge);
     }
 
     if (wasOpen)
@@ -594,7 +731,7 @@ bool TASWFileLog::RotateLogFilesUnlocked(std::string_view reasonTag)
 //---------------------------------------------------------------------------
 void TASWFileLog::WriteApplicationInfo()
 {
-    auto applicationInfo = std::format("app_exe='{}', app_target=", GetExecutablePath().string());
+    auto applicationInfo = std::format("app_exe='{}', app_target=", PathToUTF8String(GetExecutablePath()));
 
 #if defined(_WIN64)
     applicationInfo += "Win64";
@@ -654,26 +791,30 @@ std::string TASWFileLog::WriteLogEntry(
     if (!force && level < GetMinimumLevel())
         return {};
 
-    auto now = std::chrono::system_clock::now();
+    const auto now = NowUTC();
 
     if (m_Config.EnableDailyRolling)
     {
         const auto currentDateStr = Time::ToDateString(now);
         if (currentDateStr != m_LastLogDateStr)
         {
-            RotateLogFilesUnlocked("daily");
+            // Name the backup for the day its content is from, not the day that just started. A log shared with other
+            // processes may already have been rolled over by one of them, so there the file's last write decides.
+            if (m_Config.AutoOpenClosePerWrite)
+                RotateDailyLogFromEarlierDayUnlocked();
+            else
+                RotateLogFilesUnlocked("daily", m_LastLogDateStr);
+
             m_LastLogDateStr = currentDateStr;
         }
     }
 
-    const auto effectivePath = m_Config.ResolveLogFilePath();
-
-    if (m_Config.EnableRotation && std::filesystem::exists(effectivePath))
+    // Uses the size tracked by the stream, since on Windows the size read through the path isn't current while open.
+    // After a failed rotation (e.g. another program holds the file), waits RotationRetryDelay before trying again.
+    if (m_Config.EnableRotation && m_FileStream.IsOpen() && m_FileStream.GetSize() >= m_Config.MaxFileSizeBytes &&
+        IsRetryDue(m_LastRotationFailure, now, m_Config.RotationRetryDelay))
     {
-        if (std::filesystem::file_size(effectivePath) >= m_Config.MaxFileSizeBytes)
-        {
-            RotateLogFilesUnlocked("size");
-        }
+        RotateLogFilesUnlocked("size", ToBackupTimeLabel(now));
     }
 
     if (!m_FileStream.IsOpen())
@@ -699,19 +840,10 @@ std::string TASWFileLog::WriteLogEntry(
         std::format_to(std::back_inserter(line), "[{}]", Level_ToString(level));
 
     if (m_Config.LogProcessId)
-    {
-#if defined(_WIN32)
-        std::format_to(std::back_inserter(line), "[P:{}]", GetCurrentProcessId());
-#else
-        std::format_to(std::back_inserter(line), "[P:{}]", getpid());
-#endif
-    }
+        std::format_to(std::back_inserter(line), "[P:{}]", GetCurrentOSProcessId());
 
     if (m_Config.LogThreadId)
-    {
-        auto numericThreadId = std::hash<std::thread::id>{}(std::this_thread::get_id());
-        std::format_to(std::back_inserter(line), "[T:{}]", numericThreadId);
-    }
+        std::format_to(std::back_inserter(line), "[T:{}]", GetCurrentOSThreadId());
 
     if (m_Config.LogAppMem_WorkingSet || m_Config.LogAppMem_PeakWorkingSet)
     {

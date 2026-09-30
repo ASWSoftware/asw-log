@@ -25,10 +25,10 @@ limitations under the License.
 #include "ASWLog_ConsoleLog.h"
 //---------------------------------------------------------------------------
 // System includes here
+#include <cstdlib>
 #include <filesystem>
 #include <iostream>
 #include <iterator>
-#include <thread>
 
 #if defined(_WIN32)
 #include <windows.h>
@@ -46,6 +46,19 @@ namespace
 {
 
 constexpr std::string_view AnsiReset = "\x1b[0m";
+
+// True if the environment variable 'name' is set to a non-empty value.
+bool IsEnvironmentVariableSet(const char* name) noexcept
+{
+#if defined(_WIN32)
+    // With no buffer, returns the size the value needs including its terminating null (1 for an empty value), or 0
+    // if the variable isn't set. Avoids getenv(), which MSVC warns about.
+    return GetEnvironmentVariableA(name, nullptr, 0) > 1;
+#else
+    const char* value = std::getenv(name);
+    return value != nullptr && *value != '\0';
+#endif
+}
 
 } // namespace
 
@@ -99,57 +112,74 @@ std::array<std::string, LevelCount> TASWConsoleLog::DefaultLevelColors()
 }
 
 //---------------------------------------------------------------------------
-void TASWConsoleLog::EnableAnsiColorSupport()
+bool TASWConsoleLog::DetectStreamColorSupport(bool isStdErr)
 {
 #if defined(_WIN32)
-    bool anySucceeded = false;
-    const DWORD handleIds[] = { STD_OUTPUT_HANDLE, STD_ERROR_HANDLE };
-    for (const auto handleId : handleIds)
-    {
-        HANDLE handle = GetStdHandle(handleId);
-        if (handle == INVALID_HANDLE_VALUE || handle == nullptr)
-            continue;
+    const HANDLE handle = GetStdHandle(isStdErr ? STD_ERROR_HANDLE : STD_OUTPUT_HANDLE);
+    if (handle == INVALID_HANDLE_VALUE || handle == nullptr)
+        return false;
 
-        DWORD mode = 0;
-        if (!GetConsoleMode(handle, &mode))
-            continue;
+    // Fails if the stream isn't a console, e.g. when it's redirected to a file or a pipe
+    DWORD mode = 0;
+    if (!GetConsoleMode(handle, &mode))
+        return false;
 
-        if (SetConsoleMode(handle, mode | ENABLE_VIRTUAL_TERMINAL_PROCESSING))
-            anySucceeded = true;
-    }
-
-    m_ColorSupported.store(anySucceeded, std::memory_order_release);
+    // Consoles before Windows 10 don't accept virtual terminal processing, and would print the codes literally
+    return (mode & ENABLE_VIRTUAL_TERMINAL_PROCESSING) != 0 ||
+        SetConsoleMode(handle, mode | ENABLE_VIRTUAL_TERMINAL_PROCESSING) != 0;
 #else
-    // POSIX terminals accept ANSI escape codes natively; no explicit enabling is needed.
-    m_ColorSupported.store(true, std::memory_order_release);
+    // A terminal (not a file or a pipe), and not one that declares it can't show colors
+    if (isatty(isStdErr ? STDERR_FILENO : STDOUT_FILENO) == 0)
+        return false;
+
+    const char* term = std::getenv("TERM");
+    return term == nullptr || std::string_view(term) != "dumb";
 #endif
 }
 
 //---------------------------------------------------------------------------
-void TASWConsoleLog::Finalize()
+void TASWConsoleLog::Finalize() noexcept
 {
-    std::lock_guard<std::mutex> lock(m_ConsoleMutex);
-    if (!m_IsInitialized.load(std::memory_order_acquire))
-        return;
-
-    if (m_Config.WriteShutdownLog)
+    // Called from the destructor, where an exception would terminate the program
+    try
     {
-        std::string msg = "Logger shutdown: " + Time::ToISO8601String(std::chrono::system_clock::now());
+        std::lock_guard<std::mutex> lock(m_ConsoleMutex);
+        if (!m_IsInitialized.load(std::memory_order_acquire))
+            return;
 
-        if (!m_Config.BannerMessage_Shutdown.empty())
-            msg += ", " + m_Config.BannerMessage_Shutdown;
+        if (m_Config.WriteShutdownLog)
+        {
+            std::string msg = "Logger shutdown: " + Time::ToISO8601String(NowUTC());
 
-        WriteLogEntry(Level::Info, msg, false, false, true, std::source_location::current());
+            if (!m_Config.BannerMessage_Shutdown.empty())
+                msg += ", " + m_Config.BannerMessage_Shutdown;
+
+            WriteLogEntry(Level::Info, msg, false, false, true, std::source_location::current());
+        }
+
+        CloseUnlocked();
     }
+    catch (...)
+    {
+    }
+}
 
-    CloseUnlocked();
+//---------------------------------------------------------------------------
+ColorMode TASWConsoleLog::GetColorMode() const noexcept
+{
+    return m_ColorMode.load(std::memory_order_acquire);
 }
 
 //---------------------------------------------------------------------------
 TASWConsoleLog& TASWConsoleLog::GetInstance()
 {
-    static TASWConsoleLog instance;
-    return instance;
+    // Never deleted, so the instance stays usable through static destruction. It is only finalized at exit, by a
+    // handler registered right after it is created, which runs where a static instance's destructor would have run.
+    static TASWConsoleLog* const instance = new TASWConsoleLog();
+    [[maybe_unused]] static const int atExitResult = std::atexit([] {
+            instance->Finalize();
+        });
+    return *instance;
 }
 
 //---------------------------------------------------------------------------
@@ -157,12 +187,6 @@ std::string TASWConsoleLog::GetLevelColor(Level level) const
 {
     std::lock_guard<std::mutex> lock(m_ConsoleMutex);
     return std::string(LevelColorUnlocked(level));
-}
-
-//---------------------------------------------------------------------------
-bool TASWConsoleLog::GetUseColor() const noexcept
-{
-    return m_UseColor.load(std::memory_order_acquire);
 }
 
 //---------------------------------------------------------------------------
@@ -177,7 +201,9 @@ bool TASWConsoleLog::Initialize(const TASWLogConfig& config)
     m_Config = config;
     m_MinimumLevel.store(m_Config.InitialMinimumLevel, std::memory_order_release);
 
-    EnableAnsiColorSupport();
+    m_StdOutColorSupported.store(DetectStreamColorSupport(false), std::memory_order_release);
+    m_StdErrColorSupported.store(DetectStreamColorSupport(true), std::memory_order_release);
+    m_NoColorRequested.store(IsEnvironmentVariableSet("NO_COLOR"), std::memory_order_release);
 
     m_IsOpen.store(true, std::memory_order_release);
     m_IsInitialized.store(true, std::memory_order_release);
@@ -195,7 +221,7 @@ bool TASWConsoleLog::Initialize(const TASWLogConfig& config)
 //---------------------------------------------------------------------------
 bool TASWConsoleLog::IsColorSupported() const noexcept
 {
-    return m_ColorSupported.load(std::memory_order_acquire);
+    return m_StdOutColorSupported.load(std::memory_order_acquire) || m_StdErrColorSupported.load(std::memory_order_acquire);
 }
 
 //---------------------------------------------------------------------------
@@ -217,49 +243,48 @@ void TASWConsoleLog::Log(Level level, std::string_view message, std::source_loca
     if (level < GetMinimumLevel())
         return;
 
-    std::string writtenLine;
+    LogEntry(level, message, false, false, true, loc);
+}
+
+//---------------------------------------------------------------------------
+/*
+    TASWConsoleLog::LogEntry
+
+    Writes one entry for the public Log* methods, then calls OnLogEntry. Never throws, so that logging can't throw
+    into the application: if writing fails (e.g. out of memory), the entry is dropped.
+*/
+void TASWConsoleLog::LogEntry(
+    Level level, std::string_view message, bool force, bool raw, bool includeNewLine, std::source_location loc) noexcept
+{
+    try
     {
-        std::lock_guard<std::mutex> lock(m_ConsoleMutex);
-        if (!m_IsInitialized.load(std::memory_order_acquire) || !m_IsOpen.load(std::memory_order_acquire))
-            return;
+        std::string writtenLine;
+        {
+            std::lock_guard<std::mutex> lock(m_ConsoleMutex);
+            if (!m_IsInitialized.load(std::memory_order_acquire) || !m_IsOpen.load(std::memory_order_acquire))
+                return;
 
-        writtenLine = WriteLogEntry(level, message, false, false, true, loc);
+            writtenLine = WriteLogEntry(level, message, force, raw, includeNewLine, loc);
+        }
+
+        if (!writtenLine.empty())
+            DispatchLogCallback(level, writtenLine);
     }
-
-    if (!writtenLine.empty())
-        DispatchLogCallback(level, writtenLine);
+    catch (...)
+    {
+    }
 }
 
 //---------------------------------------------------------------------------
 void TASWConsoleLog::LogForce(Level level, std::string_view message, std::source_location loc)
 {
-    std::string writtenLine;
-    {
-        std::lock_guard<std::mutex> lock(m_ConsoleMutex);
-        if (!m_IsInitialized.load(std::memory_order_acquire) || !m_IsOpen.load(std::memory_order_acquire))
-            return;
-
-        writtenLine = WriteLogEntry(level, message, true, false, true, loc);
-    }
-
-    if (!writtenLine.empty())
-        DispatchLogCallback(level, writtenLine);
+    LogEntry(level, message, true, false, true, loc);
 }
 
 //---------------------------------------------------------------------------
 void TASWConsoleLog::LogForceRaw(Level level, std::string_view message, std::source_location loc)
 {
-    std::string writtenLine;
-    {
-        std::lock_guard<std::mutex> lock(m_ConsoleMutex);
-        if (!m_IsInitialized.load(std::memory_order_acquire) || !m_IsOpen.load(std::memory_order_acquire))
-            return;
-
-        writtenLine = WriteLogEntry(level, message, true, true, false, loc);
-    }
-
-    if (!writtenLine.empty())
-        DispatchLogCallback(level, writtenLine);
+    LogEntry(level, message, true, true, false, loc);
 }
 
 //---------------------------------------------------------------------------
@@ -268,17 +293,7 @@ void TASWConsoleLog::LogRaw(Level level, std::string_view message, std::source_l
     if (level < GetMinimumLevel())
         return;
 
-    std::string writtenLine;
-    {
-        std::lock_guard<std::mutex> lock(m_ConsoleMutex);
-        if (!m_IsInitialized.load(std::memory_order_acquire) || !m_IsOpen.load(std::memory_order_acquire))
-            return;
-
-        writtenLine = WriteLogEntry(level, message, false, true, false, loc);
-    }
-
-    if (!writtenLine.empty())
-        DispatchLogCallback(level, writtenLine);
+    LogEntry(level, message, false, true, false, loc);
 }
 
 //---------------------------------------------------------------------------
@@ -315,6 +330,12 @@ void TASWConsoleLog::ResetLevelColors() noexcept
 }
 
 //---------------------------------------------------------------------------
+void TASWConsoleLog::SetColorMode(ColorMode colorMode) noexcept
+{
+    m_ColorMode.store(colorMode, std::memory_order_release);
+}
+
+//---------------------------------------------------------------------------
 void TASWConsoleLog::SetLevelColor(Level level, std::string colorCode)
 {
     const auto index = static_cast<std::size_t>(level);
@@ -326,15 +347,28 @@ void TASWConsoleLog::SetLevelColor(Level level, std::string colorCode)
 }
 
 //---------------------------------------------------------------------------
-void TASWConsoleLog::SetUseColor(bool useColor) noexcept
+bool TASWConsoleLog::ShouldColorStream(bool isStdErr) const noexcept
 {
-    m_UseColor.store(useColor, std::memory_order_release);
+    switch (GetColorMode())
+    {
+        case ColorMode::Always:
+            return true;
+
+        case ColorMode::Never:
+            return false;
+
+        case ColorMode::Auto:
+            break;
+    }
+
+    const auto& isSupported = isStdErr ? m_StdErrColorSupported : m_StdOutColorSupported;
+    return isSupported.load(std::memory_order_acquire) && !m_NoColorRequested.load(std::memory_order_acquire);
 }
 
 //---------------------------------------------------------------------------
 void TASWConsoleLog::WriteApplicationInfo()
 {
-    auto applicationInfo = std::format("app_exe='{}', app_target=", GetExecutablePath().string());
+    auto applicationInfo = std::format("app_exe='{}', app_target=", PathToUTF8String(GetExecutablePath()));
 
 #if defined(_WIN64)
     applicationInfo += "Win64";
@@ -405,7 +439,7 @@ std::string TASWConsoleLog::WriteLogEntry(
     }
     else
     {
-        const auto now = std::chrono::system_clock::now();
+        const auto now = NowUTC();
 
         if (m_Config.LogUTCDateTime)
             std::format_to(std::back_inserter(line), "[{}]", Time::ToISO8601String(now));
@@ -414,19 +448,10 @@ std::string TASWConsoleLog::WriteLogEntry(
             std::format_to(std::back_inserter(line), "[{}]", Level_ToString(level));
 
         if (m_Config.LogProcessId)
-        {
-#if defined(_WIN32)
-            std::format_to(std::back_inserter(line), "[P:{}]", GetCurrentProcessId());
-#else
-            std::format_to(std::back_inserter(line), "[P:{}]", getpid());
-#endif
-        }
+            std::format_to(std::back_inserter(line), "[P:{}]", GetCurrentOSProcessId());
 
         if (m_Config.LogThreadId)
-        {
-            auto numericThreadId = std::hash<std::thread::id>{}(std::this_thread::get_id());
-            std::format_to(std::back_inserter(line), "[T:{}]", numericThreadId);
-        }
+            std::format_to(std::back_inserter(line), "[T:{}]", GetCurrentOSThreadId());
 
         if (m_Config.LogAppMem_WorkingSet || m_Config.LogAppMem_PeakWorkingSet)
         {
@@ -453,8 +478,9 @@ std::string TASWConsoleLog::WriteLogEntry(
             AppendLineEnding(line);
     }
 
-    auto& stream = (level >= Level::Warn) ? std::cerr : std::cout;
-    const auto color = GetUseColor() ? LevelColorUnlocked(level) : std::string_view{};
+    const bool toStdErr = level >= Level::Warn;
+    auto& stream = toStdErr ? std::cerr : std::cout;
+    const auto color = ShouldColorStream(toStdErr) ? LevelColorUnlocked(level) : std::string_view{};
 
     if (!color.empty())
         stream << color << line << AnsiReset;

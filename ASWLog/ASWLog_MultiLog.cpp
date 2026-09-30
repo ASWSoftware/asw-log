@@ -61,6 +61,12 @@ bool TASWMultiLog::Close()
             allSucceeded = false;
     }
 
+    // Like the other loggers, a closed composite can be initialized again
+    {
+        std::lock_guard<std::mutex> lock(m_StateMutex);
+        m_IsInitialized.store(false, std::memory_order_release);
+    }
+
     return allSucceeded;
 }
 
@@ -69,6 +75,34 @@ bool TASWMultiLog::Contains(const IASWLog& logger) const noexcept
 {
     std::lock_guard<std::mutex> lock(m_ListMutex);
     return std::find(m_Sinks.begin(), m_Sinks.end(), &logger) != m_Sinks.end();
+}
+
+//---------------------------------------------------------------------------
+/*
+    TASWMultiLog::FanOut
+
+    Calls 'logCall' with each registered sink. Never throws: a sink that throws (e.g. a custom IASWLog) doesn't stop
+    the others from receiving the entry, and doesn't throw into the application.
+*/
+template<typename TLogCall>
+void TASWMultiLog::FanOut(const TLogCall& logCall) const noexcept
+{
+    try
+    {
+        for (auto* sink : SnapshotSinks())
+        {
+            try
+            {
+                logCall(*sink);
+            }
+            catch (...)
+            {
+            }
+        }
+    }
+    catch (...)
+    {
+    }
 }
 
 //---------------------------------------------------------------------------
@@ -87,11 +121,15 @@ std::vector<IASWLog*> TASWMultiLog::GetLoggers() const
 //---------------------------------------------------------------------------
 bool TASWMultiLog::Initialize(const TASWLogConfig& config)
 {
-    if (m_IsInitialized.load(std::memory_order_acquire))
-        return false;
+    {
+        std::lock_guard<std::mutex> lock(m_StateMutex);
+        if (m_IsInitialized.load(std::memory_order_acquire))
+            return false;
 
-    m_Config = config;
-    m_MinimumLevel.store(m_Config.InitialMinimumLevel, std::memory_order_release);
+        m_Config = config;
+        m_MinimumLevel.store(m_Config.InitialMinimumLevel, std::memory_order_release);
+        m_IsInitialized.store(true, std::memory_order_release);
+    }
 
     bool allSucceeded = true;
     for (auto* sink : SnapshotSinks())
@@ -100,7 +138,6 @@ bool TASWMultiLog::Initialize(const TASWLogConfig& config)
             allSucceeded = false;
     }
 
-    m_IsInitialized.store(true, std::memory_order_release);
     return allSucceeded;
 }
 
@@ -122,22 +159,25 @@ void TASWMultiLog::Log(Level level, std::string_view message, std::source_locati
     if (level < GetMinimumLevel())
         return;
 
-    for (auto* sink : SnapshotSinks())
-        sink->Log(level, message, loc);
+    FanOut([&](IASWLog& sink) {
+            sink.Log(level, message, loc);
+        });
 }
 
 //---------------------------------------------------------------------------
 void TASWMultiLog::LogForce(Level level, std::string_view message, std::source_location loc)
 {
-    for (auto* sink : SnapshotSinks())
-        sink->LogForce(level, message, loc);
+    FanOut([&](IASWLog& sink) {
+            sink.LogForce(level, message, loc);
+        });
 }
 
 //---------------------------------------------------------------------------
 void TASWMultiLog::LogForceRaw(Level level, std::string_view message, std::source_location loc)
 {
-    for (auto* sink : SnapshotSinks())
-        sink->LogForceRaw(level, message, loc);
+    FanOut([&](IASWLog& sink) {
+            sink.LogForceRaw(level, message, loc);
+        });
 }
 
 //---------------------------------------------------------------------------
@@ -146,8 +186,9 @@ void TASWMultiLog::LogRaw(Level level, std::string_view message, std::source_loc
     if (level < GetMinimumLevel())
         return;
 
-    for (auto* sink : SnapshotSinks())
-        sink->LogRaw(level, message, loc);
+    FanOut([&](IASWLog& sink) {
+            sink.LogRaw(level, message, loc);
+        });
 }
 
 //---------------------------------------------------------------------------

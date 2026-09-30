@@ -56,10 +56,12 @@ private:
 private:
     mutable std::mutex m_ConsoleMutex; // Protects console write bounds, and m_LevelColors, across multiple threads
     std::atomic<bool> m_IsOpen{ false };
-    std::atomic<bool> m_ColorSupported{ false }; // Set by EnableAnsiColorSupport() during Initialize()
-    std::atomic<bool> m_UseColor{ true }; // Guards ANSI color wrapping; thread-safe via GetUseColor()/SetUseColor()
+    std::atomic<ColorMode> m_ColorMode{ ColorMode::Auto }; // Thread-safe via GetColorMode()/SetColorMode()
+    std::atomic<bool> m_NoColorRequested{ false }; // The NO_COLOR environment variable was set when Initialize() ran
+    std::atomic<bool> m_StdErrColorSupported{ false }; // Set by Initialize(), see DetectStreamColorSupport()
+    std::atomic<bool> m_StdOutColorSupported{ false }; // Set by Initialize(), see DetectStreamColorSupport()
 
-    // Per-level ANSI color escape sequences used when GetUseColor() is true. Defaults suit a
+    // Per-level ANSI color escape sequences used when a line is colored (see SetColorMode()). Defaults suit a
     // typical dark-background terminal (see DefaultLevelColors() for the exact codes).
     // Overridable via SetLevelColor(), restorable via ResetLevelColor()/ResetLevelColors().
     // Indexed by each Level's underlying integer value (Trace=0 .. Critical=5); read/written
@@ -72,10 +74,11 @@ private:
 private:
     void AppendLineEnding(std::string& line);
     bool CloseUnlocked();
-    void EnableAnsiColorSupport();
-    void Finalize();
+    void Finalize() noexcept;
     [[nodiscard]] std::string_view LevelColorUnlocked(Level level) const noexcept; // Caller must hold m_ConsoleMutex.
+    void LogEntry(Level level, std::string_view message, bool force, bool raw, bool includeNewLine, std::source_location loc) noexcept;
     bool OpenUnlocked();
+    [[nodiscard]] bool ShouldColorStream(bool isStdErr) const noexcept; // Applies GetColorMode() to stdout or stderr
     void WriteApplicationInfo();
     void WriteDriveInfo();
     void WriteInitializationInfo();
@@ -86,13 +89,20 @@ private:
     void WriteTimeInfo();
 
 protected:
+    // Whether stdout (or stderr, if 'isStdErr') shows ANSI colors, checked by Initialize(). Windows: the stream is a
+    // console that accepts virtual terminal sequences (turned on here if needed). POSIX: the stream is a terminal and
+    // TERM isn't "dumb". False for a file or a pipe. Overridable, e.g. by tests, where the streams aren't terminals.
+    virtual bool DetectStreamColorSupport(bool isStdErr);
+
     std::string_view GetLoggerClassName() const noexcept final
     {
         return "TASWConsoleLog";
     }
 
 public: // Static methods
-    static TASWConsoleLog& GetInstance(); // Singleton support for the common static instance
+    // Singleton support for the common static instance. Never destroyed; finalized at exit in static destruction
+    // order, like TASWFileLog::GetInstance() (see there).
+    static TASWConsoleLog& GetInstance();
 
 public:
     TASWConsoleLog() = default;
@@ -104,8 +114,8 @@ public:
     bool Close() override;
     bool IsOpen() const noexcept override;
 
-    // True if ANSI virtual terminal support was enabled during Initialize() (Windows) or is
-    // assumed supported (POSIX terminals accept ANSI codes natively).
+    // True if stdout or stderr shows ANSI colors, as detected by Initialize() (see DetectStreamColorSupport()). False
+    // before Initialize(). Doesn't consider GetColorMode() or NO_COLOR.
     [[nodiscard]] bool IsColorSupported() const noexcept;
 
     [[nodiscard]] std::string GetLevelColor(Level level) const; // Current ANSI color escape sequence used for `level`.
@@ -114,13 +124,11 @@ public:
     void ResetLevelColor(Level level) noexcept; // Restores `level`'s color to its built-in default.
     void ResetLevelColors() noexcept; // Restores every level's color to its built-in default.
 
-    // True if log lines are wrapped in the per-level ANSI color codes (see SetLevelColor()/
-    // GetLevelColor()) when writing. Default: true. Thread-safe to read/write from any thread.
-    [[nodiscard]] bool GetUseColor() const noexcept;
-    // Enables/disables ANSI color wrapping. On Windows, virtual terminal processing is enabled
-    // best-effort in Initialize(); if that fails (see IsColorSupported()), color escape codes
-    // may print literally, so callers on older Windows consoles may want to pass false here.
-    void SetUseColor(bool useColor) noexcept;
+    // Whether log lines are wrapped in the per-level ANSI color codes (see SetLevelColor()/GetLevelColor()):
+    // ColorMode::Auto (the default) colors only a stream that shows colors, unless NO_COLOR is set; Always and Never
+    // override that. Thread-safe to read/write from any thread.
+    [[nodiscard]] ColorMode GetColorMode() const noexcept;
+    void SetColorMode(ColorMode colorMode) noexcept;
 
     void Log(Level level, std::string_view message, std::source_location loc = std::source_location::current()) override;
     void LogRaw(Level level, std::string_view message, std::source_location loc = std::source_location::current()) override;

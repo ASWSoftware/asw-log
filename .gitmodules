@@ -1,0 +1,3 @@
+[submodule "third_party/asw-unit-tests"]
+	path = third_party/asw-unit-tests
+	url = https://github.com/ASWSoftware/asw-unit-tests

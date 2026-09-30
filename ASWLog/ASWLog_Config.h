@@ -51,6 +51,9 @@ struct TASWLogConfig
     std::filesystem::path LogFilePath = "aswlog.txt";
     std::string BannerMessage_Init;
     std::string BannerMessage_Shutdown;
+    // Opens and closes the log file for every entry. Required when several processes write to one log file: with the
+    // file kept open, other processes can't open it on Windows, and on POSIX they keep appending to the renamed backup
+    // after a rotation.
     bool AutoOpenClosePerWrite = false;
     bool WriteShutdownLog = true;
 
@@ -80,10 +83,21 @@ struct TASWLogConfig
     int OpenRetryCount = 5;
     std::chrono::milliseconds OpenRetryDelay{ 50 };
 
+    // Circuit breaker for a log file that couldn't be reopened (e.g. after a rotation while another program held it).
+    // Entries are dropped, without trying to open the file, until this long after the last failed attempt. The next
+    // entry then tries again, with OpenRetryCount/OpenRetryDelay. 0 = try on every entry. Not used with
+    // AutoOpenClosePerWrite, which opens the file for every entry anyway.
+    std::chrono::milliseconds CircuitBreakerResetDelay{ 500 };
+
     // --- Log Rotation and Rolling Options ---
     bool EnableRotation       = false;
     std::uintmax_t MaxFileSizeBytes = 10 * 1024 * 1024; // Default 10MB
-    bool EnableDailyRolling   = false; // Rolls file over at midnight
+    // After a failed size rotation (e.g. another program holds the file), entries keep going to the current file, and
+    // rotating isn't tried again until this long after the failure. 0 = try on every entry.
+    std::chrono::milliseconds RotationRetryDelay{ 500 };
+    // Rolls the file over at UTC midnight, and at Initialize() if the file was last written on an earlier UTC day. The
+    // backup is named for the day it holds.
+    bool EnableDailyRolling   = false;
 
     // --- Log Retention Options (applied automatically after a successful rotation) ---
     std::chrono::hours RetentionMaxAge{ 0 }; // 0 = disabled. When > 0, backups for this log older than this age are deleted after each rotation.

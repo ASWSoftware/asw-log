@@ -1,0 +1,123 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+# Cancel a superseded run on the same branch/PR instead of letting it finish.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# Read-only on purpose: a pull request from a fork gets a read-only token anyway, so nothing here needs to write
+# (the test report goes to each job's summary page, which needs no permission).
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    # Safety net: a hung/looping test should fail the job quickly instead of burning the runner's full time
+    # allotment. --test-timeout-seconds below covers a single hung test; this covers everything else.
+    timeout-minutes: 3
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Windows (MSVC)
+            os: windows-latest
+            generator: ""
+            build_args: "--config Release"
+            exe_path: build/bin/Release/ASWLogTests.exe
+          - name: Windows (MinGW)
+            os: windows-latest
+            generator: "MinGW Makefiles"
+            build_args: ""
+            exe_path: build/bin/ASWLogTests.exe
+          - name: Linux (GCC)
+            os: ubuntu-latest
+            generator: ""
+            build_args: ""
+            exe_path: build/bin/ASWLogTests
+            cc: gcc
+            cxx: g++
+          - name: Linux (Clang)
+            os: ubuntu-latest
+            generator: ""
+            build_args: ""
+            exe_path: build/bin/ASWLogTests
+            cc: clang
+            cxx: clang++
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+        with:
+          # The ASWUnitTests framework is the third_party/asw-unit-tests submodule. tests/cmake/CMakeLists.txt
+          # fails the configure step if it's missing, rather than silently building something else.
+          submodules: true
+
+      - name: Set up MinGW
+        if: matrix.generator == 'MinGW Makefiles'
+        uses: egor-tensin/setup-mingw@v3
+        with:
+          platform: x64
+
+      - name: Configure
+        shell: bash
+        run: |
+          if [ -n "${{ matrix.cc }}" ]; then
+            export CC="${{ matrix.cc }}"
+            export CXX="${{ matrix.cxx }}"
+          fi
+          if [ -n "${{ matrix.generator }}" ]; then
+            cmake -S tests/cmake -B build -G "${{ matrix.generator }}" -DCMAKE_BUILD_TYPE=Release
+          else
+            cmake -S tests/cmake -B build -DCMAKE_BUILD_TYPE=Release
+          fi
+
+      - name: Build
+        shell: bash
+        run: cmake --build build ${{ matrix.build_args }}
+
+      - name: Verify executable exists
+        shell: bash
+        run: |
+          if [ ! -f "${{ matrix.exe_path }}" ]; then
+            echo "ERROR: Executable not found at ${{ matrix.exe_path }}"
+            echo "Contents of build directory:"
+            find build -type f \( -name "ASWLogTests" -o -name "*.exe" \) 2>/dev/null || echo "No executables found"
+            exit 1
+          fi
+
+      - name: Run unit tests
+        id: tests
+        shell: bash
+        # --test-timeout-seconds and --catch-crashes turn a hung or natively crashing test into a clean, reported
+        # failure instead of relying on the job's timeout-minutes or an opaque crashed job.
+        run: >-
+          ./${{ matrix.exe_path }} --project-name "ASWLog-CI" --report-junit junit-results.xml
+          --test-timeout-seconds 60 --catch-crashes
+
+      - name: Test results summary
+        # Runs whenever the tests ran, pass or fail, so failures show up in the report too. In this mode the reporter
+        # only writes this job's summary page and makes no GitHub API calls, so it also works for pull requests from
+        # forks, whose token is read-only. It also fails if the tests ran but the report is missing or unreadable.
+        if: ${{ !cancelled() && steps.tests.outcome != 'skipped' }}
+        uses: dorny/test-reporter@v3
+        with:
+          name: Test Results - ${{ matrix.name }}
+          path: junit-results.xml
+          reporter: java-junit
+          use-actions-summary: true
+
+      - name: Upload test results
+        # Keeps the JUnit report as a downloadable artifact of the run.
+        if: ${{ !cancelled() && steps.tests.outcome != 'skipped' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-results-${{ matrix.name }}
+          path: junit-results.xml
+          if-no-files-found: error

@@ -63,8 +63,13 @@ private:
 private:
     std::vector<IASWLog*> m_Sinks;
     mutable std::mutex m_ListMutex; // Protects only the sink list; each sink manages its own internal thread-safety.
+    // Serializes Initialize()/Close() changes to m_IsInitialized and m_Config. Never held while calling into a sink,
+    // which may call back into this logger (e.g. from an OnLogEntry callback).
+    std::mutex m_StateMutex;
 
 private:
+    template<typename TLogCall>
+    void FanOut(const TLogCall& logCall) const noexcept;
     std::vector<IASWLog*> SnapshotSinks() const;
 
 protected:
@@ -91,7 +96,8 @@ public:
 
     // Fans out to every registered sink, tolerating sinks that are already initialized/open (their own Initialize()
     // may correctly return false in that case, e.g. a singleton initialized elsewhere before being added here) rather
-    // than treating that as a failure. Returns true only if every sink ends up initialized or open.
+    // than treating that as a failure. Returns true only if every sink ends up initialized or open. Returns false without
+    // doing anything if this composite is already initialized; after Close() it can be initialized again. Thread-safe.
     bool Initialize(const TASWLogConfig& config) override;
 
     bool Open() override;

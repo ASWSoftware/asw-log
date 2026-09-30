@@ -1,0 +1,380 @@
+/* **************************************************************************
+Test_ASWLog_Base.cpp
+Author: Anthony S. West - ASW Software
+
+See header for info.
+
+Copyright 2026 Anthony S. West
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    https://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+
+************************************************************************** */
+
+//---------------------------------------------------------------------------
+// Module header
+#include "Test_ASWLog_Base.h"
+//---------------------------------------------------------------------------
+#include <format>
+#include <source_location>
+#include <stdexcept>
+#include <string>
+#include <string_view>
+//---------------------------------------------------------------------------
+#include "ASWUnitTests_Registry.h"
+//---------------------------------------------------------------------------
+#include "ASWLog_Base.h"
+//---------------------------------------------------------------------------
+
+namespace
+{
+
+// A value whose formatting throws, to check that the *Fmt methods don't throw
+struct TThrowingValue
+{
+    bool ThrowStdException = true; // Else throws an int, which isn't a std::exception
+};
+
+} // namespace
+
+template<>
+struct std::formatter<TThrowingValue>
+{
+    constexpr std::format_parse_context::iterator parse(std::format_parse_context& context)
+    {
+        return context.begin();
+    }
+
+    std::format_context::iterator format(const TThrowingValue& value, std::format_context& /*context*/) const
+    {
+        if (value.ThrowStdException)
+            throw std::runtime_error("formatter failed");
+
+        throw 42;
+    }
+};
+
+namespace ASWUnitTests
+{
+
+namespace
+{
+
+class TTestLogger final : public ASWLog::TASWLogBase
+{
+private:
+    typedef ASWLog::TASWLogBase inherited;
+
+public:
+    ASWLog::Level LastLevel = ASWLog::Level::Info;
+    std::string LastMessage;
+    std::source_location LastLocation;
+
+protected:
+    std::string_view GetLoggerClassName() const noexcept override
+    {
+        return "TTestLogger";
+    }
+
+public:
+    bool Initialize(const ASWLog::TASWLogConfig& config) override
+    {
+        m_Config = config;
+        m_MinimumLevel.store(m_Config.InitialMinimumLevel, std::memory_order_release);
+        m_IsInitialized.store(true, std::memory_order_release);
+        return true;
+    }
+
+    bool Open() override
+    {
+        m_IsInitialized.store(true, std::memory_order_release);
+        return true;
+    }
+
+    bool Close() override
+    {
+        m_IsInitialized.store(false, std::memory_order_release);
+        return true;
+    }
+
+    bool IsOpen() const noexcept override
+    {
+        return m_IsInitialized.load(std::memory_order_acquire);
+    }
+
+    void Log(ASWLog::Level level, std::string_view message, std::source_location loc = std::source_location::current()) override
+    {
+        LastLevel = level;
+        LastMessage = std::string(message);
+        LastLocation = loc;
+    }
+
+    void LogRaw(ASWLog::Level level, std::string_view message, std::source_location loc = std::source_location::current()) override
+    {
+        Log(level, message, loc);
+    }
+
+    void LogForce(ASWLog::Level level, std::string_view message, std::source_location loc = std::source_location::current()) override
+    {
+        Log(level, message, loc);
+    }
+
+    void LogForceRaw(ASWLog::Level level, std::string_view message, std::source_location loc = std::source_location::current()) override
+    {
+        Log(level, message, loc);
+    }
+};
+
+} // namespace
+
+//---------------------------------------------------------------------------
+
+///////////////////////////////////////////////////////////////////////////
+// TTest_ASWLog_Base
+///////////////////////////////////////////////////////////////////////////
+
+//---------------------------------------------------------------------------
+TTest_ASWLog_Base::TTest_ASWLog_Base()
+    : inherited("ASWLog_Base_Tests")
+{
+    RegisterTest(&TTest_ASWLog_Base::Test_GetConfig_ReturnsLiveMutableReference, "GetConfig_ReturnsLiveMutableReference");
+    RegisterTest(&TTest_ASWLog_Base::Test_GetFullVersionStr_ContainsVersion, "GetFullVersionStr_ContainsVersion");
+    RegisterTest(&TTest_ASWLog_Base::Test_LogFormatMethods_LogErrorInsteadOfThrowing, "LogFormatMethods_LogErrorInsteadOfThrowing");
+    RegisterTest(&TTest_ASWLog_Base::Test_LogFormatMethods_PassCallerLocation, "LogFormatMethods_PassCallerLocation");
+    RegisterTest(&TTest_ASWLog_Base::Test_LogLevelConvenienceMethods, "LogLevelConvenienceMethods");
+    RegisterTest(&TTest_ASWLog_Base::Test_SetGetMinimumLevel_RoundTrips, "SetGetMinimumLevel_RoundTrips");
+}
+//---------------------------------------------------------------------------
+TTest_ASWLog_Base::~TTest_ASWLog_Base()
+{
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_Base::SetUp_Group()
+{
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_Base::SetUp_Test(ITestCase& /*testCase*/)
+{
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_Base::TearDown_Group()
+{
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_Base::TearDown_Test(ITestCase& /*testCase*/)
+{
+}
+//---------------------------------------------------------------------------
+
+// /////// Begin tests after this line ///////////////////////
+
+//---------------------------------------------------------------------------
+void TTest_ASWLog_Base::Test_GetConfig_ReturnsLiveMutableReference()
+{
+    // Arrange
+    TTestLogger logger;
+    const TTestLogger& constLogger = logger;
+
+    // Assert: defaults are visible through the non-const overload
+    CheckEquals(static_cast<int32_t>(ASWLog::Level::Info), static_cast<int32_t>(logger.GetConfig().InitialMinimumLevel), __func__, __LINE__, "Default minimum level should be Info");
+
+    // Act: mutate through the reference returned by the non-const overload
+    logger.GetConfig().InitialMinimumLevel = ASWLog::Level::Error;
+
+    // Assert: the mutation persists on subsequent reads, proving GetConfig() returns a live
+    // reference rather than a copy - callers rely on this to configure a logger in place
+    // (e.g. `logger.GetConfig().InitialMinimumLevel = X;`) before calling Initialize().
+    CheckEquals(static_cast<int32_t>(ASWLog::Level::Error), static_cast<int32_t>(logger.GetConfig().InitialMinimumLevel), __func__, __LINE__, "GetConfig() should return a live reference so external mutation persists");
+
+    // Assert: the const overload observes the same underlying config, not a stale copy
+    CheckEquals(static_cast<int32_t>(ASWLog::Level::Error), static_cast<int32_t>(constLogger.GetConfig().InitialMinimumLevel), __func__, __LINE__, "The const GetConfig() overload should observe the same underlying config as the non-const overload");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_Base::Test_GetFullVersionStr_ContainsVersion()
+{
+    // Arrange
+    TTestLogger logger;
+    const std::string expected = std::string("TTestLogger - Base version ") + std::string(logger.GetVersionStr());
+
+    // Act
+    const std::string version = logger.GetFullVersionStr();
+
+    // Assert
+    CheckEquals(expected, version, __func__, __LINE__, "Full version string should combine the logger class name and the version number");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_Base::Test_LogFormatMethods_LogErrorInsteadOfThrowing()
+{
+    // Arrange
+    TTestLogger logger;
+    std::string wrongArgumentCountMessage;
+    std::string stdExceptionMessage;
+    std::string otherExceptionMessage;
+    bool threw = false;
+
+    // Act
+    try
+    {
+        logger.LogInfoFmt("bad {} {}", 1);
+        wrongArgumentCountMessage = logger.LastMessage;
+
+        logger.LogErrorFmt("value {}", TThrowingValue{ true });
+        stdExceptionMessage = logger.LastMessage;
+
+        logger.LogForceFmt(ASWLog::Level::Warn, "value {}", TThrowingValue{ false });
+        otherExceptionMessage = logger.LastMessage;
+    }
+    catch (...)
+    {
+        threw = true;
+    }
+
+    // Assert
+    CheckFalse(threw, __func__, __LINE__, "A *Fmt call should not throw when formatting fails");
+    CheckTrue(wrongArgumentCountMessage.starts_with("[ASWLog format error: "), __func__, __LINE__, "A format string that doesn't match its arguments should log the error: " + wrongArgumentCountMessage);
+    CheckTrue(wrongArgumentCountMessage.ends_with("] bad {} {}"), __func__, __LINE__, "The logged error should end with the format string: " + wrongArgumentCountMessage);
+    CheckEquals(std::string("[ASWLog format error: formatter failed] value {}"), stdExceptionMessage, __func__, __LINE__, "A std::exception from a formatter should be logged with its message");
+    CheckEquals(std::string("[ASWLog format error: unknown exception] value {}"), otherExceptionMessage, __func__, __LINE__, "Any other exception from a formatter should be logged too");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_Base::Test_LogFormatMethods_PassCallerLocation()
+{
+    // Arrange
+    TTestLogger logger;
+    const std::string testName = __func__;
+    const std::string thisFile = std::source_location::current().file_name();
+
+    // Checks the location and message the last *Fmt call passed to the logger
+    const auto checkCall = [&](int expectedLine, const std::string& method, const std::string& expectedMessage)
+        {
+            const auto& location = logger.LastLocation;
+            CheckEquals(expectedMessage, logger.LastMessage, testName, __LINE__, method + " should format the message");
+            CheckEquals(thisFile, std::string(location.file_name()), testName, __LINE__, method + " should pass the caller's file, not ASWLog_Interface.h");
+            CheckEquals(static_cast<int64_t>(expectedLine), static_cast<int64_t>(location.line()), testName, __LINE__, method + " should pass the caller's line");
+            CheckTrue(std::string_view(location.function_name()).find(testName) != std::string_view::npos, testName, __LINE__, method + " should pass the caller's function");
+        };
+
+    // Act and Assert: each expected line is the line after the one that records it
+    int line = __LINE__ + 1;
+    logger.LogFmt(ASWLog::Level::Info, "fmt {}", 1);
+    checkCall(line, "LogFmt", "fmt 1");
+
+    line = __LINE__ + 1;
+    logger.LogRawFmt(ASWLog::Level::Info, "raw {}", 2);
+    checkCall(line, "LogRawFmt", "raw 2");
+
+    line = __LINE__ + 1;
+    logger.LogForceFmt(ASWLog::Level::Info, "force {}", 3);
+    checkCall(line, "LogForceFmt", "force 3");
+
+    line = __LINE__ + 1;
+    logger.LogForceRawFmt(ASWLog::Level::Info, "force raw {}", 4);
+    checkCall(line, "LogForceRawFmt", "force raw 4");
+
+    line = __LINE__ + 1;
+    logger.LogTraceFmt("trace {}", 5);
+    checkCall(line, "LogTraceFmt", "trace 5");
+
+    line = __LINE__ + 1;
+    logger.LogDebugFmt("debug {}", 6);
+    checkCall(line, "LogDebugFmt", "debug 6");
+
+    line = __LINE__ + 1;
+    logger.LogInfoFmt("info {}", 7);
+    checkCall(line, "LogInfoFmt", "info 7");
+
+    line = __LINE__ + 1;
+    logger.LogWarnFmt("warn {}", 8);
+    checkCall(line, "LogWarnFmt", "warn 8");
+
+    line = __LINE__ + 1;
+    logger.LogErrorFmt("error {}", 9);
+    checkCall(line, "LogErrorFmt", "error 9");
+
+    line = __LINE__ + 1;
+    logger.LogCriticalFmt(std::string("critical {}"), 10); // A std::string format also converts
+    checkCall(line, "LogCriticalFmt", "critical 10");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_Base::Test_LogLevelConvenienceMethods()
+{
+    // Arrange
+    TTestLogger logger;
+
+    // Act
+    logger.LogTrace("trace");
+
+    // Assert
+    CheckEquals(static_cast<int32_t>(ASWLog::Level::Trace), static_cast<int32_t>(logger.LastLevel), __func__, __LINE__, "LogTrace should set Trace level");
+    CheckEquals(std::string("trace"), logger.LastMessage, __func__, __LINE__, "LogTrace should store the message");
+
+    // Act
+    logger.LogDebug("debug");
+
+    // Assert
+    CheckEquals(static_cast<int32_t>(ASWLog::Level::Debug), static_cast<int32_t>(logger.LastLevel), __func__, __LINE__, "LogDebug should set Debug level");
+    CheckEquals(std::string("debug"), logger.LastMessage, __func__, __LINE__, "LogDebug should store the message");
+
+    // Act
+    logger.LogInfo("info");
+
+    // Assert
+    CheckEquals(static_cast<int32_t>(ASWLog::Level::Info), static_cast<int32_t>(logger.LastLevel), __func__, __LINE__, "LogInfo should set Info level");
+    CheckEquals(std::string("info"), logger.LastMessage, __func__, __LINE__, "LogInfo should store the message");
+
+    // Act
+    logger.LogWarn("warn");
+
+    // Assert
+    CheckEquals(static_cast<int32_t>(ASWLog::Level::Warn), static_cast<int32_t>(logger.LastLevel), __func__, __LINE__, "LogWarn should set Warn level");
+    CheckEquals(std::string("warn"), logger.LastMessage, __func__, __LINE__, "LogWarn should store the message");
+
+    // Act
+    logger.LogError("error");
+
+    // Assert
+    CheckEquals(static_cast<int32_t>(ASWLog::Level::Error), static_cast<int32_t>(logger.LastLevel), __func__, __LINE__, "LogError should set Error level");
+    CheckEquals(std::string("error"), logger.LastMessage, __func__, __LINE__, "LogError should store the message");
+
+    // Act
+    logger.LogCritical("critical");
+
+    // Assert
+    CheckEquals(static_cast<int32_t>(ASWLog::Level::Critical), static_cast<int32_t>(logger.LastLevel), __func__, __LINE__, "LogCritical should set Critical level");
+    CheckEquals(std::string("critical"), logger.LastMessage, __func__, __LINE__, "LogCritical should store the message");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_Base::Test_SetGetMinimumLevel_RoundTrips()
+{
+    // Arrange
+    TTestLogger logger;
+    ASWLog::TASWLogConfig config;
+    config.InitialMinimumLevel = ASWLog::Level::Warn;
+
+    // Act
+    logger.Initialize(config);
+
+    // Assert
+    CheckEquals(static_cast<int32_t>(ASWLog::Level::Warn), static_cast<int32_t>(logger.GetMinimumLevel()), __func__, __LINE__, "GetMinimumLevel should be seeded from the config's InitialMinimumLevel at Initialize() time");
+
+    // Act
+    logger.SetMinimumLevel(ASWLog::Level::Trace);
+
+    // Assert
+    CheckEquals(static_cast<int32_t>(ASWLog::Level::Trace), static_cast<int32_t>(logger.GetMinimumLevel()), __func__, __LINE__, "SetMinimumLevel should update the value returned by GetMinimumLevel immediately");
+}
+//---------------------------------------------------------------------------
+
+} // namespace ASWUnitTests
+
+//---------------------------------------------------------------------------
+ASW_REGISTER_TEST_GROUP(ASWUnitTests::TTest_ASWLog_Base)

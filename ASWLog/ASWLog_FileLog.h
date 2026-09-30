@@ -30,6 +30,7 @@ limitations under the License.
 #include <atomic>
 #include <chrono>
 #include <cstddef>
+#include <cstdint>
 #include <cstdio>
 #include <filesystem>
 #include <mutex>
@@ -56,6 +57,7 @@ private:
 
 private:
     std::FILE* m_File = nullptr;
+    std::uintmax_t m_Size = 0; // See GetSize()
 
 protected:
     int_type overflow(int_type character = traits_type::eof()) override;
@@ -65,6 +67,9 @@ protected:
 public:
     bool Open(const std::filesystem::path& path);
     bool Close();
+    // The file's size: its size when opened plus the bytes written since. Tracked here because on Windows the size
+    // read through the file's path (e.g. std::filesystem::file_size) isn't updated while the file is open.
+    std::uintmax_t GetSize() const noexcept;
     bool IsOpen() const noexcept;
     bool Write(std::string_view data);
 };
@@ -90,6 +95,7 @@ public:
     bool Close();
     bool IsOpen() const noexcept;
     void Flush();
+    std::uintmax_t GetSize() const noexcept; // See TASWFileStreamBuf::GetSize()
     bool Write(std::string_view data);
 };
 
@@ -110,16 +116,20 @@ private:
     std::string m_LastLogDateStr; // Stores YYYY-MM-DD state to detect structural calendar shifts
     std::atomic<bool> m_IsOpen{ false };
     std::chrono::steady_clock::time_point m_LastFlushTime{};
+    std::chrono::system_clock::time_point m_LastOpenFailure{}; // NowUTC() when opening the file last failed
+    std::chrono::system_clock::time_point m_LastRotationFailure{}; // NowUTC() when a rotation last failed
 
 private:
     void AppendLineEnding(std::string& line);
     bool CloseUnlocked();
-    bool EnsureOpen();
-    void Finalize();
+    bool EnsureOpenForWriteUnlocked();
+    void Finalize() noexcept;
     bool FlushUnlocked();
+    void LogEntry(Level level, std::string_view message, bool force, bool raw, bool includeNewLine, std::source_location loc) noexcept;
     void MaybeFlush(bool isNewLine);
     bool OpenUnlocked();
-    bool RotateLogFilesUnlocked(std::string_view reasonTag);
+    void RotateDailyLogFromEarlierDayUnlocked();
+    bool RotateLogFilesUnlocked(std::string_view reasonTag, std::string_view timeLabel);
     void WriteApplicationInfo();
     void WriteDriveInfo();
     void WriteInitializationInfo();
@@ -136,8 +146,17 @@ protected:
     }
 
 public: // Static methods
+    // Deletes the files in 'logDir' (not its subfolders) whose names match the wildcard 'pattern' ('*' and '?', matched
+    // as UTF-8) and that were last written more than 'maxAge' ago. Returns how many it deleted. Deletes nothing if
+    // 'pattern' is empty (pass "*" for every file) or if 'logDir' is a root folder (see IsRootFolder()). Never throws.
     static std::size_t DeleteOldLogs(const std::filesystem::path& logDir, std::string_view pattern, std::chrono::hours maxAge);
-    static TASWFileLog& GetInstance(); // Singleton support for the common static instance
+    // Singleton support for the common static instance. The instance is never destroyed, so it is safe to use until
+    // the process ends, e.g. from another static object's destructor or a thread still running at exit. At exit it is
+    // finalized (shutdown entry, flush, close) in static destruction order: a static object constructed after the
+    // first GetInstance() call can still log from its destructor, while one constructed before it is destroyed after
+    // the finalize, so what it logs is dropped. Leak checkers that list memory still allocated at exit (e.g. the MSVC
+    // debug heap's report) include the instance.
+    static TASWFileLog& GetInstance();
 
 public:
     TASWFileLog() = default;
@@ -150,6 +169,8 @@ public:
     bool IsOpen() const noexcept override;
     bool Flush();
 
+    // Renames the log file to "<stem>.<reasonTag>.<YYYY-MM-DD_HHMMSS_mmm>.bak" (UTC), adding "_1", "_2", ... to the
+    // time if that name is taken, so an existing backup is never replaced. Then reopens the log if it was open.
     bool RotateLogFiles(std::string_view reasonTag = "manual");
 
     void Log(Level level, std::string_view message, std::source_location loc = std::source_location::current()) override;

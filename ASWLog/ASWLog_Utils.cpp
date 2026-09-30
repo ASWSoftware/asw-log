@@ -26,19 +26,20 @@ limitations under the License.
 //---------------------------------------------------------------------------
 // System includes here
 #include <algorithm>
+#include <cerrno>
+#include <charconv>
 #include <chrono>
 #include <ctime>
 #include <filesystem>
 #include <format>
 #include <fstream>
-#include <thread>
 #include <vector>
 
 #if defined(_WIN32)
 #include <windows.h>
 #include <psapi.h>
-#include <process.h>
 #else
+#include <sys/syscall.h>
 #include <sys/sysinfo.h>
 #include <sys/utsname.h>
 #include <unistd.h>
@@ -47,6 +48,25 @@ limitations under the License.
 
 namespace ASWLog
 {
+
+#if !defined(_WIN32)
+namespace
+{
+
+// Returns the number in a /proc/self/status line such as "VmRSS:     1234 kB", or 0 if it has none.
+std::uint64_t ParseStatusLineKB(std::string_view line) noexcept
+{
+    const auto start = line.find_first_of("0123456789");
+    if (start == std::string_view::npos)
+        return 0;
+
+    std::uint64_t value = 0;
+    std::from_chars(line.data() + start, line.data() + line.size(), value);
+    return value;
+}
+
+} // namespace
+#endif
 
 //---------------------------------------------------------------------------
 std::string GenerateLogFileName(std::string_view prefix, std::string_view customPostfix)
@@ -68,15 +88,6 @@ std::string GenerateLogFileName(std::string_view prefix, std::string_view custom
     localtime_r(&timeTimeT, &localCalendarTime);
 #endif
 
-    // Get platform Process ID
-#if defined(_WIN32)
-    auto processId = _getpid();
-#else
-    auto processId = getpid();
-#endif
-
-    auto threadId = std::hash<std::thread::id>{}(std::this_thread::get_id());
-
     // Format target layout: YYYYMMDD_HHMMSS_mmm
     std::string timeStr = std::format("{:04}{:02}{:02}_{:02}{:02}{:02}_{:03}",
         localCalendarTime.tm_year + 1900,
@@ -88,7 +99,7 @@ std::string GenerateLogFileName(std::string_view prefix, std::string_view custom
         millisecondsFraction);
 
     std::string name = prefix.empty() ? std::string() : std::format("{}_", prefix);
-    name += std::format("{}_PID{}_TID{}", timeStr, processId, threadId);
+    name += std::format("{}_PID{}_TID{}", timeStr, GetCurrentOSProcessId(), GetCurrentOSThreadId());
 
     if (!customPostfix.empty())
         name += std::format("_{}", customPostfix);
@@ -100,7 +111,7 @@ std::string GenerateLogFileName(std::string_view prefix, std::string_view custom
 std::string GetApplicationInfoString()
 {
     auto exePath = GetExecutablePath();
-    return std::format("application_exe='{}', command_line='{}'", exePath.string(), GetCommandLineString());
+    return std::format("application_exe='{}', command_line='{}'", PathToUTF8String(exePath), GetCommandLineString());
 }
 
 //---------------------------------------------------------------------------
@@ -137,10 +148,32 @@ std::string GetCommandLineString()
 }
 
 //---------------------------------------------------------------------------
+std::uint32_t GetCurrentOSProcessId() noexcept
+{
+#if defined(_WIN32)
+    return static_cast<std::uint32_t>(GetCurrentProcessId());
+#else
+    return static_cast<std::uint32_t>(getpid());
+#endif
+}
+
+//---------------------------------------------------------------------------
+std::uint32_t GetCurrentOSThreadId() noexcept
+{
+#if defined(_WIN32)
+    return static_cast<std::uint32_t>(GetCurrentThreadId());
+#else
+    // gettid() itself needs glibc 2.30 or later. Not cached per thread, since a forked child's thread gets a new id.
+    return static_cast<std::uint32_t>(syscall(SYS_gettid));
+#endif
+}
+
+//---------------------------------------------------------------------------
 std::string GetDriveInfoString()
 {
     std::error_code errorCode;
-    auto freeSpace = std::filesystem::space(std::filesystem::current_path(), errorCode);
+    const auto currentPath = std::filesystem::current_path(errorCode);
+    auto freeSpace = std::filesystem::space(currentPath, errorCode);
     const auto totalMiB = freeSpace.capacity / (1024ULL * 1024ULL);
     const auto freeMiB = freeSpace.free / (1024ULL * 1024ULL);
     const auto usedMiB = totalMiB > freeMiB ? totalMiB - freeMiB : 0ULL;
@@ -189,9 +222,9 @@ TMemoryUsage GetMemoryUsage()
     while (std::getline(statusFile, line))
     {
         if (line.rfind("VmRSS:", 0) == 0)
-            residentSetKb = std::stoull(line.substr(line.find_first_of("0123456789")));
+            residentSetKb = ParseStatusLineKB(line);
         else if (line.rfind("VmHWM:", 0) == 0)
-            peakResidentSetKb = std::stoull(line.substr(line.find_first_of("0123456789")));
+            peakResidentSetKb = ParseStatusLineKB(line);
     }
 
     usage.WorkingSetBytes = static_cast<std::size_t>(residentSetKb * 1024ULL);
@@ -217,16 +250,20 @@ std::string GetOSInfoString()
 #else
     using RtlGetVersionFunction = LONG(WINAPI*)(PRTL_OSVERSIONINFOW);
     const auto ntdll = GetModuleHandleW(L"ntdll.dll");
-    const auto rtlGetVersion =
-        ntdll == nullptr ? nullptr : reinterpret_cast<RtlGetVersionFunction>(GetProcAddress(ntdll, "RtlGetVersion"));
-    RTL_OSVERSIONINFOW versionInfo{};
+    const auto rtlGetVersionProc = ntdll == nullptr ? nullptr : GetProcAddress(ntdll, "RtlGetVersion");
+    // Cast through the generic function pointer type void (*)() so GCC's -Wcast-function-type accepts converting
+    // GetProcAddress()'s FARPROC to the real signature.
+    const auto rtlGetVersion = reinterpret_cast<RtlGetVersionFunction>(reinterpret_cast<void (*)()>(rtlGetVersionProc));
+    // The EX form (accepted by RtlGetVersion when dwOSVersionInfoSize says so) adds wProductType, used below to
+    // recognize a server edition that the product type table doesn't name.
+    RTL_OSVERSIONINFOEXW versionInfo{};
 #endif
     versionInfo.dwOSVersionInfoSize = sizeof(versionInfo);
 
 #if defined(USE_GET_VERSION_EX)
     if (GetVersionExW(reinterpret_cast<LPOSVERSIONINFOW>(&versionInfo)))
 #else
-    if (rtlGetVersion != nullptr && rtlGetVersion(&versionInfo) == 0)
+    if (rtlGetVersion != nullptr && rtlGetVersion(reinterpret_cast<PRTL_OSVERSIONINFOW>(&versionInfo)) == 0)
 #endif
     {
         const auto major = versionInfo.dwMajorVersion;
@@ -251,56 +288,11 @@ std::string GetOSInfoString()
                 break;
         }
 
-        DWORD editionId = 0;
-        std::string edition = "Unknown";
+        DWORD productType = 0;
+        if (!GetProductInfo(major, minor, 0, 0, &productType))
+            productType = 0; // PRODUCT_UNDEFINED
 
-        if (GetProductInfo(major, minor, 0, 0, &editionId))
-        {
-#if defined(PRODUCT_ULTIMATE)
-            if (editionId == PRODUCT_ULTIMATE)
-                edition = "Ultimate";
-#endif
-#if defined(PRODUCT_HOME_BASIC)
-            if (editionId == PRODUCT_HOME_BASIC)
-                edition = "Home";
-#endif
-#if defined(PRODUCT_HOME_PREMIUM)
-            if (editionId == PRODUCT_HOME_PREMIUM)
-                edition = "Home";
-#endif
-#if defined(PRODUCT_PROFESSIONAL)
-            if (editionId == PRODUCT_PROFESSIONAL)
-                edition = "Pro";
-#endif
-#if defined(PRODUCT_PROFESSIONAL_N)
-            if (editionId == PRODUCT_PROFESSIONAL_N)
-                edition = "Pro N";
-#endif
-#if defined(PRODUCT_ENTERPRISE)
-            if (editionId == PRODUCT_ENTERPRISE)
-                edition = "Enterprise";
-#endif
-#if defined(PRODUCT_ENTERPRISE_N)
-            if (editionId == PRODUCT_ENTERPRISE_N)
-                edition = "Enterprise N";
-#endif
-#if defined(PRODUCT_EDUCATION)
-            if (editionId == PRODUCT_EDUCATION)
-                edition = "Education";
-#endif
-#if defined(PRODUCT_EDUCATION_N)
-            if (editionId == PRODUCT_EDUCATION_N)
-                edition = "Education N";
-#endif
-#if defined(PRODUCT_SERVER)
-            if (editionId == PRODUCT_SERVER)
-                edition = "Server";
-#endif
-#if defined(PRODUCT_SERVER_CORE)
-            if (editionId == PRODUCT_SERVER_CORE)
-                edition = "Server Core";
-#endif
-        }
+        const auto edition = GetWindowsEditionName(productType, versionInfo.wProductType != VER_NT_WORKSTATION);
 
         return std::format("Windows {}.{} {} (build {}), arch={}", major, minor, edition, build, arch);
     }
@@ -355,33 +347,165 @@ std::string GetSystemMemoryUsageString()
 std::string GetTimeInfoString()
 {
     const auto now = std::chrono::system_clock::now();
-    const auto timeValue = std::chrono::system_clock::to_time_t(now);
-
-    std::tm utcTime{};
-    std::tm localTime{};
-#if defined(_WIN32)
-    gmtime_s(&utcTime, &timeValue);
-    localtime_s(&localTime, &timeValue);
-#else
-    gmtime_r(&timeValue, &utcTime);
-    localtime_r(&timeValue, &localTime);
-#endif
-
-    const auto utcSeconds = std::mktime(&utcTime);
-    const auto localSeconds = std::mktime(&localTime);
-    const auto offsetSeconds = localSeconds - utcSeconds;
-    const auto offsetMinutes = offsetSeconds / 60;
 
     return std::format("utc={}, local={}, offset_minutes={}",
-        Time::ToISO8601String(now),
-        std::format("{:04}-{:02}-{:02}T{:02}:{:02}:{:02}",
-            localTime.tm_year + 1900,
-            localTime.tm_mon + 1,
-            localTime.tm_mday,
-            localTime.tm_hour,
-            localTime.tm_min,
-            localTime.tm_sec),
-        offsetMinutes);
+        Time::ToISO8601String(now), Time::ToLocalISO8601String(now), Time::GetUTCOffsetMinutes(now));
+}
+
+//---------------------------------------------------------------------------
+#if defined(_WIN32)
+std::string GetWindowsEditionName(std::uint32_t productType, bool isServer)
+{
+    std::string edition;
+
+#if defined(PRODUCT_ULTIMATE)
+    if (productType == PRODUCT_ULTIMATE)
+        edition = "Ultimate";
+#endif
+#if defined(PRODUCT_HOME_BASIC)
+    if (productType == PRODUCT_HOME_BASIC)
+        edition = "Home";
+#endif
+#if defined(PRODUCT_HOME_PREMIUM)
+    if (productType == PRODUCT_HOME_PREMIUM)
+        edition = "Home";
+#endif
+#if defined(PRODUCT_CORE)
+    if (productType == PRODUCT_CORE)
+        edition = "Home";
+#endif
+#if defined(PRODUCT_CORE_N)
+    if (productType == PRODUCT_CORE_N)
+        edition = "Home N";
+#endif
+#if defined(PRODUCT_CORE_SINGLELANGUAGE)
+    if (productType == PRODUCT_CORE_SINGLELANGUAGE)
+        edition = "Home Single Language";
+#endif
+#if defined(PRODUCT_CORE_COUNTRYSPECIFIC)
+    if (productType == PRODUCT_CORE_COUNTRYSPECIFIC)
+        edition = "Home China";
+#endif
+#if defined(PRODUCT_PROFESSIONAL)
+    if (productType == PRODUCT_PROFESSIONAL)
+        edition = "Pro";
+#endif
+#if defined(PRODUCT_PROFESSIONAL_N)
+    if (productType == PRODUCT_PROFESSIONAL_N)
+        edition = "Pro N";
+#endif
+#if defined(PRODUCT_PRO_WORKSTATION)
+    if (productType == PRODUCT_PRO_WORKSTATION)
+        edition = "Pro for Workstations";
+#endif
+#if defined(PRODUCT_PRO_WORKSTATION_N)
+    if (productType == PRODUCT_PRO_WORKSTATION_N)
+        edition = "Pro for Workstations N";
+#endif
+#if defined(PRODUCT_ENTERPRISE)
+    if (productType == PRODUCT_ENTERPRISE)
+        edition = "Enterprise";
+#endif
+#if defined(PRODUCT_ENTERPRISE_N)
+    if (productType == PRODUCT_ENTERPRISE_N)
+        edition = "Enterprise N";
+#endif
+#if defined(PRODUCT_ENTERPRISE_S)
+    if (productType == PRODUCT_ENTERPRISE_S)
+        edition = "Enterprise LTSC";
+#endif
+#if defined(PRODUCT_ENTERPRISE_S_N)
+    if (productType == PRODUCT_ENTERPRISE_S_N)
+        edition = "Enterprise N LTSC";
+#endif
+#if defined(PRODUCT_EDUCATION)
+    if (productType == PRODUCT_EDUCATION)
+        edition = "Education";
+#endif
+#if defined(PRODUCT_EDUCATION_N)
+    if (productType == PRODUCT_EDUCATION_N)
+        edition = "Education N";
+#endif
+#if defined(PRODUCT_STANDARD_SERVER)
+    if (productType == PRODUCT_STANDARD_SERVER)
+        edition = "Server Standard";
+#endif
+#if defined(PRODUCT_STANDARD_SERVER_CORE)
+    if (productType == PRODUCT_STANDARD_SERVER_CORE)
+        edition = "Server Standard Core";
+#endif
+#if defined(PRODUCT_STANDARD_EVALUATION_SERVER)
+    if (productType == PRODUCT_STANDARD_EVALUATION_SERVER)
+        edition = "Server Standard Evaluation";
+#endif
+#if defined(PRODUCT_DATACENTER_SERVER)
+    if (productType == PRODUCT_DATACENTER_SERVER)
+        edition = "Server Datacenter";
+#endif
+#if defined(PRODUCT_DATACENTER_SERVER_CORE)
+    if (productType == PRODUCT_DATACENTER_SERVER_CORE)
+        edition = "Server Datacenter Core";
+#endif
+#if defined(PRODUCT_DATACENTER_EVALUATION_SERVER)
+    if (productType == PRODUCT_DATACENTER_EVALUATION_SERVER)
+        edition = "Server Datacenter Evaluation";
+#endif
+#if defined(PRODUCT_DATACENTER_SERVER_AZURE_EDITION)
+    if (productType == PRODUCT_DATACENTER_SERVER_AZURE_EDITION)
+        edition = "Server Datacenter: Azure Edition";
+#endif
+
+    // Product types not listed above (there are many niche ones) still say whether this is a server, plus the raw
+    // product type so the exact edition can be looked up.
+    if (edition.empty())
+        edition = std::format("{} (product type 0x{:X})", isServer ? "Server" : "Unknown", productType);
+
+    return edition;
+}
+#endif
+
+//---------------------------------------------------------------------------
+bool IsRootFolder(const std::filesystem::path& folder) noexcept
+{
+    try
+    {
+#if defined(_WIN32)
+        // Asks Windows rather than parsing the path, because standard libraries differ on UNC paths (MinGW's reads
+        // "\\server\share" as a relative path). GetFullPathNameW resolves a relative path, ".", ".." and '/'.
+        const DWORD fullPathSize = GetFullPathNameW(folder.c_str(), 0, nullptr, nullptr);
+        if (fullPathSize == 0)
+            return true;
+
+        std::wstring fullPath(fullPathSize, L'\0');
+        const DWORD fullPathLength = GetFullPathNameW(folder.c_str(), fullPathSize, fullPath.data(), nullptr);
+        if (fullPathLength == 0 || fullPathLength >= fullPathSize)
+            return true;
+
+        fullPath.resize(fullPathLength);
+
+        // The mount point of the volume holding the folder, with a trailing separator, e.g. "C:\" or
+        // "\\server\share\". It is never longer than the full path plus that separator.
+        std::wstring volumePath(fullPath.size() + 2, L'\0');
+        if (!GetVolumePathNameW(fullPath.c_str(), volumePath.data(), static_cast<DWORD>(volumePath.size())))
+            return true;
+
+        volumePath.resize(std::char_traits<wchar_t>::length(volumePath.c_str()));
+
+        if (fullPath.back() != L'\\')
+            fullPath += L'\\';
+
+        return CompareStringOrdinal(fullPath.c_str(), -1, volumePath.c_str(), -1, TRUE) == CSTR_EQUAL;
+#else
+        // Only a root folder is its own parent. Unlike comparing paths, this also covers "." and "..".
+        std::error_code errorCode;
+        const bool isOwnParent = std::filesystem::equivalent(folder, folder / "..", errorCode);
+        return isOwnParent || errorCode;
+#endif
+    }
+    catch (...)
+    {
+        return true;
+    }
 }
 
 //---------------------------------------------------------------------------
@@ -427,9 +551,96 @@ bool MatchesWildcard(std::string_view value, std::string_view pattern)
 }
 
 //---------------------------------------------------------------------------
+std::string PathToUTF8String(const std::filesystem::path& path) noexcept
+{
+    try
+    {
+        const auto utf8 = path.u8string();
+        return std::string(utf8.begin(), utf8.end());
+    }
+    catch (...)
+    {
+        return {};
+    }
+}
+
+//---------------------------------------------------------------------------
+std::error_code RenameWithoutReplacing(const std::filesystem::path& from, const std::filesystem::path& to) noexcept
+{
+#if defined(_WIN32)
+    // Without MOVEFILE_REPLACE_EXISTING, the move fails if the target exists, checked by Windows as part of the move
+    if (MoveFileExW(from.c_str(), to.c_str(), 0))
+        return {};
+
+    const DWORD error = GetLastError();
+    if (error == ERROR_ALREADY_EXISTS || error == ERROR_FILE_EXISTS)
+        return std::make_error_code(std::errc::file_exists);
+
+    return std::error_code(static_cast<int>(error), std::system_category());
+#else
+    // rename() replaces an existing target, but link() fails if it exists, as one step. Then the old name is removed.
+    if (link(from.c_str(), to.c_str()) == 0)
+    {
+        if (unlink(from.c_str()) == 0)
+            return {};
+
+        // Two names for one file would keep the backup growing with the log, so undo the link
+        const int unlinkError = errno;
+        unlink(to.c_str());
+
+        return std::error_code(unlinkError, std::generic_category());
+    }
+
+    const int linkError = errno;
+    if (linkError == EEXIST)
+        return std::make_error_code(std::errc::file_exists);
+
+    // A file system without hard links (e.g. FAT or some network shares): check, then rename. Another process could
+    // still create the target in between there.
+    if (linkError == EPERM || linkError == ENOTSUP || linkError == EOPNOTSUPP)
+    {
+        std::error_code errorCode;
+        if (std::filesystem::exists(to, errorCode))
+            return std::make_error_code(std::errc::file_exists);
+
+        if (errorCode)
+            return errorCode;
+
+        std::filesystem::rename(from, to, errorCode);
+        return errorCode;
+    }
+
+    return std::error_code(linkError, std::generic_category());
+#endif
+}
+
+//---------------------------------------------------------------------------
 
 namespace Time
 {
+
+//---------------------------------------------------------------------------
+int GetUTCOffsetMinutes(std::chrono::system_clock::time_point timePoint)
+{
+    const auto timeValue = std::chrono::system_clock::to_time_t(timePoint);
+    std::tm localTime{};
+#if defined(_WIN32)
+    if (localtime_s(&localTime, &timeValue) != 0)
+        return 0;
+#else
+    if (localtime_r(&timeValue, &localTime) == nullptr)
+        return 0;
+#endif
+
+    // The local date and time read as if they were UTC, minus the actual time. Not mktime(), which would read UTC
+    // fields as local time and apply this zone's daylight saving rules to them.
+    const std::chrono::sys_days localDate = std::chrono::year(localTime.tm_year + 1900) / (localTime.tm_mon + 1) / localTime.tm_mday;
+    const auto localAsUTC = localDate + std::chrono::hours(localTime.tm_hour) + std::chrono::minutes(localTime.tm_min) +
+        std::chrono::seconds(localTime.tm_sec);
+    const auto actualTime = std::chrono::time_point_cast<std::chrono::seconds>(std::chrono::system_clock::from_time_t(timeValue));
+
+    return static_cast<int>(std::chrono::duration_cast<std::chrono::minutes>(localAsUTC - actualTime).count());
+}
 
 //---------------------------------------------------------------------------
 std::string ToISO8601String(std::chrono::system_clock::time_point timePoint)
@@ -472,6 +683,37 @@ std::string ToDateString(std::chrono::system_clock::time_point timePoint)
         utcTime.tm_year + 1900,
         utcTime.tm_mon + 1,
         utcTime.tm_mday);
+}
+
+//---------------------------------------------------------------------------
+std::string ToLocalISO8601String(std::chrono::system_clock::time_point timePoint)
+{
+    const auto timeValue = std::chrono::system_clock::to_time_t(timePoint);
+    std::tm localTime{};
+#if defined(_WIN32)
+    localtime_s(&localTime, &timeValue);
+#else
+    localtime_r(&timeValue, &localTime);
+#endif
+
+    const auto durationSinceEpoch = timePoint.time_since_epoch();
+    const auto secondsSinceEpoch = std::chrono::duration_cast<std::chrono::seconds>(durationSinceEpoch);
+    const auto millisecondsFraction = std::chrono::duration_cast<std::chrono::milliseconds>(durationSinceEpoch - secondsSinceEpoch).count();
+
+    const auto offsetMinutes = GetUTCOffsetMinutes(timePoint);
+    const auto absoluteOffsetMinutes = offsetMinutes < 0 ? -offsetMinutes : offsetMinutes;
+
+    return std::format("{:04}-{:02}-{:02}T{:02}:{:02}:{:02}.{:03}{}{:02}:{:02}",
+        localTime.tm_year + 1900,
+        localTime.tm_mon + 1,
+        localTime.tm_mday,
+        localTime.tm_hour,
+        localTime.tm_min,
+        localTime.tm_sec,
+        millisecondsFraction,
+        offsetMinutes < 0 ? '-' : '+',
+        absoluteOffsetMinutes / 60,
+        absoluteOffsetMinutes % 60);
 }
 
 } // namespace Time
