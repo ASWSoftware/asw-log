@@ -25,9 +25,7 @@ limitations under the License.
 #include "ASWLog_TextLogBase.h"
 //---------------------------------------------------------------------------
 // System includes here
-#include <filesystem>
 #include <format>
-#include <iterator>
 //---------------------------------------------------------------------------
 #include "ASWLog_Utils.h"
 //---------------------------------------------------------------------------
@@ -115,49 +113,6 @@ void TASWTextLogBase::Finalize() noexcept
     catch (...)
     {
     }
-}
-
-//---------------------------------------------------------------------------
-std::string TASWTextLogBase::FormatLine(
-    Level level, std::string_view message, std::source_location loc, std::chrono::system_clock::time_point now) const
-{
-    std::string line;
-    line.reserve(message.size() + 256);
-
-    if (m_Config.LogUTCDateTime)
-        std::format_to(std::back_inserter(line), "[{}]", Time::ToISO8601String(now));
-
-    if (m_Config.LogLevelStr)
-        std::format_to(std::back_inserter(line), "[{}]", Level_ToString(level));
-
-    if (m_Config.LogProcessId)
-        std::format_to(std::back_inserter(line), "[P:{}]", GetCurrentOSProcessId());
-
-    if (m_Config.LogThreadId)
-        std::format_to(std::back_inserter(line), "[T:{}]", GetCurrentOSThreadId());
-
-    if (m_Config.LogAppMem_WorkingSet || m_Config.LogAppMem_PeakWorkingSet)
-    {
-        const auto memoryUsage = GetMemoryUsage();
-        if (m_Config.LogAppMem_WorkingSet)
-            std::format_to(std::back_inserter(line), "[WS:{}]", memoryUsage.WorkingSetBytes);
-
-        if (m_Config.LogAppMem_PeakWorkingSet)
-            std::format_to(std::back_inserter(line), "[PWS:{}]", memoryUsage.PeakWorkingSetBytes);
-    }
-
-    if (m_Config.LogMethodName)
-        std::format_to(std::back_inserter(line), "[{}]", loc.function_name());
-
-    if (m_Config.LogSourceLine)
-    {
-        std::filesystem::path fullPath(loc.file_name());
-        std::format_to(std::back_inserter(line), "[{}:{}]", fullPath.filename().string(), loc.line());
-    }
-
-    line += ": ";
-    line.append(message);
-    return line;
 }
 
 //---------------------------------------------------------------------------
@@ -348,7 +303,19 @@ std::string TASWTextLogBase::WriteLogEntry(
     }
     else
     {
-        line = FormatLine(level, message, loc, now);
+        const TASWLogRecord record{
+            .Timestamp = now,
+            .LogLevel = level,
+            .Message = message,
+            .Location = loc,
+            .ProcessId = GetCurrentOSProcessId(),
+            .ThreadId = GetCurrentOSThreadId(),
+        };
+
+        // Without a formatter, calls the built-in layout directly (no default formatter object, which could be
+        // destroyed at exit before a never-destroyed singleton logger writes its shutdown line)
+        const auto* formatter = m_Config.Formatter.get();
+        line = formatter != nullptr ? formatter->Format(record, m_Config) : TASWTextFormatter::FormatLine(record, m_Config);
     }
 
     if (includeNewLine)

@@ -29,7 +29,7 @@ limitations under the License.
 #include <filesystem>
 #include <fstream>
 #include <iterator>
-#include <source_location>
+#include <memory>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -38,6 +38,7 @@ limitations under the License.
 #include "ASWUnitTests_Registry.h"
 //---------------------------------------------------------------------------
 #include "ASWLog_FileLog.h"
+#include "ASWLog_Formatter.h"
 #include "ASWLog_TextLogBase.h"
 //---------------------------------------------------------------------------
 
@@ -130,20 +131,13 @@ public:
     }
 };
 
-// A file logger with its own line layout, "LEVEL|message", as a user's derived class would write it
-class TPipeFileLog final : public ASWLog::TASWFileLog
+// A user's own line layout, "LEVEL|message"
+class TPipeFormatter final : public ASWLog::IASWLogFormatter
 {
-protected:
-    std::string FormatLine(ASWLog::Level level, std::string_view message, std::source_location /*loc*/,
-        std::chrono::system_clock::time_point /*now*/) const override
-    {
-        return std::string(ASWLog::Level_ToString(level)).append("|").append(message);
-    }
-
 public:
-    ~TPipeFileLog() override
+    std::string Format(const ASWLog::TASWLogRecord& record, const ASWLog::TASWLogConfig& /*config*/) const override
     {
-        Finalize(); // So the shutdown line uses this class's FormatLine()
+        return std::string(ASWLog::Level_ToString(record.LogLevel)).append("|").append(record.Message);
     }
 };
 
@@ -193,7 +187,7 @@ TTest_ASWLog_TextLogBase::TTest_ASWLog_TextLogBase()
     : inherited("ASWLog_TextLogBase_Tests")
 {
     RegisterTest(&TTest_ASWLog_TextLogBase::Test_Finalize_WritesShutdownLineFromDestructor, "Finalize_WritesShutdownLineFromDestructor");
-    RegisterTest(&TTest_ASWLog_TextLogBase::Test_FormatLine_OverrideChangesFileLineLayout, "FormatLine_OverrideChangesFileLineLayout");
+    RegisterTest(&TTest_ASWLog_TextLogBase::Test_Formatter_FormatsEveryFileLine, "Formatter_FormatsEveryFileLine");
     RegisterTest(&TTest_ASWLog_TextLogBase::Test_Initialize_WritesStartupLinesThenCallsAfterEntry, "Initialize_WritesStartupLinesThenCallsAfterEntry");
     RegisterTest(&TTest_ASWLog_TextLogBase::Test_Log_DroppedWhenNotReadyOrNotPrepared, "Log_DroppedWhenNotReadyOrNotPrepared");
     RegisterTest(&TTest_ASWLog_TextLogBase::Test_Log_FormatsFiltersAndCallsAfterEntry, "Log_FormatsFiltersAndCallsAfterEntry");
@@ -257,12 +251,13 @@ void TTest_ASWLog_TextLogBase::Test_Finalize_WritesShutdownLineFromDestructor()
     }
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_TextLogBase::Test_FormatLine_OverrideChangesFileLineLayout()
+void TTest_ASWLog_TextLogBase::Test_Formatter_FormatsEveryFileLine()
 {
     // Arrange
     const auto logPath = TestTempDir / "textlogbase.log";
     std::vector<std::string> callbackLines;
     auto config = MakeQuietConfig();
+    config.Formatter = std::make_shared<TPipeFormatter>();
     config.BannerMessage_Init = "start";
     config.WriteShutdownLog = true;
     config.BannerMessage_Shutdown = "bye";
@@ -273,7 +268,7 @@ void TTest_ASWLog_TextLogBase::Test_FormatLine_OverrideChangesFileLineLayout()
 
     // Act
     {
-        TPipeFileLog log;
+        ASWLog::TASWFileLog log;
         CheckTrue(log.Initialize(config), __func__, __LINE__, "Initialize should succeed");
         log.LogInfo("hello");
         log.LogWarn("careful");
@@ -285,11 +280,11 @@ void TTest_ASWLog_TextLogBase::Test_FormatLine_OverrideChangesFileLineLayout()
     // Assert
     const std::string expectedStart = "INFO|start\nINFO|hello\nWARN|careful\nraw text\nINFO|Logger shutdown: ";
     CheckTrue(contents.starts_with(expectedStart), __func__, __LINE__,
-        "Every formatted line, including the startup and shutdown lines, should use the override; raw text should not: " + contents);
+        "Every formatted line, including the startup and shutdown lines, should use the formatter; raw text should not: " + contents);
     CheckTrue(contents.ends_with(", bye\n"), __func__, __LINE__, "The shutdown line should end with the shutdown banner: " + contents);
     CheckEquals(static_cast<std::size_t>(3), callbackLines.size(), __func__, __LINE__, "OnLogEntry should get the three logged entries");
     if (callbackLines.size() == 3)
-        CheckEquals(std::string("INFO|hello\n"), callbackLines[0], __func__, __LINE__, "OnLogEntry should get the line in the override's layout");
+        CheckEquals(std::string("INFO|hello\n"), callbackLines[0], __func__, __LINE__, "OnLogEntry should get the line in the formatter's layout");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_TextLogBase::Test_Initialize_WritesStartupLinesThenCallsAfterEntry()

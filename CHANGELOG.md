@@ -27,9 +27,14 @@ see [0.26.1](#0261---2026-09-17) for the initial versioned baseline.
   and `OnLogEntry` once; a new text logger derives from it and implements
   protected hooks for its output (`InitializeUnlocked`, `OpenUnlocked`,
   `CloseUnlocked`, `WriteLineUnlocked`, and optionally `EnsureReadyUnlocked`,
-  `PrepareWriteUnlocked`, `AfterEntryUnlocked`). A class derived from any of
-  these loggers can override the protected virtual `FormatLine()` to change
-  the line layout.
+  `PrepareWriteUnlocked`, `AfterEntryUnlocked`).
+- Custom line formats: assign an `IASWLogFormatter` to the new
+  `TASWLogConfig::Formatter` to lay out each line your own way, without
+  deriving a logger. A formatter gets a `TASWLogRecord` (time, level,
+  message, source location, process and thread id) and the config, and can
+  be shared by several loggers. Empty keeps the built-in layout, now also
+  available as `TASWTextFormatter`. New source file `ASWLog_Formatter.h/.cpp`
+  (add it to non-CMake projects).
 
 ### Changed
 
@@ -40,7 +45,7 @@ see [0.26.1](#0261---2026-09-17) for the initial versioned baseline.
 - `Initialize`, `Open`, `Close`, `IsOpen`, `Log`, `LogRaw`, `LogForce` and
   `LogForceRaw` are now `final` in `TASWFileLog` and `TASWConsoleLog`: a
   derived class that overrode them must use the `TASWTextLogBase` hooks or
-  `FormatLine()` instead. `DispatchLogCallback` moved from `TASWLogBase` to
+  a formatter (`TASWLogConfig::Formatter`) instead. `DispatchLogCallback` moved from `TASWLogBase` to
   `TASWTextLogBase` (private). With `LogMethodName` or `LogSourceLine` on,
   the startup lines now name `TASWTextLogBase` and its source file. The
   output is otherwise unchanged.

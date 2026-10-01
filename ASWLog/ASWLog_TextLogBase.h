@@ -35,6 +35,7 @@ limitations under the License.
 #include <string_view>
 //---------------------------------------------------------------------------
 #include "ASWLog_Base.h"
+#include "ASWLog_Formatter.h" // For TASWLogConfig::Formatter
 //---------------------------------------------------------------------------
 
 namespace ASWLog
@@ -51,7 +52,7 @@ namespace ASWLog
 // called with m_Mutex held, so it must not call a public method of this logger (which would lock it again). The
 // derived logger's destructor must call Finalize(), which writes the shutdown line and closes the output.
 //
-// To change the line layout, derive from a logger (e.g. TASWFileLog) and override FormatLine().
+// To change the line layout, assign a formatter to TASWLogConfig::Formatter (see IASWLogFormatter).
 /////////////////////////////////////////////////////////////////////////////
 class TASWTextLogBase : public TASWLogBase
 {
@@ -89,15 +90,8 @@ protected:
 
     // Writes the shutdown line (if TASWLogConfig::WriteShutdownLog) and closes the output, if the logger is
     // initialized. Never throws. Each logger calls it from its destructor, since the hooks can't be called from this
-    // class's destructor. A class that overrides FormatLine() calls it from its own destructor too, if it wants the
-    // shutdown line in its own format (by the time a base destructor runs, the override is gone).
+    // class's destructor.
     void Finalize() noexcept;
-
-    // Returns the line for an entry, without its line ending, laid out from the TASWLogConfig options:
-    // "[time][LEVEL][P:pid][T:tid][WS:bytes][PWS:bytes][function][file:line]: message". 'now' is the entry's time
-    // (from NowUTC()). Not called for LogRaw()/LogForceRaw(), which write the message as is. Called with m_Mutex held.
-    virtual std::string FormatLine(Level level, std::string_view message, std::source_location loc,
-        std::chrono::system_clock::time_point now) const;
 
     // Called by Initialize() after it has stored the config: prepares and opens the output. Returning false fails
     // Initialize().

@@ -1,5 +1,5 @@
 /* **************************************************************************
-Test_ASWLog_TextLogBase.h
+Test_ASWLog_Formatter.h
 Author: Anthony S. West - ASW Software
 
 Copyright 2026 Anthony S. West
@@ -18,8 +18,8 @@ limitations under the License.
 
 ************************************************************************** */
 
-#ifndef Test_ASWLog_TextLogBaseH
-#define Test_ASWLog_TextLogBaseH
+#ifndef Test_ASWLog_FormatterH
+#define Test_ASWLog_FormatterH
 //---------------------------------------------------------------------------
 #include "ASWUnitTests_TestBase.h"
 //---------------------------------------------------------------------------
@@ -28,25 +28,24 @@ namespace ASWUnitTests
 {
 
 ///////////////////////////////////////////////////////////////////////////
-// TTest_ASWLog_TextLogBase
+// TTest_ASWLog_Formatter
 ///////////////////////////////////////////////////////////////////////////
-class TTest_ASWLog_TextLogBase : public TTestGroupBase
+class TTest_ASWLog_Formatter : public TTestGroupBase
 {
 private:
     typedef TTestGroupBase inherited;
 
 private: // Test methods
-    void Test_Finalize_WritesShutdownLineFromDestructor();
-    void Test_Formatter_FormatsEveryFileLine();
-    void Test_Initialize_WritesStartupLinesThenCallsAfterEntry();
-    void Test_Log_DroppedWhenNotReadyOrNotPrepared();
-    void Test_Log_FormatsFiltersAndCallsAfterEntry();
-    void Test_Log_ThrowingWriteDoesNotEscape();
-    void Test_LogRaw_WritesMessageAsIs();
+    void Test_Format_MatchesFormatLine();
+    void Test_FormatLine_AllFieldsInOrder();
+    void Test_FormatLine_MemoryFields();
+    void Test_FormatLine_NoFields();
+    void Test_Formatter_ReceivesRecordFromLoggingThread();
+    void Test_Formatter_SharedByTwoLoggers();
 
 public:
-    TTest_ASWLog_TextLogBase();
-    ~TTest_ASWLog_TextLogBase() override;
+    TTest_ASWLog_Formatter();
+    ~TTest_ASWLog_Formatter() override;
 
     void SetUp_Group() override;
     void SetUp_Test(ITestCase& testCase) override;
@@ -57,4 +56,4 @@ public:
 } // ASWUnitTests
 
 //---------------------------------------------------------------------------
-#endif // #ifndef Test_ASWLog_TextLogBaseH
+#endif // #ifndef Test_ASWLog_FormatterH

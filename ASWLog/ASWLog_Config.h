@@ -33,6 +33,7 @@ limitations under the License.
 #include <cstdint>
 #include <filesystem>
 #include <functional>
+#include <memory>
 #include <string>
 #include <string_view>
 //---------------------------------------------------------------------------
@@ -41,6 +42,8 @@ limitations under the License.
 
 namespace ASWLog
 {
+
+class IASWLogFormatter; // See ASWLog_Formatter.h
 
 struct TASWLogConfig
 {
@@ -71,6 +74,10 @@ struct TASWLogConfig
     bool LogSourceLine    = false;
     bool LogThreadId      = true;
     bool LogUTCDateTime   = true;
+
+    // Formats each entry's line (not LogRaw entries). Empty: TASWTextFormatter's layout, from the options above. One
+    // formatter can be shared by several loggers.
+    std::shared_ptr<const IASWLogFormatter> Formatter;
 
     // Initialize output configuration
     bool Init_LogApplicationInfo = true;

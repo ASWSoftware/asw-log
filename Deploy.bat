@@ -80,6 +80,10 @@ call :CopyFile "ASWLog\ASWLog_FileLog.cpp" "%TARGET_DIR%\ASWLog\ASWLog_FileLog.c
 if errorlevel 1 exit /b 1
 call :CopyFile "ASWLog\ASWLog_FileLog.h" "%TARGET_DIR%\ASWLog\ASWLog_FileLog.h"
 if errorlevel 1 exit /b 1
+call :CopyFile "ASWLog\ASWLog_Formatter.cpp" "%TARGET_DIR%\ASWLog\ASWLog_Formatter.cpp"
+if errorlevel 1 exit /b 1
+call :CopyFile "ASWLog\ASWLog_Formatter.h" "%TARGET_DIR%\ASWLog\ASWLog_Formatter.h"
+if errorlevel 1 exit /b 1
 call :CopyFile "ASWLog\ASWLog_Interface.cpp" "%TARGET_DIR%\ASWLog\ASWLog_Interface.cpp"
 if errorlevel 1 exit /b 1
 call :CopyFile "ASWLog\ASWLog_Interface.h" "%TARGET_DIR%\ASWLog\ASWLog_Interface.h"
