@@ -21,6 +21,15 @@ see [0.26.1](#0261---2026-09-17) for the initial versioned baseline.
   UndefinedBehaviorSanitizer) for GCC and Clang, building the library and
   everything that links to it with that sanitizer. CI runs the unit tests
   under ThreadSanitizer and AddressSanitizer + UBSan on Linux (Clang).
+- `TASWTextLogBase` (`ASWLog_TextLogBase.h/.cpp`, a new source file to add
+  to non-CMake projects), the base of `TASWFileLog` and `TASWConsoleLog`. It
+  implements the logging methods, startup and shutdown lines, line format
+  and `OnLogEntry` once; a new text logger derives from it and implements
+  protected hooks for its output (`InitializeUnlocked`, `OpenUnlocked`,
+  `CloseUnlocked`, `WriteLineUnlocked`, and optionally `EnsureReadyUnlocked`,
+  `PrepareWriteUnlocked`, `AfterEntryUnlocked`). A class derived from any of
+  these loggers can override the protected virtual `FormatLine()` to change
+  the line layout.
 
 ### Changed
 
@@ -28,6 +37,13 @@ see [0.26.1](#0261---2026-09-17) for the initial versioned baseline.
   headers it uses, so each one compiles on its own, whatever it is included
   after. The startup "App:" line's unused `MacOSX` target branch was removed;
   the logger supports Windows and Linux only.
+- `Initialize`, `Open`, `Close`, `IsOpen`, `Log`, `LogRaw`, `LogForce` and
+  `LogForceRaw` are now `final` in `TASWFileLog` and `TASWConsoleLog`: a
+  derived class that overrode them must use the `TASWTextLogBase` hooks or
+  `FormatLine()` instead. `DispatchLogCallback` moved from `TASWLogBase` to
+  `TASWTextLogBase` (private). With `LogMethodName` or `LogSourceLine` on,
+  the startup lines now name `TASWTextLogBase` and its source file. The
+  output is otherwise unchanged.
 
 ## [0.43.0] - 2026-09-29
 
