@@ -11,7 +11,7 @@ ASWLog is a thread-safe light-weight C++ logging tool for Windows and Linux proj
 - `ASWLog/` contains the framework implementation.
 - `tests/` contains the unit tests: test modules in `tests/tests/`, their CMake project in `tests/cmake/`, their RAD Studio console project in `tests/rad370/`, and their RAD Studio VCL GUI runner project in `tests/vcl/gui/rad370/` (built from the submodule's `vcl/gui/src`).
 - `third_party/asw-unit-tests/` is the ASWUnitTests framework, a git submodule pinned to a release tag. Never edit files in it; test modules self-register with `ASW_REGISTER_TEST_GROUP`, so adding a test only touches `tests/` and its build files.
-- `.github/workflows/ci.yml` builds and runs the unit tests on Windows (MSVC, MinGW) and Linux (GCC, Clang).
+- `.github/workflows/ci.yml` builds and runs the unit tests on Windows (MSVC, MinGW) and Linux (GCC, Clang), plus Linux Clang builds with ThreadSanitizer and with AddressSanitizer + UBSan (`ASWLOG_SANITIZE`).
 - `example/` contains example app that uses the logger.
 - `example/rad370/` contains the RAD Studio 13.1 project and Windows build scripts.
 - `README.md` contains repo details.

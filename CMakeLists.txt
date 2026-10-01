@@ -13,6 +13,10 @@ option(ASWLOG_BUILD_EXAMPLE "Build the ASWLog example (example/cmake)" OFF)
 option(ASWLOG_BUILD_TESTS "Build the ASWLog unit tests (tests/cmake; needs the asw-unit-tests submodule)" OFF)
 option(ASWLOG_WARNINGS "Compile the ASWLog sources with extra warnings" ${ASWLOG_IS_TOP_LEVEL})
 
+set(ASWLOG_SANITIZE "" CACHE STRING
+    "Build ASWLog and everything that links to it with a sanitizer: thread, or address (with undefined behavior)")
+set_property(CACHE ASWLOG_SANITIZE PROPERTY STRINGS "" thread address)
+
 add_library(ASWLog STATIC
     ASWLog/ASWLog_Base.cpp
     ASWLog/ASWLog_Base.h
@@ -49,6 +53,27 @@ if(ASWLOG_WARNINGS)
     else()
         target_compile_options(ASWLog PRIVATE -Wall -Wextra -Wpedantic)
     endif()
+endif()
+
+# A sanitizer must instrument the whole program (ThreadSanitizer misses races in, or misreports them through,
+# uninstrumented code), so the flags are PUBLIC: they reach the compile and link of every target linking to ASWLog.
+if(ASWLOG_SANITIZE)
+    if(MSVC)
+        message(FATAL_ERROR "ASWLOG_SANITIZE is supported only with GCC and Clang")
+    endif()
+
+    if(ASWLOG_SANITIZE STREQUAL "thread")
+        set(ASWLOG_SANITIZE_FLAGS -fsanitize=thread)
+    elseif(ASWLOG_SANITIZE STREQUAL "address")
+        # Stop at the first undefined behavior report, as AddressSanitizer does, so the run fails.
+        set(ASWLOG_SANITIZE_FLAGS -fsanitize=address,undefined -fno-sanitize-recover=undefined)
+    else()
+        message(FATAL_ERROR "ASWLOG_SANITIZE must be empty, thread, or address (got '${ASWLOG_SANITIZE}')")
+    endif()
+
+    # Debug information and frame pointers give the sanitizer reports complete call stacks.
+    target_compile_options(ASWLog PUBLIC ${ASWLOG_SANITIZE_FLAGS} -g -fno-omit-frame-pointer)
+    target_link_options(ASWLog PUBLIC ${ASWLOG_SANITIZE_FLAGS})
 endif()
 
 if(ASWLOG_BUILD_EXAMPLE)

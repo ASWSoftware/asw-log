@@ -17,6 +17,10 @@ see [0.26.1](#0261---2026-09-17) for the initial versioned baseline.
   Linking to it adds the include folder, C++20 and `psapi`, so a CMake
   project no longer lists the logger's sources itself. The CMake example
   and unit-test projects now link to it.
+- CMake option `ASWLOG_SANITIZE` (`thread`, or `address` with
+  UndefinedBehaviorSanitizer) for GCC and Clang, building the library and
+  everything that links to it with that sanitizer. CI runs the unit tests
+  under ThreadSanitizer and AddressSanitizer + UBSan on Linux (Clang).
 
 ### Changed
 

@@ -93,6 +93,17 @@ Visual Studio). For RAD Studio, use `tests/rad370/ASWLogTests.cbproj` or its `Bu
 written to `tests/build/bin/<Config>`. GitHub Actions builds and runs the tests on Windows and Linux for each push and
 pull request to `main` and `develop`.
 
+With GCC or Clang (on Linux), the tests can also be built with a sanitizer, which fails the run with a report when it
+finds a data race (`thread`), or a memory error or undefined behavior (`address`, which includes
+UndefinedBehaviorSanitizer):
+
+```
+cmake -S tests/cmake -B tests/cmake/build-tsan -DCMAKE_BUILD_TYPE=Release -DASWLOG_SANITIZE=thread
+cmake --build tests/cmake/build-tsan
+```
+
+CI runs both with Clang. `ASWLOG_SANITIZE` applies to the library and everything that links to it.
+
 On Windows with RAD Studio, the tests can also run in the ASWUnitTests VCL GUI runner, a window for choosing tests and
 reading their results: build `tests/vcl/gui/rad370/ASWLogTests_VCL_GUI.cbproj` (or its `Build_Win64x_*.bat` scripts),
 which writes `ASWLogTests_VCL_GUI.exe` to `tests/build/bin/<Config>`. `ASWLogTests_Group.groupproj` in the same folder
