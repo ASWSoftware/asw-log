@@ -29,6 +29,32 @@ Add the source in `ASWLog` to your C++ project.
 
 ## CMake
 
+The repository's root `CMakeLists.txt` defines the static library target `ASWLog::ASWLog`. Linking to it adds the
+`ASWLog` include folder, C++20, and the system libraries the logger needs (`psapi` on Windows). Add it from a copy of
+the repository, such as a git submodule:
+
+```
+add_subdirectory(third_party/asw-log)
+target_link_libraries(MyApp PRIVATE ASWLog::ASWLog)
+```
+
+or let CMake download it with `FetchContent`:
+
+```
+include(FetchContent)
+FetchContent_Declare(ASWLog
+    GIT_REPOSITORY https://github.com/ASWSoftware/asw-log.git
+    GIT_TAG v0.45.0     # A release tag, 0.45.0 or later
+    GIT_SUBMODULES ""   # Skip the unit-test framework submodule
+)
+FetchContent_MakeAvailable(ASWLog)
+target_link_libraries(MyApp PRIVATE ASWLog::ASWLog)
+```
+
+Either way, only the library is built. When ASWLog is the top-level project, `-DASWLOG_BUILD_EXAMPLE=ON` and
+`-DASWLOG_BUILD_TESTS=ON` also build the example and the unit tests, and `ASWLOG_WARNINGS` (on by default only there)
+compiles the library with extra warnings.
+
 The `example/cmake` folder contains a portable CMake project for building the example with CMake, JetBrains CLion,
 Visual Studio, Clang, or MinGW. From the repository root, configure and build it with:
 

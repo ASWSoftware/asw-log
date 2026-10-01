@@ -10,6 +10,14 @@ see [0.26.1](#0261---2026-09-17) for the initial versioned baseline.
 
 ## [Unreleased]
 
+### Added
+
+- CMake library target `ASWLog::ASWLog`, defined by a new root
+  `CMakeLists.txt`, for use with `add_subdirectory` or `FetchContent`.
+  Linking to it adds the include folder, C++20 and `psapi`, so a CMake
+  project no longer lists the logger's sources itself. The CMake example
+  and unit-test projects now link to it.
+
 ### Changed
 
 - Every library header now has `#pragma once` and includes the standard
