@@ -31,6 +31,7 @@ limitations under the License.
 #include <atomic>
 #include <cstddef>
 #include <mutex>
+#include <source_location>
 #include <string>
 #include <string_view>
 //---------------------------------------------------------------------------

@@ -57,6 +57,8 @@ if not exist "%TARGET_DIR%\example\src\." (
 
 call :CopyFile "CHANGELOG.md" "%TARGET_DIR%\CHANGELOG.md"
 if errorlevel 1 exit /b 1
+call :CopyFile "CMakeLists.txt" "%TARGET_DIR%\CMakeLists.txt"
+if errorlevel 1 exit /b 1
 call :CopyFile "LICENSE" "%TARGET_DIR%\LICENSE"
 if errorlevel 1 exit /b 1
 call :CopyFile "README.md" "%TARGET_DIR%\README.md"

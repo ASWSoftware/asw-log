@@ -10,6 +10,25 @@ see [0.26.1](#0261---2026-09-17) for the initial versioned baseline.
 
 ## [Unreleased]
 
+### Added
+
+- CMake library target `ASWLog::ASWLog`, defined by a new root
+  `CMakeLists.txt`, for use with `add_subdirectory` or `FetchContent`.
+  Linking to it adds the include folder, C++20 and `psapi`, so a CMake
+  project no longer lists the logger's sources itself. The CMake example
+  and unit-test projects now link to it.
+- CMake option `ASWLOG_SANITIZE` (`thread`, or `address` with
+  UndefinedBehaviorSanitizer) for GCC and Clang, building the library and
+  everything that links to it with that sanitizer. CI runs the unit tests
+  under ThreadSanitizer and AddressSanitizer + UBSan on Linux (Clang).
+
+### Changed
+
+- Every library header now has `#pragma once` and includes the standard
+  headers it uses, so each one compiles on its own, whatever it is included
+  after. The startup "App:" line's unused `MacOSX` target branch was removed;
+  the logger supports Windows and Linux only.
+
 ## [0.43.0] - 2026-09-29
 
 ### Added
