@@ -35,6 +35,7 @@ limitations under the License.
 #include <filesystem>
 #include <mutex>
 #include <ostream>
+#include <source_location>
 #include <string_view>
 #include <streambuf>
 #include <string>

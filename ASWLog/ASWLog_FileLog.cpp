@@ -743,8 +743,6 @@ void TASWFileLog::WriteApplicationInfo()
     applicationInfo += "LinuxARM64";
 #elif defined(__linux__)
     applicationInfo += "Linux32";
-#elif defined(__APPLE__)
-    applicationInfo += "MacOSX";
 #else
 #error "ASWLog: Unrecognized target platform in WriteApplicationInfo()"
 #endif

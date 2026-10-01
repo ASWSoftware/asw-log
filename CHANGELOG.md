@@ -10,6 +10,13 @@ see [0.26.1](#0261---2026-09-17) for the initial versioned baseline.
 
 ## [Unreleased]
 
+### Changed
+
+- Every library header now has `#pragma once` and includes the standard
+  headers it uses, so each one compiles on its own, whatever it is included
+  after. The startup "App:" line's unused `MacOSX` target branch was removed;
+  the logger supports Windows and Linux only.
+
 ## [0.43.0] - 2026-09-29
 
 ### Added

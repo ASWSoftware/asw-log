@@ -29,6 +29,10 @@ limitations under the License.
 //---------------------------------------------------------------------------
 #include <atomic>
 #include <chrono>
+#include <format>
+#include <source_location>
+#include <string>
+#include <string_view>
 //---------------------------------------------------------------------------
 #include "ASWLog_Interface.h"
 //---------------------------------------------------------------------------
