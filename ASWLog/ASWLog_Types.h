@@ -24,12 +24,16 @@ limitations under the License.
 
 ************************************************************************** */
 
+#pragma once
+
 #ifndef ASWLog_TypesH
 #define ASWLog_TypesH
 //---------------------------------------------------------------------------
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <optional>
+#include <source_location>
 #include <string_view>
 //---------------------------------------------------------------------------
 
@@ -200,6 +204,26 @@ enum class LineEnding
 
     return "UNKNOWN";
 }
+
+//---------------------------------------------------------------------------
+
+/////////////////////////////////////////////////////////////////////////////
+// TASWLogRecord struct
+//
+// The data of one log entry, as handed to a formatter (see
+// IASWLogFormatter). It is captured on the thread that logged the entry.
+// Message and Location refer to the caller's data, so they are only valid
+// during the call; a formatter that keeps a record beyond it must copy them.
+/////////////////////////////////////////////////////////////////////////////
+struct TASWLogRecord
+{
+    std::chrono::system_clock::time_point Timestamp; // UTC (a system_clock time point counts from the UTC epoch)
+    Level LogLevel = Level::Info;
+    std::string_view Message;
+    std::source_location Location; // Where the entry was logged
+    std::uint32_t ProcessId = 0; // The OS process id (see GetCurrentOSProcessId())
+    std::uint32_t ThreadId = 0; // The OS id of the thread that logged the entry (see GetCurrentOSThreadId())
+};
 
 //---------------------------------------------------------------------------
 

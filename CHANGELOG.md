@@ -10,6 +10,48 @@ see [0.26.1](#0261---2026-09-17) for the initial versioned baseline.
 
 ## [Unreleased]
 
+## [0.45.0] - 2026-10-01
+
+### Added
+
+- CMake library target `ASWLog::ASWLog`, defined by a new root
+  `CMakeLists.txt`, for use with `add_subdirectory` or `FetchContent`.
+  Linking to it adds the include folder, C++20 and `psapi`, so a CMake
+  project no longer lists the logger's sources itself. The CMake example
+  and unit-test projects now link to it.
+- CMake option `ASWLOG_SANITIZE` (`thread`, or `address` with
+  UndefinedBehaviorSanitizer) for GCC and Clang, building the library and
+  everything that links to it with that sanitizer. CI runs the unit tests
+  under ThreadSanitizer and AddressSanitizer + UBSan on Linux (Clang).
+- `TASWTextLogBase` (`ASWLog_TextLogBase.h/.cpp`, a new source file to add
+  to non-CMake projects), the base of `TASWFileLog` and `TASWConsoleLog`. It
+  implements the logging methods, startup and shutdown lines, line format
+  and `OnLogEntry` once; a new text logger derives from it and implements
+  protected hooks for its output (`InitializeUnlocked`, `OpenUnlocked`,
+  `CloseUnlocked`, `WriteLineUnlocked`, and optionally `EnsureReadyUnlocked`,
+  `PrepareWriteUnlocked`, `AfterEntryUnlocked`).
+- Custom line formats: assign an `IASWLogFormatter` to the new
+  `TASWLogConfig::Formatter` to lay out each line your own way, without
+  deriving a logger. A formatter gets a `TASWLogRecord` (time, level,
+  message, source location, process and thread id) and the config, and can
+  be shared by several loggers. Empty keeps the built-in layout, now also
+  available as `TASWTextFormatter`. New source file `ASWLog_Formatter.h/.cpp`
+  (add it to non-CMake projects).
+
+### Changed
+
+- Every library header now has `#pragma once` and includes the standard
+  headers it uses, so each one compiles on its own, whatever it is included
+  after. The startup "App:" line's unused `MacOSX` target branch was removed;
+  the logger supports Windows and Linux only.
+- `Initialize`, `Open`, `Close`, `IsOpen`, `Log`, `LogRaw`, `LogForce` and
+  `LogForceRaw` are now `final` in `TASWFileLog` and `TASWConsoleLog`: a
+  derived class that overrode them must use the `TASWTextLogBase` hooks or
+  a formatter (`TASWLogConfig::Formatter`) instead. `DispatchLogCallback`
+  moved from `TASWLogBase` to `TASWTextLogBase` (private). With
+  `LogMethodName` or `LogSourceLine` on, the startup lines now name
+  `TASWTextLogBase` and its source file. The output is otherwise unchanged.
+
 ## [0.43.0] - 2026-09-29
 
 ### Added
@@ -254,7 +296,8 @@ Everything already present in the logger at this point (`TASWFileLog`,
 and CMake example projects, unit tests, `Deploy.bat`, etc.) is treated as the
 baseline and is not itemized commit-by-commit.
 
-[Unreleased]: https://github.com/ASWSoftware/asw-log/compare/v0.43.0...HEAD
+[Unreleased]: https://github.com/ASWSoftware/asw-log/compare/v0.45.0...HEAD
+[0.45.0]: https://github.com/ASWSoftware/asw-log/compare/v0.43.0...v0.45.0
 [0.43.0]: https://github.com/ASWSoftware/asw-log/compare/v0.26.4...v0.43.0
 [0.26.4]: https://github.com/ASWSoftware/asw-log/compare/v0.26.3...v0.26.4
 [0.26.3]: https://github.com/ASWSoftware/asw-log/compare/v0.26.1...v0.26.3

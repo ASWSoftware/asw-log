@@ -32,7 +32,7 @@ limitations under the License.
 #include <fstream>
 #include <iomanip>
 #include <iostream>
-#include <iterator>
+#include <mutex>
 #include <sstream>
 #include <system_error>
 #include <thread>
@@ -300,19 +300,11 @@ TASWFileLog::~TASWFileLog()
 }
 
 //---------------------------------------------------------------------------
-void TASWFileLog::AppendLineEnding(std::string& line)
+void TASWFileLog::AfterEntryUnlocked()
 {
-    if (m_Config.LogLineEnding == LineEnding::CRLF)
-        line += "\r\n";
-    else
-        line += '\n';
-}
-
-//---------------------------------------------------------------------------
-bool TASWFileLog::Close()
-{
-    std::lock_guard<std::mutex> lock(m_FileMutex);
-    return CloseUnlocked();
+    // In this mode the file is only open while an entry (or Initialize()'s startup lines) is written
+    if (m_Config.AutoOpenClosePerWrite)
+        CloseUnlocked();
 }
 
 //---------------------------------------------------------------------------
@@ -376,11 +368,11 @@ std::size_t TASWFileLog::DeleteOldLogs(
 
 //---------------------------------------------------------------------------
 /*
-    TASWFileLog::EnsureOpenForWriteUnlocked
+    TASWFileLog::EnsureReadyUnlocked
 
     Makes sure the log file is open for the next write. Returns false if the entry can't be written.
 */
-bool TASWFileLog::EnsureOpenForWriteUnlocked()
+bool TASWFileLog::EnsureReadyUnlocked()
 {
     const bool isInitialized = m_IsInitialized.load(std::memory_order_acquire);
     if (isInitialized && m_FileStream.IsOpen())
@@ -400,36 +392,9 @@ bool TASWFileLog::EnsureOpenForWriteUnlocked()
 }
 
 //---------------------------------------------------------------------------
-void TASWFileLog::Finalize() noexcept
-{
-    // Called from the destructor, where an exception would terminate the program
-    try
-    {
-        std::lock_guard<std::mutex> lock(m_FileMutex);
-        if (!m_IsInitialized.load(std::memory_order_acquire))
-            return;
-
-        if (m_Config.WriteShutdownLog)
-        {
-            std::string msg = "Logger shutdown: " + Time::ToISO8601String(NowUTC());
-
-            if (!m_Config.BannerMessage_Shutdown.empty())
-                msg += ", " + m_Config.BannerMessage_Shutdown;
-
-            WriteLogEntry(Level::Info, msg, false, false, true, std::source_location::current());
-        }
-
-        CloseUnlocked();
-    }
-    catch (...)
-    {
-    }
-}
-
-//---------------------------------------------------------------------------
 bool TASWFileLog::Flush()
 {
-    std::lock_guard<std::mutex> lock(m_FileMutex);
+    std::lock_guard<std::mutex> lock(m_Mutex);
     return FlushUnlocked();
 }
 
@@ -457,17 +422,8 @@ TASWFileLog& TASWFileLog::GetInstance()
 }
 
 //---------------------------------------------------------------------------
-bool TASWFileLog::Initialize(const TASWLogConfig& config)
+bool TASWFileLog::InitializeUnlocked()
 {
-    std::lock_guard<std::mutex> lock(m_FileMutex);
-    if (m_IsInitialized.load(std::memory_order_acquire))
-    {
-        return false;
-    }
-
-    m_Config = config;
-    m_MinimumLevel.store(m_Config.InitialMinimumLevel, std::memory_order_release);
-
     if (m_Config.EnableDailyRolling)
         RotateDailyLogFromEarlierDayUnlocked();
 
@@ -477,86 +433,7 @@ bool TASWFileLog::Initialize(const TASWLogConfig& config)
     }
 
     m_LastLogDateStr = Time::ToDateString(NowUTC());
-
-    if (!m_Config.BannerMessage_Init.empty())
-    {
-        WriteLogEntry(Level::Info, m_Config.BannerMessage_Init, false, false, true, std::source_location::current());
-    }
-
-    WriteInitializationInfo();
-
-    if (m_Config.AutoOpenClosePerWrite)
-        CloseUnlocked();
-
     return true;
-}
-
-//---------------------------------------------------------------------------
-bool TASWFileLog::IsOpen() const noexcept
-{
-    return m_IsOpen.load(std::memory_order_acquire);
-}
-
-//---------------------------------------------------------------------------
-void TASWFileLog::Log(Level level, std::string_view message, std::source_location loc)
-{
-    if (level < GetMinimumLevel())
-        return;
-
-    LogEntry(level, message, false, false, true, loc);
-}
-
-//---------------------------------------------------------------------------
-/*
-    TASWFileLog::LogEntry
-
-    Writes one entry for the public Log* methods, then calls OnLogEntry. Never throws, so that logging can't throw
-    into the application: if writing fails (e.g. out of memory), the entry is dropped.
-*/
-void TASWFileLog::LogEntry(
-    Level level, std::string_view message, bool force, bool raw, bool includeNewLine, std::source_location loc) noexcept
-{
-    try
-    {
-        std::string writtenLine;
-        {
-            std::lock_guard<std::mutex> lock(m_FileMutex);
-            if (!EnsureOpenForWriteUnlocked())
-                return;
-
-            writtenLine = WriteLogEntry(level, message, force, raw, includeNewLine, loc);
-
-            if (m_Config.AutoOpenClosePerWrite)
-                CloseUnlocked();
-        }
-
-        if (!writtenLine.empty())
-            DispatchLogCallback(level, writtenLine);
-    }
-    catch (...)
-    {
-    }
-}
-
-//---------------------------------------------------------------------------
-void TASWFileLog::LogForce(Level level, std::string_view message, std::source_location loc)
-{
-    LogEntry(level, message, true, false, true, loc);
-}
-
-//---------------------------------------------------------------------------
-void TASWFileLog::LogForceRaw(Level level, std::string_view message, std::source_location loc)
-{
-    LogEntry(level, message, true, true, false, loc);
-}
-
-//---------------------------------------------------------------------------
-void TASWFileLog::LogRaw(Level level, std::string_view message, std::source_location loc)
-{
-    if (level < GetMinimumLevel())
-        return;
-
-    LogEntry(level, message, false, true, false, loc);
 }
 
 //---------------------------------------------------------------------------
@@ -575,13 +452,6 @@ void TASWFileLog::MaybeFlush(bool isNewLine)
         if (now - m_LastFlushTime >= m_Config.FlushInterval)
             FlushUnlocked();
     }
-}
-
-//---------------------------------------------------------------------------
-bool TASWFileLog::Open()
-{
-    std::lock_guard<std::mutex> lock(m_FileMutex);
-    return OpenUnlocked();
 }
 
 //---------------------------------------------------------------------------
@@ -632,9 +502,45 @@ bool TASWFileLog::OpenUnlocked()
 }
 
 //---------------------------------------------------------------------------
+/*
+    TASWFileLog::PrepareWriteUnlocked
+
+    Rotates the log file if the day has changed or the file has reached its maximum size, as configured. Returns false
+    if the file isn't open (e.g. it couldn't be reopened after a rotation), which drops the line.
+*/
+bool TASWFileLog::PrepareWriteUnlocked(std::chrono::system_clock::time_point now)
+{
+    if (m_Config.EnableDailyRolling)
+    {
+        const auto currentDateStr = Time::ToDateString(now);
+        if (currentDateStr != m_LastLogDateStr)
+        {
+            // Name the backup for the day its content is from, not the day that just started. A log shared with other
+            // processes may already have been rolled over by one of them, so there the file's last write decides.
+            if (m_Config.AutoOpenClosePerWrite)
+                RotateDailyLogFromEarlierDayUnlocked();
+            else
+                RotateLogFilesUnlocked("daily", m_LastLogDateStr);
+
+            m_LastLogDateStr = currentDateStr;
+        }
+    }
+
+    // Uses the size tracked by the stream, since on Windows the size read through the path isn't current while open.
+    // After a failed rotation (e.g. another program holds the file), waits RotationRetryDelay before trying again.
+    if (m_Config.EnableRotation && m_FileStream.IsOpen() && m_FileStream.GetSize() >= m_Config.MaxFileSizeBytes &&
+        IsRetryDue(m_LastRotationFailure, now, m_Config.RotationRetryDelay))
+    {
+        RotateLogFilesUnlocked("size", ToBackupTimeLabel(now));
+    }
+
+    return m_FileStream.IsOpen();
+}
+
+//---------------------------------------------------------------------------
 bool TASWFileLog::RotateLogFiles(std::string_view reasonTag)
 {
-    std::lock_guard<std::mutex> lock(m_FileMutex);
+    std::lock_guard<std::mutex> lock(m_Mutex);
     return RotateLogFilesUnlocked(reasonTag, ToBackupTimeLabel(NowUTC()));
 }
 
@@ -729,175 +635,10 @@ bool TASWFileLog::RotateLogFilesUnlocked(std::string_view reasonTag, std::string
 }
 
 //---------------------------------------------------------------------------
-void TASWFileLog::WriteApplicationInfo()
+void TASWFileLog::WriteLineUnlocked(Level /*level*/, std::string_view line, bool endsLine)
 {
-    auto applicationInfo = std::format("app_exe='{}', app_target=", PathToUTF8String(GetExecutablePath()));
-
-#if defined(_WIN64)
-    applicationInfo += "Win64";
-#elif defined(_WIN32)
-    applicationInfo += "Win32";
-#elif defined(__linux__) && defined(__x86_64__)
-    applicationInfo += "Linux64";
-#elif defined(__linux__) && defined(__aarch64__)
-    applicationInfo += "LinuxARM64";
-#elif defined(__linux__)
-    applicationInfo += "Linux32";
-#elif defined(__APPLE__)
-    applicationInfo += "MacOSX";
-#else
-#error "ASWLog: Unrecognized target platform in WriteApplicationInfo()"
-#endif
-
-    if (m_Config.Init_LogCommandLine)
-        applicationInfo += std::format(", command_line='{}'", GetCommandLineString());
-
-    WriteLogEntry(Level::Info, std::format("App: {}", applicationInfo), false, false, true, std::source_location::current());
-}
-
-//---------------------------------------------------------------------------
-void TASWFileLog::WriteDriveInfo()
-{
-    WriteLogEntry(Level::Info,
-        std::format("Drive: {}", GetDriveInfoString()), false, false, true, std::source_location::current());
-}
-
-//---------------------------------------------------------------------------
-void TASWFileLog::WriteInitializationInfo()
-{
-    if (m_Config.Init_LogTimeInfo)
-        WriteTimeInfo();
-
-    if (m_Config.Init_LogOSInfo)
-        WriteOSInfo();
-
-    if (m_Config.Init_LogDriveInfo)
-        WriteDriveInfo();
-
-    if (m_Config.Init_LogSysMemInfo)
-        WriteSystemMemoryInfo();
-
-    if (m_Config.Init_LogApplicationInfo)
-        WriteApplicationInfo();
-
-    if (m_Config.Init_LogMemoryUsage)
-        WriteMemoryUsageInfo();
-}
-
-//---------------------------------------------------------------------------
-std::string TASWFileLog::WriteLogEntry(
-    Level level, std::string_view message, bool force, bool raw, bool includeNewLine, std::source_location loc)
-{
-    if (!force && level < GetMinimumLevel())
-        return {};
-
-    const auto now = NowUTC();
-
-    if (m_Config.EnableDailyRolling)
-    {
-        const auto currentDateStr = Time::ToDateString(now);
-        if (currentDateStr != m_LastLogDateStr)
-        {
-            // Name the backup for the day its content is from, not the day that just started. A log shared with other
-            // processes may already have been rolled over by one of them, so there the file's last write decides.
-            if (m_Config.AutoOpenClosePerWrite)
-                RotateDailyLogFromEarlierDayUnlocked();
-            else
-                RotateLogFilesUnlocked("daily", m_LastLogDateStr);
-
-            m_LastLogDateStr = currentDateStr;
-        }
-    }
-
-    // Uses the size tracked by the stream, since on Windows the size read through the path isn't current while open.
-    // After a failed rotation (e.g. another program holds the file), waits RotationRetryDelay before trying again.
-    if (m_Config.EnableRotation && m_FileStream.IsOpen() && m_FileStream.GetSize() >= m_Config.MaxFileSizeBytes &&
-        IsRetryDue(m_LastRotationFailure, now, m_Config.RotationRetryDelay))
-    {
-        RotateLogFilesUnlocked("size", ToBackupTimeLabel(now));
-    }
-
-    if (!m_FileStream.IsOpen())
-        return {};
-
-    std::string line;
-    line.reserve(message.size() + 256);
-
-    if (raw)
-    {
-        line.append(message);
-        if (includeNewLine)
-            AppendLineEnding(line);
-        m_FileStream.Write(line);
-        MaybeFlush(includeNewLine);
-        return line;
-    }
-
-    if (m_Config.LogUTCDateTime)
-        std::format_to(std::back_inserter(line), "[{}]", Time::ToISO8601String(now));
-
-    if (m_Config.LogLevelStr)
-        std::format_to(std::back_inserter(line), "[{}]", Level_ToString(level));
-
-    if (m_Config.LogProcessId)
-        std::format_to(std::back_inserter(line), "[P:{}]", GetCurrentOSProcessId());
-
-    if (m_Config.LogThreadId)
-        std::format_to(std::back_inserter(line), "[T:{}]", GetCurrentOSThreadId());
-
-    if (m_Config.LogAppMem_WorkingSet || m_Config.LogAppMem_PeakWorkingSet)
-    {
-        const auto memoryUsage = GetMemoryUsage();
-        if (m_Config.LogAppMem_WorkingSet)
-            std::format_to(std::back_inserter(line), "[WS:{}]", memoryUsage.WorkingSetBytes);
-
-        if (m_Config.LogAppMem_PeakWorkingSet)
-            std::format_to(std::back_inserter(line), "[PWS:{}]", memoryUsage.PeakWorkingSetBytes);
-    }
-
-    if (m_Config.LogMethodName)
-        std::format_to(std::back_inserter(line), "[{}]", loc.function_name());
-
-    if (m_Config.LogSourceLine)
-    {
-        std::filesystem::path fullPath(loc.file_name());
-        std::format_to(std::back_inserter(line), "[{}:{}]", fullPath.filename().string(), loc.line());
-    }
-
-    line += ": ";
-    line.append(message);
-    if (includeNewLine)
-        AppendLineEnding(line);
-
     m_FileStream.Write(line);
-
-    MaybeFlush(includeNewLine);
-    return line;
-}
-
-//---------------------------------------------------------------------------
-void TASWFileLog::WriteMemoryUsageInfo()
-{
-    WriteLogEntry(Level::Info, std::format("App Memory: {}", GetMemoryUsageString()), false, false, true, std::source_location::current());
-}
-
-//---------------------------------------------------------------------------
-void TASWFileLog::WriteOSInfo()
-{
-    WriteLogEntry(Level::Info, std::format("OS: {}", GetOSInfoString()), false, false, true, std::source_location::current());
-}
-
-//---------------------------------------------------------------------------
-void TASWFileLog::WriteSystemMemoryInfo()
-{
-    WriteLogEntry(Level::Info,
-        std::format("System memory: {}", GetSystemMemoryUsageString()), false, false, true, std::source_location::current());
-}
-
-//---------------------------------------------------------------------------
-void TASWFileLog::WriteTimeInfo()
-{
-    WriteLogEntry(Level::Info, std::format("Time: {}", GetTimeInfoString()), false, false, true, std::source_location::current());
+    MaybeFlush(endsLine);
 }
 
 //---------------------------------------------------------------------------

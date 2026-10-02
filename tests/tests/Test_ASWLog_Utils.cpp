@@ -72,10 +72,15 @@ private:
         int hasDaylightSavingTime = 0;
         if (value != nullptr && _get_daylight(&hasDaylightSavingTime) == 0 && hasDaylightSavingTime != 0)
         {
+            // __dstbias() is deprecated in favor of _get_dstbias(), which can't set it.
 #if defined(_MSC_VER)
-#pragma warning(suppress : 4996) // __dstbias() is deprecated in favor of _get_dstbias(), which can't set it
+#pragma warning(push)
+#pragma warning(disable : 4996)
 #endif
             *__dstbias() = -3600;
+#if defined(_MSC_VER)
+#pragma warning(pop)
+#endif
         }
 #else
         if (value != nullptr)

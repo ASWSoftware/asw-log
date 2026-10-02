@@ -23,30 +23,32 @@ endif()
 
 include("${ASWUNITTESTS_ROOT}/src/ASWUnitTests_Sources.cmake")
 
+# The ASWLog::ASWLog library target, from the repository root's CMakeLists.txt. It already exists when the root
+# project builds the tests (ASWLOG_BUILD_TESTS).
+if(NOT TARGET ASWLog::ASWLog)
+    set(ASWLOG_WARNINGS ON)
+    add_subdirectory("${ASWLOG_ROOT}" aswlog)
+endif()
+
 add_executable(ASWLogTests
     ${ASWUNITTESTS_SOURCES}
-    "${ASWLOG_ROOT}/ASWLog/ASWLog_Base.cpp"
-    "${ASWLOG_ROOT}/ASWLog/ASWLog_Config.cpp"
-    "${ASWLOG_ROOT}/ASWLog/ASWLog_ConsoleLog.cpp"
-    "${ASWLOG_ROOT}/ASWLog/ASWLog_FileLog.cpp"
-    "${ASWLOG_ROOT}/ASWLog/ASWLog_Interface.cpp"
-    "${ASWLOG_ROOT}/ASWLog/ASWLog_MultiLog.cpp"
-    "${ASWLOG_ROOT}/ASWLog/ASWLog_Types.cpp"
-    "${ASWLOG_ROOT}/ASWLog/ASWLog_Utils.cpp"
     "${ASWLOG_TESTS_DIR}/Test_ASWLog_Base.cpp"
     "${ASWLOG_TESTS_DIR}/Test_ASWLog_Config.cpp"
     "${ASWLOG_TESTS_DIR}/Test_ASWLog_ConsoleLog.cpp"
     "${ASWLOG_TESTS_DIR}/Test_ASWLog_FileLog.cpp"
+    "${ASWLOG_TESTS_DIR}/Test_ASWLog_Formatter.cpp"
     "${ASWLOG_TESTS_DIR}/Test_ASWLog_MultiLog.cpp"
+    "${ASWLOG_TESTS_DIR}/Test_ASWLog_TextLogBase.cpp"
     "${ASWLOG_TESTS_DIR}/Test_ASWLog_Types.cpp"
     "${ASWLOG_TESTS_DIR}/Test_ASWLog_Utils.cpp"
 )
 
 target_include_directories(ASWLogTests PRIVATE
-    "${ASWLOG_ROOT}/ASWLog"
     "${ASWUNITTESTS_SOURCE_DIR}"
     "${ASWLOG_TESTS_DIR}"
 )
+
+target_link_libraries(ASWLogTests PRIVATE ASWLog::ASWLog)
 
 # ASWUnitTests' --test-timeout-seconds uses std::thread/std::future, which needs an explicit threading library on
 # Linux and some MinGW-w64 distributions.
@@ -57,11 +59,6 @@ if(MSVC)
     target_compile_options(ASWLogTests PRIVATE /W4 /Zc:__cplusplus)
 else()
     target_compile_options(ASWLogTests PRIVATE -Wall -Wextra -Wpedantic)
-endif()
-
-if(WIN32)
-    # ASWLog_Utils.cpp uses the process memory APIs from psapi.
-    target_link_libraries(ASWLogTests PRIVATE psapi)
 endif()
 
 if(MINGW)

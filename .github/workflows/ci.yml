@@ -21,8 +21,9 @@ jobs:
     name: ${{ matrix.name }}
     runs-on: ${{ matrix.os }}
     # Safety net: a hung/looping test should fail the job quickly instead of burning the runner's full time
-    # allotment. --test-timeout-seconds below covers a single hung test; this covers everything else.
-    timeout-minutes: 3
+    # allotment. --test-timeout-seconds below covers a single hung test; this covers everything else. A sanitizer
+    # build compiles and runs several times slower, so it gets longer.
+    timeout-minutes: ${{ matrix.sanitize && 10 || 3 }}
     strategy:
       fail-fast: false
       matrix:
@@ -32,11 +33,13 @@ jobs:
             generator: ""
             build_args: "--config Release"
             exe_path: build/bin/Release/ASWLogTests.exe
+            sanitize: ""
           - name: Windows (MinGW)
             os: windows-latest
             generator: "MinGW Makefiles"
             build_args: ""
             exe_path: build/bin/ASWLogTests.exe
+            sanitize: ""
           - name: Linux (GCC)
             os: ubuntu-latest
             generator: ""
@@ -44,6 +47,7 @@ jobs:
             exe_path: build/bin/ASWLogTests
             cc: gcc
             cxx: g++
+            sanitize: ""
           - name: Linux (Clang)
             os: ubuntu-latest
             generator: ""
@@ -51,6 +55,25 @@ jobs:
             exe_path: build/bin/ASWLogTests
             cc: clang
             cxx: clang++
+            sanitize: ""
+          # The sanitizer jobs build with ASWLOG_SANITIZE (see the root CMakeLists.txt). A sanitizer report fails the
+          # run with a non-zero exit code, even when every test passed.
+          - name: Linux (Clang, ThreadSanitizer)
+            os: ubuntu-latest
+            generator: ""
+            build_args: ""
+            exe_path: build/bin/ASWLogTests
+            cc: clang
+            cxx: clang++
+            sanitize: thread
+          - name: Linux (Clang, AddressSanitizer + UBSan)
+            os: ubuntu-latest
+            generator: ""
+            build_args: ""
+            exe_path: build/bin/ASWLogTests
+            cc: clang
+            cxx: clang++
+            sanitize: address
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
@@ -65,6 +88,12 @@ jobs:
         with:
           platform: x64
 
+      - name: Limit address space randomization for the sanitizers
+        # Ubuntu runners use more mmap randomization bits than some sanitizer runtimes support, which makes them
+        # fail at startup (e.g. "ThreadSanitizer: unexpected memory mapping"). 28 bits is the usual workaround.
+        if: matrix.sanitize
+        run: sudo sysctl vm.mmap_rnd_bits=28
+
       - name: Configure
         shell: bash
         run: |
@@ -73,9 +102,10 @@ jobs:
             export CXX="${{ matrix.cxx }}"
           fi
           if [ -n "${{ matrix.generator }}" ]; then
-            cmake -S tests/cmake -B build -G "${{ matrix.generator }}" -DCMAKE_BUILD_TYPE=Release
+            cmake -S tests/cmake -B build -G "${{ matrix.generator }}" -DCMAKE_BUILD_TYPE=Release \
+              -DASWLOG_SANITIZE="${{ matrix.sanitize }}"
           else
-            cmake -S tests/cmake -B build -DCMAKE_BUILD_TYPE=Release
+            cmake -S tests/cmake -B build -DCMAKE_BUILD_TYPE=Release -DASWLOG_SANITIZE="${{ matrix.sanitize }}"
           fi
 
       - name: Build
@@ -96,10 +126,15 @@ jobs:
         id: tests
         shell: bash
         # --test-timeout-seconds and --catch-crashes turn a hung or natively crashing test into a clean, reported
-        # failure instead of relying on the job's timeout-minutes or an opaque crashed job.
+        # failure instead of relying on the job's timeout-minutes or an opaque crashed job. A sanitizer job leaves out
+        # --catch-crashes, whose signal handlers would replace the sanitizer's own crash report (with its call stack),
+        # and allows a slower test.
+        env:
+          TSAN_OPTIONS: second_deadlock_stack=1
+          UBSAN_OPTIONS: print_stacktrace=1
         run: >-
           ./${{ matrix.exe_path }} --project-name "ASWLog-CI" --report-junit junit-results.xml
-          --test-timeout-seconds 60 --catch-crashes
+          ${{ matrix.sanitize && '--test-timeout-seconds 300' || '--test-timeout-seconds 60 --catch-crashes' }}
 
       - name: Test results summary
         # Runs whenever the tests ran, pass or fail, so failures show up in the report too. In this mode the reporter

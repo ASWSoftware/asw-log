@@ -27,19 +27,17 @@ limitations under the License.
 #ifndef ASWLog_FileLogH
 #define ASWLog_FileLogH
 //---------------------------------------------------------------------------
-#include <atomic>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <cstdio>
 #include <filesystem>
-#include <mutex>
 #include <ostream>
 #include <string_view>
 #include <streambuf>
 #include <string>
 //---------------------------------------------------------------------------
-#include "ASWLog_Base.h"
+#include "ASWLog_TextLogBase.h"
 //---------------------------------------------------------------------------
 
 namespace ASWLog
@@ -105,39 +103,33 @@ public:
 //
 // Used for logging to a file.
 /////////////////////////////////////////////////////////////////////////////
-class TASWFileLog : public TASWLogBase
+class TASWFileLog : public TASWTextLogBase
 {
 private:
-    typedef TASWLogBase inherited;
+    typedef TASWTextLogBase inherited;
 
 private:
+    // m_Mutex (see TASWTextLogBase) protects all of these
     TASWFileStream m_FileStream;
-    std::mutex m_FileMutex; // Protects file write bounds across multiple threads
     std::string m_LastLogDateStr; // Stores YYYY-MM-DD state to detect structural calendar shifts
-    std::atomic<bool> m_IsOpen{ false };
     std::chrono::steady_clock::time_point m_LastFlushTime{};
     std::chrono::system_clock::time_point m_LastOpenFailure{}; // NowUTC() when opening the file last failed
     std::chrono::system_clock::time_point m_LastRotationFailure{}; // NowUTC() when a rotation last failed
 
 private:
-    void AppendLineEnding(std::string& line);
-    bool CloseUnlocked();
-    bool EnsureOpenForWriteUnlocked();
-    void Finalize() noexcept;
     bool FlushUnlocked();
-    void LogEntry(Level level, std::string_view message, bool force, bool raw, bool includeNewLine, std::source_location loc) noexcept;
     void MaybeFlush(bool isNewLine);
-    bool OpenUnlocked();
     void RotateDailyLogFromEarlierDayUnlocked();
     bool RotateLogFilesUnlocked(std::string_view reasonTag, std::string_view timeLabel);
-    void WriteApplicationInfo();
-    void WriteDriveInfo();
-    void WriteInitializationInfo();
-    std::string WriteLogEntry(Level level, std::string_view message, bool force, bool raw, bool includeNewLine, std::source_location loc);
-    void WriteMemoryUsageInfo();
-    void WriteOSInfo();
-    void WriteSystemMemoryInfo();
-    void WriteTimeInfo();
+
+protected: // TASWTextLogBase hooks
+    void AfterEntryUnlocked() override;
+    bool CloseUnlocked() override;
+    bool EnsureReadyUnlocked() override;
+    bool InitializeUnlocked() override;
+    bool OpenUnlocked() override;
+    bool PrepareWriteUnlocked(std::chrono::system_clock::time_point now) override;
+    void WriteLineUnlocked(Level level, std::string_view line, bool endsLine) override;
 
 protected:
     std::string_view GetLoggerClassName() const noexcept final
@@ -162,22 +154,11 @@ public:
     TASWFileLog() = default;
     ~TASWFileLog();
 
-    bool Initialize(const TASWLogConfig& config) override;
-
-    bool Open() override;
-    bool Close() override;
-    bool IsOpen() const noexcept override;
     bool Flush();
 
     // Renames the log file to "<stem>.<reasonTag>.<YYYY-MM-DD_HHMMSS_mmm>.bak" (UTC), adding "_1", "_2", ... to the
     // time if that name is taken, so an existing backup is never replaced. Then reopens the log if it was open.
     bool RotateLogFiles(std::string_view reasonTag = "manual");
-
-    void Log(Level level, std::string_view message, std::source_location loc = std::source_location::current()) override;
-    void LogRaw(Level level, std::string_view message, std::source_location loc = std::source_location::current()) override;
-
-    void LogForce(Level level, std::string_view message, std::source_location loc = std::source_location::current()) override;
-    void LogForceRaw(Level level, std::string_view message, std::source_location loc = std::source_location::current()) override;
 };
 
 } // namespace ASWLog

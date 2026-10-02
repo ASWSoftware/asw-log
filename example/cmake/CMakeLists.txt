@@ -8,22 +8,22 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 set(ASWLOG_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../..")
 
+# The ASWLog::ASWLog library target, from the repository root's CMakeLists.txt. It already exists when the root
+# project builds the example (ASWLOG_BUILD_EXAMPLE).
+if(NOT TARGET ASWLog::ASWLog)
+    set(ASWLOG_WARNINGS ON)
+    add_subdirectory("${ASWLOG_ROOT}" aswlog)
+endif()
+
 add_executable(ASWLogExample
-    "${ASWLOG_ROOT}/ASWLog/ASWLog_Base.cpp"
-    "${ASWLOG_ROOT}/ASWLog/ASWLog_Config.cpp"
-    "${ASWLOG_ROOT}/ASWLog/ASWLog_ConsoleLog.cpp"
-    "${ASWLOG_ROOT}/ASWLog/ASWLog_FileLog.cpp"
-    "${ASWLOG_ROOT}/ASWLog/ASWLog_Interface.cpp"
-    "${ASWLOG_ROOT}/ASWLog/ASWLog_MultiLog.cpp"
-    "${ASWLOG_ROOT}/ASWLog/ASWLog_Types.cpp"
-    "${ASWLOG_ROOT}/ASWLog/ASWLog_Utils.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/main.cpp"
 )
 
 target_include_directories(ASWLogExample PRIVATE
-    "${ASWLOG_ROOT}/ASWLog"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src"
 )
+
+target_link_libraries(ASWLogExample PRIVATE ASWLog::ASWLog)
 
 set_target_properties(ASWLogExample PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY "${ASWLOG_ROOT}/example/build/bin"
@@ -40,8 +40,4 @@ if(MSVC)
     target_compile_options(ASWLogExample PRIVATE /W4)
 else()
     target_compile_options(ASWLogExample PRIVATE -Wall -Wextra -Wpedantic)
-endif()
-
-if(WIN32)
-    target_link_libraries(ASWLogExample PRIVATE psapi)
 endif()

@@ -29,6 +29,10 @@ limitations under the License.
 //---------------------------------------------------------------------------
 #include <atomic>
 #include <chrono>
+#include <format>
+#include <source_location>
+#include <string>
+#include <string_view>
 //---------------------------------------------------------------------------
 #include "ASWLog_Interface.h"
 //---------------------------------------------------------------------------
@@ -65,7 +69,7 @@ protected:
 public:
     std::string_view GetVersionStr() const noexcept final
     {
-        return "0.43.0"; // Semantic Versioning
+        return "0.45.0"; // Semantic Versioning
     }
 
     std::string GetFullVersionStr() const final
@@ -94,24 +98,6 @@ public:
     void SetMinimumLevel(Level level) noexcept
     {
         m_MinimumLevel.store(level, std::memory_order_relaxed);
-    }
-
-protected:
-    // Invoked by sinks after their internal mutex has been released, so a callback that logs again does not
-    // deadlock. The config's OnLogEntry is called if set and 'level' meets 'CallbackMinimumLevel'.
-    void DispatchLogCallback(Level level, std::string_view formattedLine) const noexcept
-    {
-        const auto& callback = m_Config.OnLogEntry;
-        if (callback == nullptr || level < m_Config.CallbackMinimumLevel)
-            return;
-
-        try
-        {
-            callback(level, formattedLine);
-        }
-        catch (...)
-        {
-        }
     }
 
 public:

@@ -29,6 +29,8 @@ limitations under the License.
 //---------------------------------------------------------------------------
 #include <cstddef>
 #include <mutex>
+#include <source_location>
+#include <string_view>
 #include <vector>
 //---------------------------------------------------------------------------
 #include "ASWLog_Base.h"
