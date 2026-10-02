@@ -189,8 +189,10 @@ TTest_ASWLog_TextLogBase::TTest_ASWLog_TextLogBase()
     RegisterTest(&TTest_ASWLog_TextLogBase::Test_Finalize_WritesShutdownLineFromDestructor, "Finalize_WritesShutdownLineFromDestructor");
     RegisterTest(&TTest_ASWLog_TextLogBase::Test_Formatter_FormatsEveryFileLine, "Formatter_FormatsEveryFileLine");
     RegisterTest(&TTest_ASWLog_TextLogBase::Test_Initialize_WritesStartupLinesThenCallsAfterEntry, "Initialize_WritesStartupLinesThenCallsAfterEntry");
+    RegisterTest(&TTest_ASWLog_TextLogBase::Test_Log_AtLevelOffIsNeverWritten, "Log_AtLevelOffIsNeverWritten");
     RegisterTest(&TTest_ASWLog_TextLogBase::Test_Log_DroppedWhenNotReadyOrNotPrepared, "Log_DroppedWhenNotReadyOrNotPrepared");
     RegisterTest(&TTest_ASWLog_TextLogBase::Test_Log_FormatsFiltersAndCallsAfterEntry, "Log_FormatsFiltersAndCallsAfterEntry");
+    RegisterTest(&TTest_ASWLog_TextLogBase::Test_Log_MinimumLevelOffAllowsOnlyForcedEntries, "Log_MinimumLevelOffAllowsOnlyForcedEntries");
     RegisterTest(&TTest_ASWLog_TextLogBase::Test_Log_ThrowingWriteDoesNotEscape, "Log_ThrowingWriteDoesNotEscape");
     RegisterTest(&TTest_ASWLog_TextLogBase::Test_LogRaw_WritesMessageAsIs, "LogRaw_WritesMessageAsIs");
 }
@@ -313,6 +315,37 @@ void TTest_ASWLog_TextLogBase::Test_Initialize_WritesStartupLinesThenCallsAfterE
     CheckEquals(1, output.AfterEntryCount, __func__, __LINE__, "Initialize should call AfterEntryUnlocked once, after the startup lines");
 }
 //---------------------------------------------------------------------------
+void TTest_ASWLog_TextLogBase::Test_Log_AtLevelOffIsNeverWritten()
+{
+    // Arrange
+    TMemoryOutput output;
+    int callbackCount = 0;
+    auto config = MakeQuietConfig();
+    config.InitialMinimumLevel = ASWLog::Level::Trace;
+    config.CallbackMinimumLevel = ASWLog::Level::Trace;
+    config.OnLogEntry = [&callbackCount](ASWLog::Level, std::string_view) {
+            ++callbackCount;
+        };
+
+    TMemoryTextLog log(output);
+    CheckTrue(log.Initialize(config), __func__, __LINE__, "Initialize should succeed");
+    const int afterEntryCountAtStart = output.AfterEntryCount;
+
+    // Act
+    log.Log(ASWLog::Level::Off, "off");
+    log.LogRaw(ASWLog::Level::Off, "off_raw\n");
+    log.LogForce(ASWLog::Level::Off, "off_forced");
+    log.LogForceRaw(ASWLog::Level::Off, "off_forced_raw\n");
+    log.LogInfoFmt("{}", "off_fmt_check"); // A normal entry after them, to show the logger still works
+
+    // Assert
+    CheckTrue(output.Lines == std::vector<std::string>{ "[INFO]: off_fmt_check\n" }, __func__, __LINE__,
+        "A message logged at Off should never be written, even when forced");
+    CheckEquals(1, callbackCount, __func__, __LINE__, "OnLogEntry should only fire for the written entry");
+    CheckEquals(afterEntryCountAtStart + 1, output.AfterEntryCount, __func__, __LINE__,
+        "An entry at Off should be dropped before reaching the logger's output");
+}
+//---------------------------------------------------------------------------
 void TTest_ASWLog_TextLogBase::Test_Log_DroppedWhenNotReadyOrNotPrepared()
 {
     // Arrange
@@ -376,6 +409,41 @@ void TTest_ASWLog_TextLogBase::Test_Log_FormatsFiltersAndCallsAfterEntry()
     CheckTrue(callbackLines == expected, __func__, __LINE__, "OnLogEntry should get each written line");
     CheckTrue(output.EndsLine == std::vector<bool>{ true, true }, __func__, __LINE__, "A formatted entry should end its line");
     CheckEquals(afterEntryCountAtStart + 2, output.AfterEntryCount, __func__, __LINE__, "AfterEntryUnlocked should be called once per entry that reached the logger");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_TextLogBase::Test_Log_MinimumLevelOffAllowsOnlyForcedEntries()
+{
+    // Arrange
+    TMemoryOutput output;
+    int callbackCount = 0;
+    auto config = MakeQuietConfig();
+    config.InitialMinimumLevel = ASWLog::Level::Off;
+    config.BannerMessage_Init = "startup banner";
+    config.Init_LogTimeInfo = true;
+    config.CallbackMinimumLevel = ASWLog::Level::Off;
+    config.OnLogEntry = [&callbackCount](ASWLog::Level, std::string_view) {
+            ++callbackCount;
+        };
+
+    TMemoryTextLog log(output);
+
+    // Act
+    const bool initialized = log.Initialize(config);
+    const auto linesAfterInitialize = output.Lines.size();
+    log.LogCritical("critical");
+    log.LogRaw(ASWLog::Level::Critical, "critical_raw\n");
+    log.LogCriticalFmt("{}", "critical_fmt");
+    log.LogForce(ASWLog::Level::Info, "forced");
+    log.LogForceRaw(ASWLog::Level::Trace, "forced_raw\n");
+
+    // Assert
+    CheckTrue(initialized, __func__, __LINE__, "Initialize should succeed");
+    CheckTrue(log.GetMinimumLevel() == ASWLog::Level::Off, __func__, __LINE__, "InitialMinimumLevel should seed the minimum level");
+    CheckEquals(static_cast<std::size_t>(0), linesAfterInitialize, __func__, __LINE__,
+        "With the minimum level at Off, Initialize should write no startup lines");
+    CheckTrue(output.Lines == std::vector<std::string>{ "[INFO]: forced\n", "forced_raw\n" }, __func__, __LINE__,
+        "With the minimum level at Off, only forced entries should be written");
+    CheckEquals(0, callbackCount, __func__, __LINE__, "With CallbackMinimumLevel at Off, OnLogEntry should never fire");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_TextLogBase::Test_Log_ThrowingWriteDoesNotEscape()

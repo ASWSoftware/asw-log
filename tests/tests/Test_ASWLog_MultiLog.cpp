@@ -51,6 +51,59 @@ namespace
 const auto GroupBaseTempDir = std::filesystem::temp_directory_path() / "aswlog_multilog_tests";
 const auto TestTempDir = GroupBaseTempDir / "test";
 
+// A sink that records which logging method received which message, e.g. "LogForce:text"
+class TRecordingLogger final : public ASWLog::TASWLogBase
+{
+protected:
+    std::string_view GetLoggerClassName() const noexcept override
+    {
+        return "TRecordingLogger";
+    }
+
+public:
+    std::vector<std::string> Calls;
+
+    bool Initialize(const ASWLog::TASWLogConfig& /*config*/) override
+    {
+        return true;
+    }
+
+    bool Open() override
+    {
+        return true;
+    }
+
+    bool Close() override
+    {
+        return true;
+    }
+
+    bool IsOpen() const noexcept override
+    {
+        return true;
+    }
+
+    void Log(ASWLog::Level /*level*/, std::string_view message, std::source_location /*loc*/) override
+    {
+        Calls.push_back(std::string("Log:").append(message));
+    }
+
+    void LogRaw(ASWLog::Level /*level*/, std::string_view message, std::source_location /*loc*/) override
+    {
+        Calls.push_back(std::string("LogRaw:").append(message));
+    }
+
+    void LogForce(ASWLog::Level /*level*/, std::string_view message, std::source_location /*loc*/) override
+    {
+        Calls.push_back(std::string("LogForce:").append(message));
+    }
+
+    void LogForceRaw(ASWLog::Level /*level*/, std::string_view message, std::source_location /*loc*/) override
+    {
+        Calls.push_back(std::string("LogForceRaw:").append(message));
+    }
+};
+
 // A sink whose logging methods all throw, standing in for a faulty custom IASWLog
 class TThrowingLogger final : public ASWLog::TASWLogBase
 {
@@ -156,6 +209,7 @@ TTest_ASWLog_MultiLog::TTest_ASWLog_MultiLog()
     RegisterTest(&TTest_ASWLog_MultiLog::Test_GetLoggers_ReturnsSnapshotOfRegisteredSinks, "GetLoggers_ReturnsSnapshotOfRegisteredSinks");
     RegisterTest(&TTest_ASWLog_MultiLog::Test_Initialize_ConcurrentCallsSucceedOnce, "Initialize_ConcurrentCallsSucceedOnce");
     RegisterTest(&TTest_ASWLog_MultiLog::Test_IsOpen_RequiresAllSinksOpen, "IsOpen_RequiresAllSinksOpen");
+    RegisterTest(&TTest_ASWLog_MultiLog::Test_Log_AtLevelOffIsNotFannedOut, "Log_AtLevelOffIsNotFannedOut");
     RegisterTest(&TTest_ASWLog_MultiLog::Test_Log_FansOutToAllRegisteredSinks, "Log_FansOutToAllRegisteredSinks");
     RegisterTest(&TTest_ASWLog_MultiLog::Test_Log_ThrowingSinkDoesNotStopOtherSinks, "Log_ThrowingSinkDoesNotStopOtherSinks");
     RegisterTest(&TTest_ASWLog_MultiLog::Test_LogForce_BypassesCompositeGate, "LogForce_BypassesCompositeGate");
@@ -406,6 +460,33 @@ void TTest_ASWLog_MultiLog::Test_IsOpen_RequiresAllSinksOpen()
     CheckFalse(multiLog.IsOpen(), __func__, __LINE__, "Composite should report closed if any registered sink is closed");
 
     sinkA.Close();
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_MultiLog::Test_Log_AtLevelOffIsNotFannedOut()
+{
+    // Arrange
+    TRecordingLogger sink;
+    ASWLog::TASWMultiLog multiLog;
+    multiLog.AddLogger(sink);
+    multiLog.SetMinimumLevel(ASWLog::Level::Trace);
+
+    // Act
+    multiLog.Log(ASWLog::Level::Off, "off");
+    multiLog.LogRaw(ASWLog::Level::Off, "off_raw");
+    multiLog.LogForce(ASWLog::Level::Off, "off_forced");
+    multiLog.LogForceRaw(ASWLog::Level::Off, "off_forced_raw");
+    const auto callsAtOffLevel = sink.Calls;
+
+    multiLog.SetMinimumLevel(ASWLog::Level::Off);
+    multiLog.LogCritical("critical");
+    multiLog.LogRaw(ASWLog::Level::Critical, "critical_raw");
+    multiLog.LogForce(ASWLog::Level::Info, "forced");
+    multiLog.LogForceRaw(ASWLog::Level::Info, "forced_raw");
+
+    // Assert
+    CheckTrue(callsAtOffLevel.empty(), __func__, __LINE__, "A message at Off should not reach any sink, even when forced");
+    CheckTrue(sink.Calls == std::vector<std::string>{ "LogForce:forced", "LogForceRaw:forced_raw" }, __func__, __LINE__,
+        "With the composite's minimum level at Off, only forced entries should be fanned out");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_MultiLog::Test_Log_FansOutToAllRegisteredSinks()

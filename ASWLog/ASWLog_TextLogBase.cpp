@@ -169,6 +169,10 @@ void TASWTextLogBase::Log(Level level, std::string_view message, std::source_loc
 void TASWTextLogBase::LogEntry(
     Level level, std::string_view message, bool force, bool raw, bool includeNewLine, std::source_location loc) noexcept
 {
+    // Off isn't a severity, so a message logged at Off is never written, even when forced
+    if (level == Level::Off)
+        return;
+
     try
     {
         std::string writtenLine;

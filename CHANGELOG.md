@@ -10,6 +10,17 @@ see [0.26.1](#0261---2026-09-17) for the initial versioned baseline.
 
 ## [Unreleased]
 
+### Added
+
+- `Level::Off`, to turn a logger off through its level:
+  `SetMinimumLevel(Level::Off)` (or `InitialMinimumLevel`) stops all
+  entries except `LogForce`/`LogForceRaw`, which still ignore the minimum
+  level, and `CallbackMinimumLevel = Level::Off` turns off `OnLogEntry`. A
+  message logged at `Off` is never written, even when forced.
+  `Level_ToString` gives "OFF", and `Level_FromString` accepts "OFF" and
+  "NONE". `LevelCount` stays 6 (the severity levels, not counting `Off`).
+  Code that switches over every `Level` value must handle `Off`.
+
 ## [0.45.0] - 2026-10-01
 
 ### Added

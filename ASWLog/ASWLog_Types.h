@@ -148,9 +148,15 @@ enum class Level : std::uint8_t
     // The application is unable to continue safely and will usually abort immediately.
     // Examples include out-of-memory states, hardware faults, or failed sanity checks.
     Critical = 5,
+
+    // Not a severity. As a minimum level (SetMinimumLevel(), InitialMinimumLevel, CallbackMinimumLevel), turns off
+    // everything except LogForce()/LogForceRaw(), which ignore the minimum level. A message logged at Off is never
+    // written, even when forced.
+    Off = 6,
 };
 
-// Number of Level enumerators (Trace..Critical). Update this when a Level is added or removed.
+// Number of severity levels (Trace..Critical), e.g. for a table indexed by level. Doesn't count Off. Update this when
+// a severity level is added or removed.
 constexpr std::size_t LevelCount = 6;
 
 [[nodiscard]] std::optional<Level> Level_FromString(std::string_view str) noexcept;
@@ -176,6 +182,9 @@ constexpr std::size_t LevelCount = 6;
 
         case Level::Critical:
             return "CRITICAL";
+
+        case Level::Off:
+            return "OFF";
     }
 
     return "UNKNOWN";

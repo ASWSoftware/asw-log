@@ -156,7 +156,7 @@ bool TASWMultiLog::IsOpen() const noexcept
 //---------------------------------------------------------------------------
 void TASWMultiLog::Log(Level level, std::string_view message, std::source_location loc)
 {
-    if (level < GetMinimumLevel())
+    if (level == Level::Off || level < GetMinimumLevel())
         return;
 
     FanOut([&](IASWLog& sink) {
@@ -167,6 +167,9 @@ void TASWMultiLog::Log(Level level, std::string_view message, std::source_locati
 //---------------------------------------------------------------------------
 void TASWMultiLog::LogForce(Level level, std::string_view message, std::source_location loc)
 {
+    if (level == Level::Off) // Not a severity: never written, even when forced
+        return;
+
     FanOut([&](IASWLog& sink) {
             sink.LogForce(level, message, loc);
         });
@@ -175,6 +178,9 @@ void TASWMultiLog::LogForce(Level level, std::string_view message, std::source_l
 //---------------------------------------------------------------------------
 void TASWMultiLog::LogForceRaw(Level level, std::string_view message, std::source_location loc)
 {
+    if (level == Level::Off) // Not a severity: never written, even when forced
+        return;
+
     FanOut([&](IASWLog& sink) {
             sink.LogForceRaw(level, message, loc);
         });
@@ -183,7 +189,7 @@ void TASWMultiLog::LogForceRaw(Level level, std::string_view message, std::sourc
 //---------------------------------------------------------------------------
 void TASWMultiLog::LogRaw(Level level, std::string_view message, std::source_location loc)
 {
-    if (level < GetMinimumLevel())
+    if (level == Level::Off || level < GetMinimumLevel())
         return;
 
     FanOut([&](IASWLog& sink) {

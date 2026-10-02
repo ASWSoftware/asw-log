@@ -44,6 +44,7 @@ private: // Test methods
     void Test_GetLoggers_ReturnsSnapshotOfRegisteredSinks();
     void Test_Initialize_ConcurrentCallsSucceedOnce();
     void Test_IsOpen_RequiresAllSinksOpen();
+    void Test_Log_AtLevelOffIsNotFannedOut();
     void Test_Log_FansOutToAllRegisteredSinks();
     void Test_Log_ThrowingSinkDoesNotStopOtherSinks();
     void Test_LogForce_BypassesCompositeGate();

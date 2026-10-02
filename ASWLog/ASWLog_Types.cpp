@@ -107,6 +107,9 @@ std::optional<Level> Level_FromString(std::string_view str) noexcept
     if (iequals(str, "CRITICAL") || iequals(str, "FATAL"))
         return Level::Critical;
 
+    if (iequals(str, "OFF") || iequals(str, "NONE"))
+        return Level::Off;
+
     return std::nullopt; // Return empty optional if the string is not recognized
 }
 

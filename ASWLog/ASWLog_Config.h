@@ -114,7 +114,7 @@ struct TASWLogConfig
     // --- Log Entry Callback Options ---
     using LogCallback = std::function<void (Level level, std::string_view formattedLine)>;
     LogCallback OnLogEntry; // Optional hook invoked after a successful write (e.g. alerting/crash-reporting). Invoked outside the sink's internal lock; exceptions are swallowed.
-    Level CallbackMinimumLevel = Level::Error; // Independent threshold gating OnLogEntry; unrelated to InitialMinimumLevel or the Force* APIs.
+    Level CallbackMinimumLevel = Level::Error; // Independent threshold gating OnLogEntry (Off = never); unrelated to InitialMinimumLevel or the Force* APIs.
 
     [[nodiscard]] std::filesystem::path ResolveLogFileDir() const
     {

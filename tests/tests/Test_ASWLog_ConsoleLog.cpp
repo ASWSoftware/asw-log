@@ -193,6 +193,7 @@ TTest_ASWLog_ConsoleLog::TTest_ASWLog_ConsoleLog()
     RegisterTest(&TTest_ASWLog_ConsoleLog::Test_ColorModeNever_SuppressesAnsiCodes, "ColorModeNever_SuppressesAnsiCodes");
     RegisterTest(&TTest_ASWLog_ConsoleLog::Test_GetColorMode_ReflectsSetColorMode, "GetColorMode_ReflectsSetColorMode");
     RegisterTest(&TTest_ASWLog_ConsoleLog::Test_GetInstance_ReturnsSameInstance, "GetInstance_ReturnsSameInstance");
+    RegisterTest(&TTest_ASWLog_ConsoleLog::Test_GetLevelColor_OffHasNoColor, "GetLevelColor_OffHasNoColor");
     RegisterTest(&TTest_ASWLog_ConsoleLog::Test_Initialize_SuppressesInfoBannersBelowMinimumLevel, "Initialize_SuppressesInfoBannersBelowMinimumLevel");
     RegisterTest(&TTest_ASWLog_ConsoleLog::Test_Initialize_WritesDriveInfoWhenEnabled, "Initialize_WritesDriveInfoWhenEnabled");
     RegisterTest(&TTest_ASWLog_ConsoleLog::Test_IsColorSupported_ReflectsDetectedStreams, "IsColorSupported_ReflectsDetectedStreams");
@@ -372,6 +373,23 @@ void TTest_ASWLog_ConsoleLog::Test_GetInstance_ReturnsSameInstance()
 
     // Assert
     CheckTrue(&first == &second, __func__, __LINE__, "GetInstance should return the same logger on every call");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_ConsoleLog::Test_GetLevelColor_OffHasNoColor()
+{
+    // Arrange
+    ASWLog::TASWConsoleLog logger;
+    const std::string defaultCriticalColor = logger.GetLevelColor(ASWLog::Level::Critical);
+
+    // Act
+    logger.SetLevelColor(ASWLog::Level::Off, "\x1b[35m");
+    logger.ResetLevelColor(ASWLog::Level::Off);
+    const auto offColor = logger.GetLevelColor(ASWLog::Level::Off);
+
+    // Assert
+    CheckTrue(offColor.empty(), __func__, __LINE__, "Off isn't a severity, so it should have no color, and setting one should be ignored");
+    CheckEquals(defaultCriticalColor, logger.GetLevelColor(ASWLog::Level::Critical), __func__, __LINE__,
+        "Setting or resetting Off's color should not change another level's color");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_ConsoleLog::Test_Initialize_SuppressesInfoBannersBelowMinimumLevel()
