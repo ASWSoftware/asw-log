@@ -10,6 +10,8 @@ see [0.26.1](#0261---2026-09-17) for the initial versioned baseline.
 
 ## [Unreleased]
 
+## [0.45.0] - 2026-10-01
+
 ### Added
 
 - CMake library target `ASWLog::ASWLog`, defined by a new root
@@ -45,10 +47,10 @@ see [0.26.1](#0261---2026-09-17) for the initial versioned baseline.
 - `Initialize`, `Open`, `Close`, `IsOpen`, `Log`, `LogRaw`, `LogForce` and
   `LogForceRaw` are now `final` in `TASWFileLog` and `TASWConsoleLog`: a
   derived class that overrode them must use the `TASWTextLogBase` hooks or
-  a formatter (`TASWLogConfig::Formatter`) instead. `DispatchLogCallback` moved from `TASWLogBase` to
-  `TASWTextLogBase` (private). With `LogMethodName` or `LogSourceLine` on,
-  the startup lines now name `TASWTextLogBase` and its source file. The
-  output is otherwise unchanged.
+  a formatter (`TASWLogConfig::Formatter`) instead. `DispatchLogCallback`
+  moved from `TASWLogBase` to `TASWTextLogBase` (private). With
+  `LogMethodName` or `LogSourceLine` on, the startup lines now name
+  `TASWTextLogBase` and its source file. The output is otherwise unchanged.
 
 ## [0.43.0] - 2026-09-29
 
@@ -294,7 +296,8 @@ Everything already present in the logger at this point (`TASWFileLog`,
 and CMake example projects, unit tests, `Deploy.bat`, etc.) is treated as the
 baseline and is not itemized commit-by-commit.
 
-[Unreleased]: https://github.com/ASWSoftware/asw-log/compare/v0.43.0...HEAD
+[Unreleased]: https://github.com/ASWSoftware/asw-log/compare/v0.45.0...HEAD
+[0.45.0]: https://github.com/ASWSoftware/asw-log/compare/v0.43.0...v0.45.0
 [0.43.0]: https://github.com/ASWSoftware/asw-log/compare/v0.26.4...v0.43.0
 [0.26.4]: https://github.com/ASWSoftware/asw-log/compare/v0.26.3...v0.26.4
 [0.26.3]: https://github.com/ASWSoftware/asw-log/compare/v0.26.1...v0.26.3
