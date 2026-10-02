@@ -30,12 +30,10 @@ limitations under the License.
 #include <array>
 #include <atomic>
 #include <cstddef>
-#include <mutex>
-#include <source_location>
 #include <string>
 #include <string_view>
 //---------------------------------------------------------------------------
-#include "ASWLog_Base.h"
+#include "ASWLog_TextLogBase.h"
 //---------------------------------------------------------------------------
 
 namespace ASWLog
@@ -49,14 +47,13 @@ namespace ASWLog
 // Reuses TASWLogConfig for consistency with TASWFileLog, but only honors the
 // subset of fields that make sense for a console destination.
 /////////////////////////////////////////////////////////////////////////////
-class TASWConsoleLog : public TASWLogBase
+class TASWConsoleLog : public TASWTextLogBase
 {
 private:
-    typedef TASWLogBase inherited;
+    typedef TASWTextLogBase inherited;
 
 private:
-    mutable std::mutex m_ConsoleMutex; // Protects console write bounds, and m_LevelColors, across multiple threads
-    std::atomic<bool> m_IsOpen{ false };
+    // m_Mutex (see TASWTextLogBase) also protects m_LevelColors
     std::atomic<ColorMode> m_ColorMode{ ColorMode::Auto }; // Thread-safe via GetColorMode()/SetColorMode()
     std::atomic<bool> m_NoColorRequested{ false }; // The NO_COLOR environment variable was set when Initialize() ran
     std::atomic<bool> m_StdErrColorSupported{ false }; // Set by Initialize(), see DetectStreamColorSupport()
@@ -73,21 +70,14 @@ private:
     [[nodiscard]] static std::array<std::string, LevelCount> DefaultLevelColors();
 
 private:
-    void AppendLineEnding(std::string& line);
-    bool CloseUnlocked();
-    void Finalize() noexcept;
-    [[nodiscard]] std::string_view LevelColorUnlocked(Level level) const noexcept; // Caller must hold m_ConsoleMutex.
-    void LogEntry(Level level, std::string_view message, bool force, bool raw, bool includeNewLine, std::source_location loc) noexcept;
-    bool OpenUnlocked();
+    [[nodiscard]] std::string_view LevelColorUnlocked(Level level) const noexcept; // Caller must hold m_Mutex.
     [[nodiscard]] bool ShouldColorStream(bool isStdErr) const noexcept; // Applies GetColorMode() to stdout or stderr
-    void WriteApplicationInfo();
-    void WriteDriveInfo();
-    void WriteInitializationInfo();
-    std::string WriteLogEntry(Level level, std::string_view message, bool force, bool raw, bool includeNewLine, std::source_location loc);
-    void WriteMemoryUsageInfo();
-    void WriteOSInfo();
-    void WriteSystemMemoryInfo();
-    void WriteTimeInfo();
+
+protected: // TASWTextLogBase hooks
+    bool CloseUnlocked() override;
+    bool InitializeUnlocked() override;
+    bool OpenUnlocked() override;
+    void WriteLineUnlocked(Level level, std::string_view line, bool endsLine) override;
 
 protected:
     // Whether stdout (or stderr, if 'isStdErr') shows ANSI colors, checked by Initialize(). Windows: the stream is a
@@ -109,12 +99,6 @@ public:
     TASWConsoleLog() = default;
     ~TASWConsoleLog();
 
-    bool Initialize(const TASWLogConfig& config) override;
-
-    bool Open() override;
-    bool Close() override;
-    bool IsOpen() const noexcept override;
-
     // True if stdout or stderr shows ANSI colors, as detected by Initialize() (see DetectStreamColorSupport()). False
     // before Initialize(). Doesn't consider GetColorMode() or NO_COLOR.
     [[nodiscard]] bool IsColorSupported() const noexcept;
@@ -130,12 +114,6 @@ public:
     // override that. Thread-safe to read/write from any thread.
     [[nodiscard]] ColorMode GetColorMode() const noexcept;
     void SetColorMode(ColorMode colorMode) noexcept;
-
-    void Log(Level level, std::string_view message, std::source_location loc = std::source_location::current()) override;
-    void LogRaw(Level level, std::string_view message, std::source_location loc = std::source_location::current()) override;
-
-    void LogForce(Level level, std::string_view message, std::source_location loc = std::source_location::current()) override;
-    void LogForceRaw(Level level, std::string_view message, std::source_location loc = std::source_location::current()) override;
 };
 
 } // namespace ASWLog

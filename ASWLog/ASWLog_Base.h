@@ -100,24 +100,6 @@ public:
         m_MinimumLevel.store(level, std::memory_order_relaxed);
     }
 
-protected:
-    // Invoked by sinks after their internal mutex has been released, so a callback that logs again does not
-    // deadlock. The config's OnLogEntry is called if set and 'level' meets 'CallbackMinimumLevel'.
-    void DispatchLogCallback(Level level, std::string_view formattedLine) const noexcept
-    {
-        const auto& callback = m_Config.OnLogEntry;
-        if (callback == nullptr || level < m_Config.CallbackMinimumLevel)
-            return;
-
-        try
-        {
-            callback(level, formattedLine);
-        }
-        catch (...)
-        {
-        }
-    }
-
 public:
     void LogTrace(std::string_view msg, std::source_location loc = std::source_location::current()) override;
     void LogDebug(std::string_view msg, std::source_location loc = std::source_location::current()) override;
