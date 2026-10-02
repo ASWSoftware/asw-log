@@ -125,7 +125,7 @@ bool TASWTextLogBase::Initialize(const TASWLogConfig& config)
     }
 
     m_Config = config;
-    m_MinimumLevel.store(m_Config.InitialMinimumLevel, std::memory_order_release);
+    SetMinimumLevel(m_Config.InitialMinimumLevel);
 
     if (!InitializeUnlocked())
     {
@@ -153,7 +153,7 @@ bool TASWTextLogBase::IsOpen() const noexcept
 //---------------------------------------------------------------------------
 void TASWTextLogBase::Log(Level level, std::string_view message, std::source_location loc)
 {
-    if (level < GetMinimumLevel())
+    if (!PassesLevelGate(level))
         return;
 
     LogEntry(level, message, false, false, true, loc);
@@ -169,8 +169,9 @@ void TASWTextLogBase::Log(Level level, std::string_view message, std::source_loc
 void TASWTextLogBase::LogEntry(
     Level level, std::string_view message, bool force, bool raw, bool includeNewLine, std::source_location loc) noexcept
 {
-    // Off isn't a severity, so a message logged at Off is never written, even when forced
-    if (level == Level::Off)
+    // Nothing is written while disabled, and Off isn't a severity, so a message logged at Off is never written; both
+    // apply even when forced. Checked before locking, so a disabled file logger doesn't reopen its file either.
+    if (level == Level::Off || !IsEnabled())
         return;
 
     try
@@ -209,7 +210,7 @@ void TASWTextLogBase::LogForceRaw(Level level, std::string_view message, std::so
 //---------------------------------------------------------------------------
 void TASWTextLogBase::LogRaw(Level level, std::string_view message, std::source_location loc)
 {
-    if (level < GetMinimumLevel())
+    if (!PassesLevelGate(level))
         return;
 
     LogEntry(level, message, false, true, false, loc);
@@ -286,13 +287,14 @@ void TASWTextLogBase::WriteInitializationInfo()
 /*
     TASWTextLogBase::WriteLogEntry
 
-    Formats and writes one entry, unless its level is filtered out (and it isn't forced) or PrepareWriteUnlocked()
-    drops it. Returns the line written, or an empty string if nothing was written.
+    Formats and writes one entry, unless the logger is disabled, its level is filtered out (and it isn't forced), or
+    PrepareWriteUnlocked() drops it. Returns the line written, or an empty string if nothing was written. The startup
+    and shutdown lines come through here too, so they aren't written while the logger is disabled.
 */
 std::string TASWTextLogBase::WriteLogEntry(
     Level level, std::string_view message, bool force, bool raw, bool includeNewLine, std::source_location loc)
 {
-    if (!force && level < GetMinimumLevel())
+    if (!IsEnabled() || (!force && level < GetMinimumLevel()))
         return {};
 
     const auto now = NowUTC();

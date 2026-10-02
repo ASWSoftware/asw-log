@@ -53,7 +53,8 @@ namespace ASWLog
 // acts as an optional composite-level pre-filter gate, checked before fanning
 // Log()/LogRaw() out (default Trace = no extra filtering); LogForce()/
 // LogForceRaw() bypass it, matching force semantics elsewhere. Each sink
-// still applies its own level independently. All other
+// still applies its own level independently. SetEnabled(false) on the
+// composite stops all fan-out, forced entries included. All other
 // fields on this class's config (rotation, retention, banners, OnLogEntry,
 // etc.) are inert, since the composite performs no I/O of its own.
 /////////////////////////////////////////////////////////////////////////////
@@ -105,6 +106,10 @@ public:
     bool Open() override;
     bool Close() override;
     bool IsOpen() const noexcept override; // True if every registered sink reports open (vacuously true if none are registered).
+
+    // True if this composite's own gate passes (enabled, not Off, minimum level) and at least one registered sink's
+    // ShouldLog() is true (false if none are registered).
+    bool ShouldLog(Level level) const noexcept override;
 
     void Log(Level level, std::string_view message, std::source_location loc = std::source_location::current()) override;
     void LogRaw(Level level, std::string_view message, std::source_location loc = std::source_location::current()) override;

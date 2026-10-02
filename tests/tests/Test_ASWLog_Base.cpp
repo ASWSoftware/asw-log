@@ -38,6 +38,13 @@ limitations under the License.
 namespace
 {
 
+// A value whose formatting is counted in CountedValueFormatCount, to check when the *Fmt methods format
+struct TCountedValue
+{
+};
+
+int CountedValueFormatCount = 0;
+
 // A value whose formatting throws, to check that the *Fmt methods don't throw
 struct TThrowingValue
 {
@@ -45,6 +52,21 @@ struct TThrowingValue
 };
 
 } // namespace
+
+template<>
+struct std::formatter<TCountedValue>
+{
+    constexpr std::format_parse_context::iterator parse(std::format_parse_context& context)
+    {
+        return context.begin();
+    }
+
+    std::format_context::iterator format(const TCountedValue& /*value*/, std::format_context& context) const
+    {
+        ++CountedValueFormatCount;
+        return std::format_to(context.out(), "counted");
+    }
+};
 
 template<>
 struct std::formatter<TThrowingValue>
@@ -89,7 +111,7 @@ public:
     bool Initialize(const ASWLog::TASWLogConfig& config) override
     {
         m_Config = config;
-        m_MinimumLevel.store(m_Config.InitialMinimumLevel, std::memory_order_release);
+        SetMinimumLevel(m_Config.InitialMinimumLevel);
         m_IsInitialized.store(true, std::memory_order_release);
         return true;
     }
@@ -150,8 +172,10 @@ TTest_ASWLog_Base::TTest_ASWLog_Base()
     RegisterTest(&TTest_ASWLog_Base::Test_GetFullVersionStr_ContainsVersion, "GetFullVersionStr_ContainsVersion");
     RegisterTest(&TTest_ASWLog_Base::Test_LogFormatMethods_LogErrorInsteadOfThrowing, "LogFormatMethods_LogErrorInsteadOfThrowing");
     RegisterTest(&TTest_ASWLog_Base::Test_LogFormatMethods_PassCallerLocation, "LogFormatMethods_PassCallerLocation");
+    RegisterTest(&TTest_ASWLog_Base::Test_LogFormatMethods_SkipFormattingWhenNotWritten, "LogFormatMethods_SkipFormattingWhenNotWritten");
     RegisterTest(&TTest_ASWLog_Base::Test_LogLevelConvenienceMethods, "LogLevelConvenienceMethods");
     RegisterTest(&TTest_ASWLog_Base::Test_SetGetMinimumLevel_RoundTrips, "SetGetMinimumLevel_RoundTrips");
+    RegisterTest(&TTest_ASWLog_Base::Test_ShouldLog_ReflectsEnabledAndLevel, "ShouldLog_ReflectsEnabledAndLevel");
 }
 //---------------------------------------------------------------------------
 TTest_ASWLog_Base::~TTest_ASWLog_Base()
@@ -250,6 +274,7 @@ void TTest_ASWLog_Base::Test_LogFormatMethods_PassCallerLocation()
 {
     // Arrange
     TTestLogger logger;
+    logger.SetMinimumLevel(ASWLog::Level::Trace); // So LogTraceFmt()/LogDebugFmt() aren't filtered before formatting
     const std::string testName = __func__;
     const std::string thisFile = std::source_location::current().file_name();
 
@@ -303,6 +328,37 @@ void TTest_ASWLog_Base::Test_LogFormatMethods_PassCallerLocation()
     line = __LINE__ + 1;
     logger.LogCriticalFmt(std::string("critical {}"), 10); // A std::string format also converts
     checkCall(line, "LogCriticalFmt", "critical 10");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_Base::Test_LogFormatMethods_SkipFormattingWhenNotWritten()
+{
+    // Arrange
+    TTestLogger logger; // Minimum level Info
+    CountedValueFormatCount = 0;
+
+    // Act and Assert: each step checks how many times the value has been formatted so far
+    logger.LogDebugFmt("{}", TCountedValue{});
+    logger.LogFmt(ASWLog::Level::Trace, "{}", TCountedValue{});
+    logger.LogRawFmt(ASWLog::Level::Debug, "{}", TCountedValue{});
+    logger.LogFmt(ASWLog::Level::Off, "{}", TCountedValue{});
+    logger.LogForceFmt(ASWLog::Level::Off, "{}", TCountedValue{});
+    CheckEquals(0, CountedValueFormatCount, __func__, __LINE__, "An entry below the minimum level, or at Off, should not be formatted");
+
+    logger.LogInfoFmt("{}", TCountedValue{});
+    CheckEquals(1, CountedValueFormatCount, __func__, __LINE__, "An entry at the minimum level should be formatted once");
+    CheckEquals(std::string("counted"), logger.LastMessage, __func__, __LINE__, "The formatted entry should reach the logger");
+
+    logger.LogForceFmt(ASWLog::Level::Trace, "{}", TCountedValue{});
+    logger.LogForceRawFmt(ASWLog::Level::Trace, "{}", TCountedValue{});
+    CheckEquals(3, CountedValueFormatCount, __func__, __LINE__, "A forced entry below the minimum level should still be formatted");
+
+    logger.SetEnabled(false);
+    logger.LastMessage.clear();
+    logger.LogErrorFmt("{}", TCountedValue{});
+    logger.LogForceFmt(ASWLog::Level::Critical, "{}", TCountedValue{});
+    logger.LogForceRawFmt(ASWLog::Level::Critical, "{}", TCountedValue{});
+    CheckEquals(3, CountedValueFormatCount, __func__, __LINE__, "Nothing should be formatted while the logger is disabled, not even forced entries");
+    CheckTrue(logger.LastMessage.empty(), __func__, __LINE__, "Nothing should reach the logger while it is disabled");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_Base::Test_LogLevelConvenienceMethods()
@@ -371,6 +427,38 @@ void TTest_ASWLog_Base::Test_SetGetMinimumLevel_RoundTrips()
 
     // Assert
     CheckEquals(static_cast<int32_t>(ASWLog::Level::Trace), static_cast<int32_t>(logger.GetMinimumLevel()), __func__, __LINE__, "SetMinimumLevel should update the value returned by GetMinimumLevel immediately");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_Base::Test_ShouldLog_ReflectsEnabledAndLevel()
+{
+    // Arrange: everything through the interface, as code holding only an IASWLog& would use it
+    TTestLogger testLogger;
+    ASWLog::IASWLog& logger = testLogger;
+
+    // Act
+    logger.SetMinimumLevel(ASWLog::Level::Warn);
+    const bool enabledByDefault = logger.IsEnabled();
+    const bool shouldLogInfo = logger.ShouldLog(ASWLog::Level::Info);
+    const bool shouldLogWarn = logger.ShouldLog(ASWLog::Level::Warn);
+    const bool shouldLogOff = logger.ShouldLog(ASWLog::Level::Off);
+
+    logger.SetEnabled(false);
+    const bool enabledAfterDisable = logger.IsEnabled();
+    const bool shouldLogCriticalWhileDisabled = logger.ShouldLog(ASWLog::Level::Critical);
+
+    logger.SetEnabled(true);
+    logger.SetMinimumLevel(ASWLog::Level::Off);
+    const bool shouldLogCriticalAtMinimumOff = logger.ShouldLog(ASWLog::Level::Critical);
+
+    // Assert
+    CheckTrue(enabledByDefault, __func__, __LINE__, "A logger should be enabled by default");
+    CheckTrue(logger.GetMinimumLevel() == ASWLog::Level::Off, __func__, __LINE__, "The minimum level should be readable through IASWLog");
+    CheckFalse(shouldLogInfo, __func__, __LINE__, "An entry below the minimum level should not be logged");
+    CheckTrue(shouldLogWarn, __func__, __LINE__, "An entry at the minimum level should be logged");
+    CheckFalse(shouldLogOff, __func__, __LINE__, "An entry at Off should never be logged");
+    CheckFalse(enabledAfterDisable, __func__, __LINE__, "SetEnabled(false) should disable the logger");
+    CheckFalse(shouldLogCriticalWhileDisabled, __func__, __LINE__, "Nothing should be logged while the logger is disabled");
+    CheckFalse(shouldLogCriticalAtMinimumOff, __func__, __LINE__, "Nothing should be logged at a minimum level of Off");
 }
 //---------------------------------------------------------------------------
 

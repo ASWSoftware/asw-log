@@ -47,10 +47,13 @@ private: // Test methods
     void Test_Log_AtLevelOffIsNotFannedOut();
     void Test_Log_FansOutToAllRegisteredSinks();
     void Test_Log_ThrowingSinkDoesNotStopOtherSinks();
+    void Test_LogFmt_FormatsOnceForAllSinks();
     void Test_LogForce_BypassesCompositeGate();
     void Test_RemoveAllLoggers_ClearsRegistrationAndReturnsCount();
     void Test_RemoveLogger_StopsReceivingEntries();
+    void Test_SetEnabled_FalseStopsFanOut();
     void Test_SetMinimumLevel_GatesFanOutBeforeSinks();
+    void Test_ShouldLog_RequiresCompositeGateAndAnySink();
 
 public:
     TTest_ASWLog_MultiLog();

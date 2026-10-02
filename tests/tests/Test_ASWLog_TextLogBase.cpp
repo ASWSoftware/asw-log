@@ -195,6 +195,7 @@ TTest_ASWLog_TextLogBase::TTest_ASWLog_TextLogBase()
     RegisterTest(&TTest_ASWLog_TextLogBase::Test_Log_MinimumLevelOffAllowsOnlyForcedEntries, "Log_MinimumLevelOffAllowsOnlyForcedEntries");
     RegisterTest(&TTest_ASWLog_TextLogBase::Test_Log_ThrowingWriteDoesNotEscape, "Log_ThrowingWriteDoesNotEscape");
     RegisterTest(&TTest_ASWLog_TextLogBase::Test_LogRaw_WritesMessageAsIs, "LogRaw_WritesMessageAsIs");
+    RegisterTest(&TTest_ASWLog_TextLogBase::Test_SetEnabled_FalseWritesNothing, "SetEnabled_FalseWritesNothing");
 }
 //---------------------------------------------------------------------------
 TTest_ASWLog_TextLogBase::~TTest_ASWLog_TextLogBase()
@@ -488,6 +489,58 @@ void TTest_ASWLog_TextLogBase::Test_LogRaw_WritesMessageAsIs()
     // Assert
     CheckTrue(output.Lines == std::vector<std::string>{ "partial", " line\n" }, __func__, __LINE__, "Raw entries should be written as is, without a format or a line ending");
     CheckTrue(output.EndsLine == std::vector<bool>{ false, false }, __func__, __LINE__, "A raw entry doesn't end its line");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_TextLogBase::Test_SetEnabled_FalseWritesNothing()
+{
+    // Arrange
+    TMemoryOutput output;
+    int callbackCount = 0;
+    auto config = MakeQuietConfig();
+    config.BannerMessage_Init = "startup banner";
+    config.Init_LogTimeInfo = true;
+    config.WriteShutdownLog = true;
+    config.CallbackMinimumLevel = ASWLog::Level::Trace;
+    config.OnLogEntry = [&callbackCount](ASWLog::Level, std::string_view) {
+            ++callbackCount;
+        };
+
+    // Act
+    bool openWhileDisabled = false;
+    std::size_t linesWhileDisabled = 0;
+    int afterEntryCountWhileDisabled = 0;
+    std::size_t linesBeforeDestruction = 0;
+    {
+        TMemoryTextLog log(output);
+        log.SetEnabled(false);
+        CheckTrue(log.Initialize(config), __func__, __LINE__, "Initialize should succeed while disabled");
+        const int afterEntryCountAtStart = output.AfterEntryCount;
+
+        log.LogCritical("critical");
+        log.LogRaw(ASWLog::Level::Critical, "critical_raw\n");
+        log.LogForce(ASWLog::Level::Critical, "forced");
+        log.LogForceRaw(ASWLog::Level::Critical, "forced_raw\n");
+        log.LogCriticalFmt("{}", "critical_fmt");
+        openWhileDisabled = log.IsOpen();
+        linesWhileDisabled = output.Lines.size();
+        afterEntryCountWhileDisabled = output.AfterEntryCount - afterEntryCountAtStart;
+
+        log.SetEnabled(true);
+        log.LogInfo("enabled_again");
+        linesBeforeDestruction = output.Lines.size();
+
+        log.SetEnabled(false); // So the destructor writes no shutdown line
+    }
+
+    // Assert
+    CheckTrue(openWhileDisabled, __func__, __LINE__, "A disabled logger should stay open");
+    CheckEquals(static_cast<std::size_t>(0), linesWhileDisabled, __func__, __LINE__,
+        "A disabled logger should write nothing: no startup lines, entries, or forced entries");
+    CheckEquals(0, afterEntryCountWhileDisabled, __func__, __LINE__, "A disabled logger's entries should not reach its output at all");
+    CheckEquals(static_cast<std::size_t>(1), linesBeforeDestruction, __func__, __LINE__, "Logging should resume once enabled again");
+    CheckTrue(output.Lines == std::vector<std::string>{ "[INFO]: enabled_again\n" }, __func__, __LINE__,
+        "Disabling before destruction should suppress the shutdown line");
+    CheckEquals(1, callbackCount, __func__, __LINE__, "OnLogEntry should only fire for the entry written while enabled");
 }
 //---------------------------------------------------------------------------
 

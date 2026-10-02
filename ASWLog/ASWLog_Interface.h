@@ -114,8 +114,26 @@ public:
     virtual bool Initialize(const TASWLogConfig& config) = 0;
 
     virtual bool Open() = 0;
+    // Closes the output (e.g. the log file). This doesn't always stop logging: a file logger with
+    // TASWLogConfig::AutoOpenClosePerWrite reopens its file for the next entry. Use SetEnabled(false) to stop logging.
     virtual bool Close() = 0;
     virtual bool IsOpen() const noexcept = 0;
+
+    // Whether the logger writes anything at all. While disabled, nothing is written, not even LogForce*() entries or
+    // the startup and shutdown lines, but the output stays open and the minimum level is kept. Enabled by default.
+    // Lock-free, so it can be changed from any thread at any time.
+    virtual bool IsEnabled() const noexcept = 0;
+    virtual void SetEnabled(bool enabled) noexcept = 0;
+
+    // The level an entry needs to be written by Log()/LogRaw() (LogForce*() ignores it). Seeded by Initialize() from
+    // TASWLogConfig::InitialMinimumLevel. Lock-free, so it can be changed from any thread at any time.
+    virtual Level GetMinimumLevel() const noexcept = 0;
+    virtual void SetMinimumLevel(Level level) noexcept = 0;
+
+    // True if Log()/LogRaw() would write an entry at 'level': the logger is enabled, 'level' isn't Off, and it meets
+    // the minimum level (a multi-log also needs one of its loggers to accept it). The *Fmt methods use it to skip
+    // formatting an entry that wouldn't be written; use it the same way to skip building an expensive message.
+    virtual bool ShouldLog(Level level) const noexcept = 0;
 
     virtual void Log(Level level, std::string_view message, std::source_location loc = std::source_location::current()) = 0;
     virtual void LogRaw(Level level, std::string_view message, std::source_location loc = std::source_location::current()) = 0;
@@ -132,65 +150,70 @@ public:
 
     // --- Non-virtual Inline Template Format Methods ---
     // Each passes on the caller's source location, captured by TASWFormatString. A formatting error is logged in place
-    // of the message instead of thrown (see TASWFormatString::FormatMessage()).
+    // of the message instead of thrown (see TASWFormatString::FormatMessage()). An entry that wouldn't be written isn't
+    // formatted: see ShouldLog(), and, for the LogForce*Fmt() methods, IsEnabled() and Level::Off.
     template<typename ... Args>
     inline void LogFmt(Level level, TASWFormatString fmt, Args&&... args)
     {
-        Log(level, fmt.FormatMessage(args ...), fmt.Location);
+        if (ShouldLog(level))
+            Log(level, fmt.FormatMessage(args ...), fmt.Location);
     }
 
     template<typename ... Args>
     inline void LogRawFmt(Level level, TASWFormatString fmt, Args&&... args)
     {
-        LogRaw(level, fmt.FormatMessage(args ...), fmt.Location);
+        if (ShouldLog(level))
+            LogRaw(level, fmt.FormatMessage(args ...), fmt.Location);
     }
 
     template<typename ... Args>
     inline void LogForceFmt(Level level, TASWFormatString fmt, Args&&... args)
     {
-        LogForce(level, fmt.FormatMessage(args ...), fmt.Location);
+        if (level != Level::Off && IsEnabled())
+            LogForce(level, fmt.FormatMessage(args ...), fmt.Location);
     }
 
     template<typename ... Args>
     inline void LogForceRawFmt(Level level, TASWFormatString fmt, Args&&... args)
     {
-        LogForceRaw(level, fmt.FormatMessage(args ...), fmt.Location);
+        if (level != Level::Off && IsEnabled())
+            LogForceRaw(level, fmt.FormatMessage(args ...), fmt.Location);
     }
 
     template<typename ... Args>
     inline void LogTraceFmt(TASWFormatString fmt, Args&&... args)
     {
-        Log(Level::Trace, fmt.FormatMessage(args ...), fmt.Location);
+        LogFmt(Level::Trace, fmt, args ...);
     }
 
     template<typename ... Args>
     inline void LogDebugFmt(TASWFormatString fmt, Args&&... args)
     {
-        Log(Level::Debug, fmt.FormatMessage(args ...), fmt.Location);
+        LogFmt(Level::Debug, fmt, args ...);
     }
 
     template<typename ... Args>
     inline void LogInfoFmt(TASWFormatString fmt, Args&&... args)
     {
-        Log(Level::Info, fmt.FormatMessage(args ...), fmt.Location);
+        LogFmt(Level::Info, fmt, args ...);
     }
 
     template<typename ... Args>
     inline void LogWarnFmt(TASWFormatString fmt, Args&&... args)
     {
-        Log(Level::Warn, fmt.FormatMessage(args ...), fmt.Location);
+        LogFmt(Level::Warn, fmt, args ...);
     }
 
     template<typename ... Args>
     inline void LogErrorFmt(TASWFormatString fmt, Args&&... args)
     {
-        Log(Level::Error, fmt.FormatMessage(args ...), fmt.Location);
+        LogFmt(Level::Error, fmt, args ...);
     }
 
     template<typename ... Args>
     inline void LogCriticalFmt(TASWFormatString fmt, Args&&... args)
     {
-        Log(Level::Critical, fmt.FormatMessage(args ...), fmt.Location);
+        LogFmt(Level::Critical, fmt, args ...);
     }
 };
 

@@ -40,8 +40,10 @@ private: // Test methods
     void Test_GetFullVersionStr_ContainsVersion();
     void Test_LogFormatMethods_LogErrorInsteadOfThrowing();
     void Test_LogFormatMethods_PassCallerLocation();
+    void Test_LogFormatMethods_SkipFormattingWhenNotWritten();
     void Test_LogLevelConvenienceMethods();
     void Test_SetGetMinimumLevel_RoundTrips();
+    void Test_ShouldLog_ReflectsEnabledAndLevel();
 
 public:
     TTest_ASWLog_Base();

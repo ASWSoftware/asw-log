@@ -27,6 +27,7 @@ limitations under the License.
 #include <algorithm>
 #include <atomic>
 #include <filesystem>
+#include <format>
 #include <fstream>
 #include <iterator>
 #include <source_location>
@@ -41,6 +42,33 @@ limitations under the License.
 #include "ASWLog_FileLog.h"
 #include "ASWLog_MultiLog.h"
 //---------------------------------------------------------------------------
+
+namespace
+{
+
+// A value whose formatting is counted in MultiLogFormatCount, to check how often a *Fmt call through a multi-log formats
+struct TMultiLogCountedValue
+{
+};
+
+int MultiLogFormatCount = 0;
+
+} // namespace
+
+template<>
+struct std::formatter<TMultiLogCountedValue>
+{
+    constexpr std::format_parse_context::iterator parse(std::format_parse_context& context)
+    {
+        return context.begin();
+    }
+
+    std::format_context::iterator format(const TMultiLogCountedValue& /*value*/, std::format_context& context) const
+    {
+        ++MultiLogFormatCount;
+        return std::format_to(context.out(), "counted");
+    }
+};
 
 namespace ASWUnitTests
 {
@@ -212,10 +240,13 @@ TTest_ASWLog_MultiLog::TTest_ASWLog_MultiLog()
     RegisterTest(&TTest_ASWLog_MultiLog::Test_Log_AtLevelOffIsNotFannedOut, "Log_AtLevelOffIsNotFannedOut");
     RegisterTest(&TTest_ASWLog_MultiLog::Test_Log_FansOutToAllRegisteredSinks, "Log_FansOutToAllRegisteredSinks");
     RegisterTest(&TTest_ASWLog_MultiLog::Test_Log_ThrowingSinkDoesNotStopOtherSinks, "Log_ThrowingSinkDoesNotStopOtherSinks");
+    RegisterTest(&TTest_ASWLog_MultiLog::Test_LogFmt_FormatsOnceForAllSinks, "LogFmt_FormatsOnceForAllSinks");
     RegisterTest(&TTest_ASWLog_MultiLog::Test_LogForce_BypassesCompositeGate, "LogForce_BypassesCompositeGate");
     RegisterTest(&TTest_ASWLog_MultiLog::Test_RemoveAllLoggers_ClearsRegistrationAndReturnsCount, "RemoveAllLoggers_ClearsRegistrationAndReturnsCount");
     RegisterTest(&TTest_ASWLog_MultiLog::Test_RemoveLogger_StopsReceivingEntries, "RemoveLogger_StopsReceivingEntries");
+    RegisterTest(&TTest_ASWLog_MultiLog::Test_SetEnabled_FalseStopsFanOut, "SetEnabled_FalseStopsFanOut");
     RegisterTest(&TTest_ASWLog_MultiLog::Test_SetMinimumLevel_GatesFanOutBeforeSinks, "SetMinimumLevel_GatesFanOutBeforeSinks");
+    RegisterTest(&TTest_ASWLog_MultiLog::Test_ShouldLog_RequiresCompositeGateAndAnySink, "ShouldLog_RequiresCompositeGateAndAnySink");
 }
 //---------------------------------------------------------------------------
 TTest_ASWLog_MultiLog::~TTest_ASWLog_MultiLog()
@@ -552,6 +583,29 @@ void TTest_ASWLog_MultiLog::Test_Log_ThrowingSinkDoesNotStopOtherSinks()
     CheckTrue(contents.find("force_raw_message") != std::string::npos, __func__, __LINE__, "LogForceRaw should still reach the other sinks");
 }
 //---------------------------------------------------------------------------
+void TTest_ASWLog_MultiLog::Test_LogFmt_FormatsOnceForAllSinks()
+{
+    // Arrange: two sinks at the default minimum level (Info), and a composite that lets everything through
+    TRecordingLogger sinkA;
+    TRecordingLogger sinkB;
+    ASWLog::TASWMultiLog multiLog;
+    multiLog.AddLogger(sinkA);
+    multiLog.AddLogger(sinkB);
+    multiLog.SetMinimumLevel(ASWLog::Level::Trace);
+    MultiLogFormatCount = 0;
+
+    // Act
+    multiLog.LogDebugFmt("{}", TMultiLogCountedValue{});
+    const int countAfterFilteredEntry = MultiLogFormatCount;
+    multiLog.LogInfoFmt("{}", TMultiLogCountedValue{});
+
+    // Assert
+    CheckEquals(0, countAfterFilteredEntry, __func__, __LINE__, "An entry no sink would write should not be formatted");
+    CheckEquals(1, MultiLogFormatCount, __func__, __LINE__, "An entry should be formatted once, however many sinks get it");
+    CheckTrue(sinkA.Calls == std::vector<std::string>{ "Log:counted" } && sinkB.Calls == sinkA.Calls, __func__, __LINE__,
+        "Both sinks should get the formatted entry");
+}
+//---------------------------------------------------------------------------
 void TTest_ASWLog_MultiLog::Test_LogForce_BypassesCompositeGate()
 {
     // Arrange
@@ -627,6 +681,32 @@ void TTest_ASWLog_MultiLog::Test_RemoveLogger_StopsReceivingEntries()
     CheckTrue(contents.find("after_removal") == std::string::npos, __func__, __LINE__, "Message logged after removal should not reach the sink");
 }
 //---------------------------------------------------------------------------
+void TTest_ASWLog_MultiLog::Test_SetEnabled_FalseStopsFanOut()
+{
+    // Arrange
+    TRecordingLogger sink;
+    ASWLog::TASWMultiLog multiLog;
+    multiLog.AddLogger(sink);
+    multiLog.SetMinimumLevel(ASWLog::Level::Trace);
+
+    // Act
+    multiLog.SetEnabled(false);
+    multiLog.LogCritical("critical");
+    multiLog.LogRaw(ASWLog::Level::Critical, "critical_raw");
+    multiLog.LogForce(ASWLog::Level::Critical, "forced");
+    multiLog.LogForceRaw(ASWLog::Level::Critical, "forced_raw");
+    multiLog.LogForceFmt(ASWLog::Level::Critical, "{}", "forced_fmt");
+    const auto callsWhileDisabled = sink.Calls;
+
+    multiLog.SetEnabled(true);
+    multiLog.LogInfo("enabled_again");
+
+    // Assert
+    CheckTrue(callsWhileDisabled.empty(), __func__, __LINE__, "A disabled composite should fan out nothing, not even forced entries");
+    CheckTrue(sink.IsEnabled(), __func__, __LINE__, "Disabling the composite should not change its sinks");
+    CheckTrue(sink.Calls == std::vector<std::string>{ "Log:enabled_again" }, __func__, __LINE__, "Fan-out should resume once enabled again");
+}
+//---------------------------------------------------------------------------
 void TTest_ASWLog_MultiLog::Test_SetMinimumLevel_GatesFanOutBeforeSinks()
 {
     // Arrange
@@ -649,6 +729,44 @@ void TTest_ASWLog_MultiLog::Test_SetMinimumLevel_GatesFanOutBeforeSinks()
     // Assert
     CheckTrue(contents.find("blocked_by_composite_gate") == std::string::npos, __func__, __LINE__, "Composite MinimumLevel should gate fan-out even though the sink's own level would allow it");
     CheckTrue(contents.find("passes_composite_gate") != std::string::npos, __func__, __LINE__, "Entries at or above the composite level should still reach the sink");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_MultiLog::Test_ShouldLog_RequiresCompositeGateAndAnySink()
+{
+    // Arrange
+    TRecordingLogger errorSink;
+    TRecordingLogger warnSink;
+    errorSink.SetMinimumLevel(ASWLog::Level::Error);
+    warnSink.SetMinimumLevel(ASWLog::Level::Warn);
+    ASWLog::TASWMultiLog multiLog;
+    multiLog.SetMinimumLevel(ASWLog::Level::Trace);
+    const bool shouldLogWithoutSinks = multiLog.ShouldLog(ASWLog::Level::Critical);
+    multiLog.AddLogger(errorSink);
+    multiLog.AddLogger(warnSink);
+
+    // Act
+    const bool shouldLogInfo = multiLog.ShouldLog(ASWLog::Level::Info);
+    const bool shouldLogWarn = multiLog.ShouldLog(ASWLog::Level::Warn);
+
+    warnSink.SetEnabled(false);
+    const bool shouldLogWarnWithWarnSinkDisabled = multiLog.ShouldLog(ASWLog::Level::Warn);
+    const bool shouldLogErrorWithWarnSinkDisabled = multiLog.ShouldLog(ASWLog::Level::Error);
+
+    multiLog.SetMinimumLevel(ASWLog::Level::Critical);
+    const bool shouldLogErrorBelowCompositeLevel = multiLog.ShouldLog(ASWLog::Level::Error);
+
+    multiLog.SetMinimumLevel(ASWLog::Level::Trace);
+    multiLog.SetEnabled(false);
+    const bool shouldLogErrorWithCompositeDisabled = multiLog.ShouldLog(ASWLog::Level::Error);
+
+    // Assert
+    CheckFalse(shouldLogWithoutSinks, __func__, __LINE__, "A composite with no sinks should log nothing");
+    CheckFalse(shouldLogInfo, __func__, __LINE__, "No sink accepts Info");
+    CheckTrue(shouldLogWarn, __func__, __LINE__, "One sink accepts Warn, which is enough");
+    CheckFalse(shouldLogWarnWithWarnSinkDisabled, __func__, __LINE__, "A disabled sink should not count");
+    CheckTrue(shouldLogErrorWithWarnSinkDisabled, __func__, __LINE__, "The enabled sink still accepts Error");
+    CheckFalse(shouldLogErrorBelowCompositeLevel, __func__, __LINE__, "The composite's own minimum level should apply first");
+    CheckFalse(shouldLogErrorWithCompositeDisabled, __func__, __LINE__, "A disabled composite should log nothing");
 }
 //---------------------------------------------------------------------------
 

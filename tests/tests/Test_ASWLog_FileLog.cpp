@@ -222,6 +222,7 @@ TTest_ASWLog_FileLog::TTest_ASWLog_FileLog()
     RegisterTest(&TTest_ASWLog_FileLog::Test_RetentionMaxAge_DefaultDisabledPreservesOldBackups, "RetentionMaxAge_DefaultDisabledPreservesOldBackups");
     RegisterTest(&TTest_ASWLog_FileLog::Test_RetentionMaxAge_DeletesExpiredBackupsAfterRotation, "RetentionMaxAge_DeletesExpiredBackupsAfterRotation");
     RegisterTest(&TTest_ASWLog_FileLog::Test_RotateLogFiles_KeepsEveryBackup, "RotateLogFiles_KeepsEveryBackup");
+    RegisterTest(&TTest_ASWLog_FileLog::Test_SetEnabled_FalseStopsAutoOpenCloseLogging, "SetEnabled_FalseStopsAutoOpenCloseLogging");
     RegisterTest(&TTest_ASWLog_FileLog::Test_SizeRotation_AutoOpenCloseCountsOtherWriters, "SizeRotation_AutoOpenCloseCountsOtherWriters");
     RegisterTest(&TTest_ASWLog_FileLog::Test_SizeRotation_CountsExistingFileSize, "SizeRotation_CountsExistingFileSize");
     RegisterTest(&TTest_ASWLog_FileLog::Test_SizeRotation_RotatesWhenLimitReached, "SizeRotation_RotatesWhenLimitReached");
@@ -1361,6 +1362,36 @@ void TTest_ASWLog_FileLog::Test_RotateLogFiles_KeepsEveryBackup()
     CheckTrue(firstContents.find("second_segment") == std::string::npos, __func__, __LINE__, "A second rotation should not replace the first backup");
     CheckTrue(secondContents.find("second_segment") != std::string::npos, __func__, __LINE__, "A second rotation with a taken name should add _1 to the name");
     CheckTrue(ReadFileText(logFile).find("third_segment") != std::string::npos, __func__, __LINE__, "Entries after the last rotation should go to the reopened log file");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_FileLog::Test_SetEnabled_FalseStopsAutoOpenCloseLogging()
+{
+    // Arrange: with AutoOpenClosePerWrite the file is only open while an entry is written
+    const auto logFile = TestTempDir / "disabled.log";
+    auto config = MakeRotationTestConfig(logFile);
+    config.AutoOpenClosePerWrite = true;
+    ASWLog::TASWFileLog logger;
+    CheckTrue(logger.Initialize(config), __func__, __LINE__, "Initialize should succeed");
+
+    // Act: Close() doesn't stop logging in this mode, since the next entry reopens the file
+    logger.Close();
+    logger.LogInfo("after_close");
+    const auto contentsAfterClose = ReadFileText(logFile);
+
+    logger.SetEnabled(false);
+    std::filesystem::remove(logFile);
+    logger.LogInfo("disabled");
+    logger.LogForce(ASWLog::Level::Critical, "disabled_forced");
+    const bool fileExistsWhileDisabled = std::filesystem::exists(logFile);
+
+    logger.SetEnabled(true);
+    logger.LogInfo("enabled_again");
+
+    // Assert
+    CheckEquals(std::string(": after_close\n"), contentsAfterClose, __func__, __LINE__,
+        "With AutoOpenClosePerWrite, an entry after Close() reopens the file (documented on IASWLog::Close())");
+    CheckFalse(fileExistsWhileDisabled, __func__, __LINE__, "A disabled logger should not reopen (or recreate) its file, even for a forced entry");
+    CheckEquals(std::string(": enabled_again\n"), ReadFileText(logFile), __func__, __LINE__, "Logging should resume once enabled again");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_FileLog::Test_SizeRotation_AutoOpenCloseCountsOtherWriters()

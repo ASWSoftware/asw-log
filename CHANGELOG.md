@@ -20,6 +20,28 @@ see [0.26.1](#0261---2026-09-17) for the initial versioned baseline.
   `Level_ToString` gives "OFF", and `Level_FromString` accepts "OFF" and
   "NONE". `LevelCount` stays 6 (the severity levels, not counting `Off`).
   Code that switches over every `Level` value must handle `Off`.
+- `IASWLog::SetEnabled()`/`IsEnabled()`: a disabled logger writes nothing,
+  not even forced entries or the startup and shutdown lines, while its
+  output stays open and its level is kept (lock-free, like the level). Use
+  it to stop logging; `Close()` releases the output, but with
+  `AutoOpenClosePerWrite` the next entry reopens the file.
+- `GetMinimumLevel()`/`SetMinimumLevel()` and the new `ShouldLog(level)` are
+  now on `IASWLog`, so code holding only an `IASWLog&` can use them.
+  `ShouldLog()` is true if `Log()` would write an entry at that level (for a
+  multi-log, if any of its loggers would); use it to skip building an
+  expensive message.
+
+### Changed
+
+- The `*Fmt` methods no longer format an entry that wouldn't be written:
+  below the minimum level, at `Off`, or with the logger disabled (a forced
+  entry is skipped only at `Off` or while disabled). Such an entry also no
+  longer reaches the logger's `Log()`, which matters only for a custom
+  logger that ignores its level. Code implementing `IASWLog` directly must
+  add `IsEnabled`, `SetEnabled`, `GetMinimumLevel`, `SetMinimumLevel` and
+  `ShouldLog` (deriving from `TASWLogBase` needs no change). `TASWLogBase`'s
+  level is now private: a derived class that set `m_MinimumLevel` must call
+  `SetMinimumLevel()` instead.
 
 ## [0.45.0] - 2026-10-01
 

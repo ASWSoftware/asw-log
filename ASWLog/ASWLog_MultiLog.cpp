@@ -127,7 +127,7 @@ bool TASWMultiLog::Initialize(const TASWLogConfig& config)
             return false;
 
         m_Config = config;
-        m_MinimumLevel.store(m_Config.InitialMinimumLevel, std::memory_order_release);
+        SetMinimumLevel(m_Config.InitialMinimumLevel);
         m_IsInitialized.store(true, std::memory_order_release);
     }
 
@@ -156,7 +156,7 @@ bool TASWMultiLog::IsOpen() const noexcept
 //---------------------------------------------------------------------------
 void TASWMultiLog::Log(Level level, std::string_view message, std::source_location loc)
 {
-    if (level == Level::Off || level < GetMinimumLevel())
+    if (!PassesLevelGate(level))
         return;
 
     FanOut([&](IASWLog& sink) {
@@ -167,7 +167,7 @@ void TASWMultiLog::Log(Level level, std::string_view message, std::source_locati
 //---------------------------------------------------------------------------
 void TASWMultiLog::LogForce(Level level, std::string_view message, std::source_location loc)
 {
-    if (level == Level::Off) // Not a severity: never written, even when forced
+    if (level == Level::Off || !IsEnabled()) // Off isn't a severity; disabled writes nothing. Even when forced.
         return;
 
     FanOut([&](IASWLog& sink) {
@@ -178,7 +178,7 @@ void TASWMultiLog::LogForce(Level level, std::string_view message, std::source_l
 //---------------------------------------------------------------------------
 void TASWMultiLog::LogForceRaw(Level level, std::string_view message, std::source_location loc)
 {
-    if (level == Level::Off) // Not a severity: never written, even when forced
+    if (level == Level::Off || !IsEnabled()) // Off isn't a severity; disabled writes nothing. Even when forced.
         return;
 
     FanOut([&](IASWLog& sink) {
@@ -189,7 +189,7 @@ void TASWMultiLog::LogForceRaw(Level level, std::string_view message, std::sourc
 //---------------------------------------------------------------------------
 void TASWMultiLog::LogRaw(Level level, std::string_view message, std::source_location loc)
 {
-    if (level == Level::Off || level < GetMinimumLevel())
+    if (!PassesLevelGate(level))
         return;
 
     FanOut([&](IASWLog& sink) {
@@ -231,6 +231,24 @@ bool TASWMultiLog::RemoveLogger(IASWLog& logger) noexcept
     const auto originalCount = m_Sinks.size();
     m_Sinks.erase(std::remove(m_Sinks.begin(), m_Sinks.end(), &logger), m_Sinks.end());
     return m_Sinks.size() != originalCount;
+}
+
+//---------------------------------------------------------------------------
+bool TASWMultiLog::ShouldLog(Level level) const noexcept
+{
+    if (!PassesLevelGate(level))
+        return false;
+
+    // Iterates under the lock instead of copying the list, which could throw. A sink's ShouldLog() must not call back
+    // into this composite (the built-in loggers' ShouldLog() only reads their own level and enabled flag).
+    std::lock_guard<std::mutex> lock(m_ListMutex);
+    for (const auto* sink : m_Sinks)
+    {
+        if (sink->ShouldLog(level))
+            return true;
+    }
+
+    return false;
 }
 
 //---------------------------------------------------------------------------

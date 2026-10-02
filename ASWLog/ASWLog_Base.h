@@ -50,14 +50,25 @@ class TASWLogBase : public IASWLog
 private:
     typedef IASWLog inherited;
 
+private:
+    std::atomic<Level> m_MinimumLevel{ Level::Info };
+    std::atomic<bool> m_IsEnabled{ true };
+
 protected:
     TASWLogConfig m_Config;
-    std::atomic<Level> m_MinimumLevel{ Level::Info };
     std::atomic<bool> m_IsInitialized{ false };
 
 protected:
     // Pure virtual helper so the base class knows what implementation name to print
     virtual std::string_view GetLoggerClassName() const noexcept = 0;
+
+    // This logger's own level check for Log()/LogRaw(), without locking: enabled, 'level' isn't Off, and it meets the
+    // minimum level. Non-virtual, so the logging methods can check it without a virtual call (see ShouldLog()).
+    bool PassesLevelGate(Level level) const noexcept
+    {
+        return m_IsEnabled.load(std::memory_order_relaxed) && level != Level::Off &&
+            level >= m_MinimumLevel.load(std::memory_order_relaxed);
+    }
 
     // The current time, used for log line timestamps, daily rolling, and backup file names. Override it to control
     // the logger's clock, e.g. in tests. A system_clock time point has no time zone (it counts from the UTC epoch).
@@ -87,17 +98,32 @@ public:
         return m_Config;
     }
 
+    bool IsEnabled() const noexcept final
+    {
+        return m_IsEnabled.load(std::memory_order_relaxed);
+    }
+
+    void SetEnabled(bool enabled) noexcept final
+    {
+        m_IsEnabled.store(enabled, std::memory_order_relaxed);
+    }
+
     // Lock-free runtime level gate. Initialize() seeds this from m_Config.InitialMinimumLevel;
     // afterward this atomic (not m_Config.InitialMinimumLevel) is the authoritative value
     // used by Log()/LogRaw() to skip locking entirely for filtered entries.
-    Level GetMinimumLevel() const noexcept
+    Level GetMinimumLevel() const noexcept final
     {
         return m_MinimumLevel.load(std::memory_order_relaxed);
     }
 
-    void SetMinimumLevel(Level level) noexcept
+    void SetMinimumLevel(Level level) noexcept final
     {
         m_MinimumLevel.store(level, std::memory_order_relaxed);
+    }
+
+    bool ShouldLog(Level level) const noexcept override
+    {
+        return PassesLevelGate(level);
     }
 
 public:

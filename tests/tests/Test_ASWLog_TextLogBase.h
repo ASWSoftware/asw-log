@@ -45,6 +45,7 @@ private: // Test methods
     void Test_Log_MinimumLevelOffAllowsOnlyForcedEntries();
     void Test_Log_ThrowingWriteDoesNotEscape();
     void Test_LogRaw_WritesMessageAsIs();
+    void Test_SetEnabled_FalseWritesNothing();
 
 public:
     TTest_ASWLog_TextLogBase();
