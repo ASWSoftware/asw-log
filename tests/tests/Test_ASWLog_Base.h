@@ -38,6 +38,7 @@ private:
 private: // Test methods
     void Test_GetConfig_ReturnsLiveMutableReference();
     void Test_GetFullVersionStr_ContainsVersion();
+    void Test_LogFormatMethods_AcceptEveryArgumentKind();
     void Test_LogFormatMethods_LogErrorInsteadOfThrowing();
     void Test_LogFormatMethods_PassCallerLocation();
     void Test_LogFormatMethods_SkipFormattingWhenNotWritten();

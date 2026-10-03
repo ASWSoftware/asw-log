@@ -52,6 +52,15 @@ see [0.26.1](#0261---2026-09-17) for the initial versioned baseline.
   `ShouldLog` (deriving from `TASWLogBase` needs no change). `TASWLogBase`'s
   level is now private: a derived class that set `m_MinimumLevel` must call
   `SetMinimumLevel()` instead.
+- The `*Fmt` methods check the format string against their arguments at
+  compile time, like `std::format`, so a mismatch such as
+  `LogInfoFmt("{} {}", 1)` no longer compiles (it used to log
+  `[ASWLog format error: ...]`). A format string that isn't a compile-time
+  constant, such as a `std::string` variable, must now be wrapped in the new
+  `ASWLog::RuntimeFormat(...)`, which keeps the check at run time and still
+  logs the format error on a mismatch. A custom `std::formatter` used with
+  them needs a `constexpr` `parse()`, as `std::format` already requires.
+  `TASWFormatString` is now a class template.
 
 ## [0.45.0] - 2026-10-01
 

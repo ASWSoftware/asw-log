@@ -33,6 +33,8 @@ limitations under the License.
 #include <source_location>
 #include <string>
 #include <string_view>
+#include <type_traits>
+#include <utility>
 //---------------------------------------------------------------------------
 #include "ASWLog_Config.h"
 #include "ASWLog_Types.h"
@@ -42,12 +44,37 @@ namespace ASWLog
 {
 
 /////////////////////////////////////////////////////////////////////////////
+// TASWRuntimeFormat
+//
+// A format string known only at run time, made by RuntimeFormat().
+/////////////////////////////////////////////////////////////////////////////
+struct TASWRuntimeFormat
+{
+    std::string_view Format;
+};
+
+// Passes a format string that isn't a compile-time constant (e.g. one read from a file) to a *Fmt method, which checks
+// any other format string against its arguments at compile time. This one is checked when the entry is formatted
+// instead: a mismatch logs "[ASWLog format error: <reason>] <format string>" (see TASWFormatString::FormatMessage()).
+// Like C++26's std::runtime_format, it holds a view of 'format', so the string must outlive the *Fmt call.
+[[nodiscard]] constexpr TASWRuntimeFormat RuntimeFormat(std::string_view format) noexcept
+{
+    return TASWRuntimeFormat{ format };
+}
+
+
+/////////////////////////////////////////////////////////////////////////////
 // TASWFormatString
 //
-// A format string plus the source location of the call that passed it, taken by the *Fmt methods. C++ doesn't allow
-// a defaulted std::source_location parameter after the arguments' parameter pack, but the defaulted argument of this
-// implicit constructor is evaluated at the call site too, so it captures the caller's location.
+// A format string plus the source location of the call that passed it, taken by the *Fmt methods, where Args are the
+// types of the arguments it formats. A compile-time constant format string (e.g. a literal) is checked against them
+// at compile time, like std::format's, so LogInfoFmt("{} {}", 1) doesn't compile. A format string known only at run
+// time must be wrapped in RuntimeFormat().
+//
+// C++ doesn't allow a defaulted std::source_location parameter after the arguments' parameter pack, but the defaulted
+// argument of these implicit constructors is evaluated at the call site too, so it captures the caller's location.
 /////////////////////////////////////////////////////////////////////////////
+template<typename ... Args>
 struct TASWFormatString
 {
     std::string_view Format;
@@ -55,15 +82,23 @@ struct TASWFormatString
 
     template<typename T>
     requires std::convertible_to<const T&, std::string_view>
-    TASWFormatString(const T& format, std::source_location location = std::source_location::current())
+    consteval TASWFormatString(const T& format, std::source_location location = std::source_location::current())
         : Format(format),
+          Location(location)
+    {
+        // std::format_string's constructor fails to compile if the format string doesn't match Args
+        [[maybe_unused]] const std::format_string<Args...> checkedFormat(Format);
+    }
+
+    TASWFormatString(TASWRuntimeFormat format, std::source_location location = std::source_location::current()) noexcept
+        : Format(format.Format),
           Location(location)
     {
     }
 
-    // Formats the message from 'args'. Never throws: if formatting fails (e.g. the format string doesn't match the
-    // arguments), returns "[ASWLog format error: <reason>] <format string>" instead, so the entry is still logged.
-    template<typename ... Args>
+    // Formats the message from 'args'. Never throws: if formatting fails (e.g. a RuntimeFormat() string doesn't match
+    // the arguments, or a formatter throws), returns "[ASWLog format error: <reason>] <format string>" instead, so the
+    // entry is still logged.
     [[nodiscard]] std::string FormatMessage(Args&... args) const noexcept
     {
         try
@@ -153,71 +188,73 @@ public:
     virtual void LogCritical(std::string_view msg, std::source_location loc = std::source_location::current()) = 0;
 
     // --- Non-virtual Inline Template Format Methods ---
-    // Each passes on the caller's source location, captured by TASWFormatString. A formatting error is logged in place
-    // of the message instead of thrown (see TASWFormatString::FormatMessage()). An entry that wouldn't be written isn't
-    // formatted: see ShouldLog(), and, for the LogForce*Fmt() methods, IsEnabled() and Level::Off.
+    // Each passes on the caller's source location, captured by TASWFormatString. The format string is checked against
+    // the arguments at compile time. Use RuntimeFormat() to wrap run time format strings. A formatting error at run
+    // time is logged in place of the message instead of thrown (see TASWFormatString::FormatMessage()). An entry that
+    // wouldn't be written isn't formatted: see ShouldLog(), and, for the LogForce*Fmt() methods, IsEnabled() and
+    // Level::Off. The type_identity_t keeps 'fmt' from taking part in deducing Args, like std::format's parameter.
     template<typename ... Args>
-    inline void LogFmt(Level level, TASWFormatString fmt, Args&&... args)
+    inline void LogFmt(Level level, TASWFormatString<std::type_identity_t<Args>...> fmt, Args&&... args)
     {
         if (ShouldLog(level))
             Log(level, fmt.FormatMessage(args ...), fmt.Location);
     }
 
     template<typename ... Args>
-    inline void LogRawFmt(Level level, TASWFormatString fmt, Args&&... args)
+    inline void LogRawFmt(Level level, TASWFormatString<std::type_identity_t<Args>...> fmt, Args&&... args)
     {
         if (ShouldLog(level))
             LogRaw(level, fmt.FormatMessage(args ...), fmt.Location);
     }
 
     template<typename ... Args>
-    inline void LogForceFmt(Level level, TASWFormatString fmt, Args&&... args)
+    inline void LogForceFmt(Level level, TASWFormatString<std::type_identity_t<Args>...> fmt, Args&&... args)
     {
         if (level != Level::Off && IsEnabled())
             LogForce(level, fmt.FormatMessage(args ...), fmt.Location);
     }
 
     template<typename ... Args>
-    inline void LogForceRawFmt(Level level, TASWFormatString fmt, Args&&... args)
+    inline void LogForceRawFmt(Level level, TASWFormatString<std::type_identity_t<Args>...> fmt, Args&&... args)
     {
         if (level != Level::Off && IsEnabled())
             LogForceRaw(level, fmt.FormatMessage(args ...), fmt.Location);
     }
 
     template<typename ... Args>
-    inline void LogTraceFmt(TASWFormatString fmt, Args&&... args)
+    inline void LogTraceFmt(TASWFormatString<std::type_identity_t<Args>...> fmt, Args&&... args)
     {
-        LogFmt(Level::Trace, fmt, args ...);
+        LogFmt(Level::Trace, fmt, std::forward<Args>(args) ...);
     }
 
     template<typename ... Args>
-    inline void LogDebugFmt(TASWFormatString fmt, Args&&... args)
+    inline void LogDebugFmt(TASWFormatString<std::type_identity_t<Args>...> fmt, Args&&... args)
     {
-        LogFmt(Level::Debug, fmt, args ...);
+        LogFmt(Level::Debug, fmt, std::forward<Args>(args) ...);
     }
 
     template<typename ... Args>
-    inline void LogInfoFmt(TASWFormatString fmt, Args&&... args)
+    inline void LogInfoFmt(TASWFormatString<std::type_identity_t<Args>...> fmt, Args&&... args)
     {
-        LogFmt(Level::Info, fmt, args ...);
+        LogFmt(Level::Info, fmt, std::forward<Args>(args) ...);
     }
 
     template<typename ... Args>
-    inline void LogWarnFmt(TASWFormatString fmt, Args&&... args)
+    inline void LogWarnFmt(TASWFormatString<std::type_identity_t<Args>...> fmt, Args&&... args)
     {
-        LogFmt(Level::Warn, fmt, args ...);
+        LogFmt(Level::Warn, fmt, std::forward<Args>(args) ...);
     }
 
     template<typename ... Args>
-    inline void LogErrorFmt(TASWFormatString fmt, Args&&... args)
+    inline void LogErrorFmt(TASWFormatString<std::type_identity_t<Args>...> fmt, Args&&... args)
     {
-        LogFmt(Level::Error, fmt, args ...);
+        LogFmt(Level::Error, fmt, std::forward<Args>(args) ...);
     }
 
     template<typename ... Args>
-    inline void LogCriticalFmt(TASWFormatString fmt, Args&&... args)
+    inline void LogCriticalFmt(TASWFormatString<std::type_identity_t<Args>...> fmt, Args&&... args)
     {
-        LogFmt(Level::Critical, fmt, args ...);
+        LogFmt(Level::Critical, fmt, std::forward<Args>(args) ...);
     }
 };
 

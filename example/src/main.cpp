@@ -22,6 +22,8 @@ limitations under the License.
 
 //---------------------------------------------------------------------------
 #include <iostream>
+#include <string>
+#include <string_view>
 //---------------------------------------------------------------------------
 #include "ASWLog_ConsoleLog.h"
 #include "ASWLog_FileLog.h"
@@ -36,6 +38,15 @@ void SampleFunction(ASWLog::IASWLog& logger)
 
     // Testing C++20 inline type-safe string formatting layout
     logger.LogDebugFmt("Dynamic template formatting inside function: status={}, value={:.4f}", "ACTIVE", 3.14159);
+
+    // Format strings are checked against their arguments at compile time; a named constant works like a literal
+    static constexpr std::string_view StatusFormat = "Status of {}: {}";
+    logger.LogInfoFmt(StatusFormat, "SampleFunction", "OK");
+    // logger.LogInfoFmt("{} and {}", "only one"); // Doesn't compile: too few arguments
+
+    // A format string known only at run time (e.g. loaded from a file) is checked when the entry is formatted instead
+    const std::string loadedFormat = "Loaded format with value={}";
+    logger.LogInfoFmt(ASWLog::RuntimeFormat(loadedFormat), 42);
 }
 
 // Class example

@@ -7,7 +7,8 @@ ASWLog is a thread-safe light-weight C++ logging tool for Windows and Linux proj
 - Portable C++20 logger for Windows and Linux, with CMake and RAD Studio examples.
 - Thread-safe file logging with singleton or independent logger instances.
 - Configurable log levels, metadata, line endings, flushing, file paths, and rotation.
-- Formatted, raw, forced, and force-raw logging APIs with source-location support.
+- Formatted, raw, forced, and force-raw logging APIs with source-location support. Format strings are checked
+  against their arguments at compile time; wrap one built at run time in `ASWLog::RuntimeFormat()`.
 - Runtime `Open()`, `Close()`, `Flush()`, reconfiguration, and log rotation controls.
 - Optional application and system memory, OS, drive, time, and command-line diagnostics.
 - Retry handling for temporary file access conflicts and Windows reader-sharing support.

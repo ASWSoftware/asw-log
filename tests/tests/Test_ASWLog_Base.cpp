@@ -175,6 +175,7 @@ TTest_ASWLog_Base::TTest_ASWLog_Base()
 {
     RegisterTest(&TTest_ASWLog_Base::Test_GetConfig_ReturnsLiveMutableReference, "GetConfig_ReturnsLiveMutableReference");
     RegisterTest(&TTest_ASWLog_Base::Test_GetFullVersionStr_ContainsVersion, "GetFullVersionStr_ContainsVersion");
+    RegisterTest(&TTest_ASWLog_Base::Test_LogFormatMethods_AcceptEveryArgumentKind, "LogFormatMethods_AcceptEveryArgumentKind");
     RegisterTest(&TTest_ASWLog_Base::Test_LogFormatMethods_LogErrorInsteadOfThrowing, "LogFormatMethods_LogErrorInsteadOfThrowing");
     RegisterTest(&TTest_ASWLog_Base::Test_LogFormatMethods_PassCallerLocation, "LogFormatMethods_PassCallerLocation");
     RegisterTest(&TTest_ASWLog_Base::Test_LogFormatMethods_SkipFormattingWhenNotWritten, "LogFormatMethods_SkipFormattingWhenNotWritten");
@@ -241,6 +242,33 @@ void TTest_ASWLog_Base::Test_GetFullVersionStr_ContainsVersion()
     CheckEquals(expected, version, __func__, __LINE__, "Full version string should combine the logger class name and the version number");
 }
 //---------------------------------------------------------------------------
+void TTest_ASWLog_Base::Test_LogFormatMethods_AcceptEveryArgumentKind()
+{
+    // Arrange
+    // rvalue, lvalue and const lvalue arguments deduce different Args, which the level shortcuts must forward
+    // unchanged to LogFmt() for the checked format string's type to match (a mismatch wouldn't compile)
+    TTestLogger logger;
+    int value = 1;
+    const int constValue = 2;
+    std::string text = "three";
+    const std::string_view view = "four";
+    static constexpr std::string_view constantFormat = "{}-{}"; // A compile-time constant, but not a literal
+    const std::string runtimeFormat = "{} {} {} {} {}";
+
+    // Act and Assert
+    logger.LogInfoFmt("{} {} {} {} {}", value, constValue, text, view, 5);
+    CheckEquals(std::string("1 2 three four 5"), logger.LastMessage, __func__, __LINE__, "A level shortcut should format every kind of argument");
+
+    logger.LogFmt(ASWLog::Level::Info, "{} {} {} {} {}", value, constValue, text, view, 5);
+    CheckEquals(std::string("1 2 three four 5"), logger.LastMessage, __func__, __LINE__, "LogFmt() should format every kind of argument");
+
+    logger.LogWarnFmt(constantFormat, value, text);
+    CheckEquals(std::string("1-three"), logger.LastMessage, __func__, __LINE__, "A constexpr string_view format should be accepted");
+
+    logger.LogInfoFmt(ASWLog::RuntimeFormat(runtimeFormat), value, constValue, text, view, 5);
+    CheckEquals(std::string("1 2 three four 5"), logger.LastMessage, __func__, __LINE__, "A RuntimeFormat() string that matches its arguments should format like a literal");
+}
+//---------------------------------------------------------------------------
 void TTest_ASWLog_Base::Test_LogFormatMethods_LogErrorInsteadOfThrowing()
 {
     // Arrange
@@ -253,7 +281,7 @@ void TTest_ASWLog_Base::Test_LogFormatMethods_LogErrorInsteadOfThrowing()
     // Act
     try
     {
-        logger.LogInfoFmt("bad {} {}", 1);
+        logger.LogInfoFmt(ASWLog::RuntimeFormat("bad {} {}"), 1); // A literal would fail to compile
         wrongArgumentCountMessage = logger.LastMessage;
 
         logger.LogErrorFmt("value {}", TThrowingValue{ true });
@@ -282,6 +310,7 @@ void TTest_ASWLog_Base::Test_LogFormatMethods_PassCallerLocation()
     logger.SetMinimumLevel(ASWLog::Level::Trace); // So LogTraceFmt()/LogDebugFmt() aren't filtered before formatting
     const std::string testName = __func__;
     const std::string thisFile = std::source_location::current().file_name();
+    const std::string runtimeFormat = "runtime {}";
 
     // Checks the location and message the last *Fmt call passed to the logger
     const auto checkCall = [&](int expectedLine, const std::string& method, const std::string& expectedMessage)
@@ -331,8 +360,12 @@ void TTest_ASWLog_Base::Test_LogFormatMethods_PassCallerLocation()
     checkCall(line, "LogErrorFmt", "error 9");
 
     line = __LINE__ + 1;
-    logger.LogCriticalFmt(std::string("critical {}"), 10); // A std::string format also converts
+    logger.LogCriticalFmt("critical {}", 10);
     checkCall(line, "LogCriticalFmt", "critical 10");
+
+    line = __LINE__ + 1;
+    logger.LogInfoFmt(ASWLog::RuntimeFormat(runtimeFormat), 11);
+    checkCall(line, "LogInfoFmt with RuntimeFormat()", "runtime 11");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_Base::Test_LogFormatMethods_SkipFormattingWhenNotWritten()
