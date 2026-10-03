@@ -117,6 +117,7 @@ private:
     std::chrono::system_clock::time_point m_LastRotationFailure{}; // NowUTC() when a rotation last failed
 
 private:
+    void CloseFileUnlocked(); // Closes the file but, unlike CloseUnlocked(), leaves the logger initialized
     void MaybeFlush(bool isNewLine);
     void RotateDailyLogFromEarlierDayUnlocked();
     bool RotateLogFilesUnlocked(std::string_view reasonTag, std::string_view timeLabel);

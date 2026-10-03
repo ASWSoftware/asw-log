@@ -105,7 +105,9 @@ void TASWTextLogBase::Finalize() noexcept
         if (!m_IsInitialized.load(std::memory_order_acquire))
             return;
 
-        if (m_Config.Shutdown.WriteLine)
+        // EnsureReadyUnlocked() reopens an output that is closed between entries (e.g. a file with
+        // AutoOpenClosePerWrite)
+        if (m_Config.Shutdown.WriteLine && EnsureReadyUnlocked())
         {
             std::string msg = "Logger shutdown: " + Time::ToISO8601String(NowUTC());
 

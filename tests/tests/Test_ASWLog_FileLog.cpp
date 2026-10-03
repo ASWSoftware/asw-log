@@ -193,6 +193,7 @@ std::string ReadFileText(const std::filesystem::path& path)
 TTest_ASWLog_FileLog::TTest_ASWLog_FileLog()
     : inherited("ASWLog_FileLog_Tests")
 {
+    RegisterTest(&TTest_ASWLog_FileLog::Test_AutoOpenClose_StaysInitializedBetweenWrites, "AutoOpenClose_StaysInitializedBetweenWrites");
     RegisterTest(&TTest_ASWLog_FileLog::Test_ChildProcess_DoesNotInheritLogFile, "ChildProcess_DoesNotInheritLogFile");
     RegisterTest(&TTest_ASWLog_FileLog::Test_DailyRolling_KeepsExistingBackupForSameDate, "DailyRolling_KeepsExistingBackupForSameDate");
     RegisterTest(&TTest_ASWLog_FileLog::Test_DailyRolling_KeepsLeftoverLogFromSameDay, "DailyRolling_KeepsLeftoverLogFromSameDay");
@@ -261,6 +262,42 @@ void TTest_ASWLog_FileLog::TearDown_Test(ITestCase& testCase)
 
 // /////// Begin tests after this line ///////////////////////
 
+//---------------------------------------------------------------------------
+void TTest_ASWLog_FileLog::Test_AutoOpenClose_StaysInitializedBetweenWrites()
+{
+    // Arrange: with File.AutoOpenClosePerWrite the file is closed after every entry, which must not uninitialize the
+    // logger
+    const auto logFile = TestTempDir / "auto_open_close.log";
+    auto config = MakeRotationTestConfig(logFile);
+    config.File.AutoOpenClosePerWrite = true;
+    config.Startup.Banner = "startup_banner";
+    config.Shutdown.WriteLine = true;
+
+    // Act
+    bool initialized = false;
+    bool initializedAgain = true;
+    {
+        ASWLog::TASWFileLog logger;
+        initialized = logger.Initialize(config);
+        logger.LogInfo("entry");
+        initializedAgain = logger.Initialize(config);
+    }
+
+    const auto contents = ReadFileText(logFile);
+    const auto bannerPos = contents.find("startup_banner");
+    const auto entryPos = contents.find(": entry\n");
+    const auto shutdownPos = contents.find(": Logger shutdown: ");
+
+    // Assert
+    CheckTrue(initialized, __func__, __LINE__, "Initialize should succeed");
+    CheckFalse(initializedAgain, __func__, __LINE__,
+        "A second Initialize() should fail while the logger is initialized, although its file is closed between writes");
+    CheckTrue(bannerPos != std::string::npos && contents.find("startup_banner", bannerPos + 1) == std::string::npos, __func__,
+        __LINE__, "The startup banner should be written exactly once");
+    CheckTrue(entryPos != std::string::npos, __func__, __LINE__, "The entry should be written");
+    CheckTrue(shutdownPos != std::string::npos && shutdownPos > entryPos, __func__, __LINE__,
+        "The destructor should write the shutdown line after the last entry: " + contents);
+}
 //---------------------------------------------------------------------------
 void TTest_ASWLog_FileLog::Test_ChildProcess_DoesNotInheritLogFile()
 {

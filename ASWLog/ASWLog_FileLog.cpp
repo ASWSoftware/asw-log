@@ -302,13 +302,14 @@ TASWFileLog::~TASWFileLog()
 //---------------------------------------------------------------------------
 void TASWFileLog::AfterEntryUnlocked()
 {
-    // In this mode the file is only open while an entry (or Initialize()'s startup lines) is written
+    // In this mode the file is only open while an entry (or Initialize()'s startup lines) is written. Unlike Close(),
+    // this leaves the logger initialized.
     if (m_Config.File.AutoOpenClosePerWrite)
-        CloseUnlocked();
+        CloseFileUnlocked();
 }
 
 //---------------------------------------------------------------------------
-bool TASWFileLog::CloseUnlocked()
+void TASWFileLog::CloseFileUnlocked()
 {
     if (m_FileStream.IsOpen())
     {
@@ -317,6 +318,12 @@ bool TASWFileLog::CloseUnlocked()
     }
 
     m_IsOpen.store(false, std::memory_order_release);
+}
+
+//---------------------------------------------------------------------------
+bool TASWFileLog::CloseUnlocked()
+{
+    CloseFileUnlocked();
     m_IsInitialized.store(false, std::memory_order_release);
     return true;
 }

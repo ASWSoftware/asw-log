@@ -131,6 +131,14 @@ see [0.26.1](#0261---2026-09-17) for the initial versioned baseline.
 
   A custom formatter reads the line options from `config.Line`.
 
+### Fixed
+
+- A file logger with `AutoOpenClosePerWrite` now writes its shutdown line,
+  and a second `Initialize()` call fails as for any initialized logger.
+  Closing the file after each entry used to mark the logger as not
+  initialized, so the shutdown line was skipped and a repeated
+  `Initialize()` wrote the startup lines again.
+
 ## [0.45.0] - 2026-10-01
 
 ### Added
