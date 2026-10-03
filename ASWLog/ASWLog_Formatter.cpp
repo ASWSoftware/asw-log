@@ -53,32 +53,32 @@ std::string TASWTextFormatter::FormatLine(const TASWLogRecord& record, const TAS
     std::string line;
     line.reserve(record.Message.size() + 256);
 
-    if (config.LogUTCDateTime)
+    if (config.Line.ShowTimestamp)
         std::format_to(std::back_inserter(line), "[{}]", Time::ToISO8601String(record.Timestamp));
 
-    if (config.LogLevelStr)
+    if (config.Line.ShowLevel)
         std::format_to(std::back_inserter(line), "[{}]", Level_ToString(record.LogLevel));
 
-    if (config.LogProcessId)
+    if (config.Line.ShowProcessId)
         std::format_to(std::back_inserter(line), "[P:{}]", record.ProcessId);
 
-    if (config.LogThreadId)
+    if (config.Line.ShowThreadId)
         std::format_to(std::back_inserter(line), "[T:{}]", record.ThreadId);
 
-    if (config.LogAppMem_WorkingSet || config.LogAppMem_PeakWorkingSet)
+    if (config.Line.ShowWorkingSet || config.Line.ShowPeakWorkingSet)
     {
         const auto memoryUsage = GetMemoryUsage();
-        if (config.LogAppMem_WorkingSet)
+        if (config.Line.ShowWorkingSet)
             std::format_to(std::back_inserter(line), "[WS:{}]", memoryUsage.WorkingSetBytes);
 
-        if (config.LogAppMem_PeakWorkingSet)
+        if (config.Line.ShowPeakWorkingSet)
             std::format_to(std::back_inserter(line), "[PWS:{}]", memoryUsage.PeakWorkingSetBytes);
     }
 
-    if (config.LogMethodName)
+    if (config.Line.ShowFunctionName)
         std::format_to(std::back_inserter(line), "[{}]", record.Location.function_name());
 
-    if (config.LogSourceLine)
+    if (config.Line.ShowSourceLine)
     {
         std::filesystem::path fullPath(record.Location.file_name());
         std::format_to(std::back_inserter(line), "[{}:{}]", fullPath.filename().string(), record.Location.line());

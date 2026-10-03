@@ -10,6 +10,176 @@ see [0.26.1](#0261---2026-09-17) for the initial versioned baseline.
 
 ## [Unreleased]
 
+### Added
+
+- `Level::Off`, to turn a logger off through its level:
+  `SetMinimumLevel(Level::Off)` (or `InitialMinimumLevel`) stops all
+  entries except `LogForce`/`LogForceRaw`, which still ignore the minimum
+  level, and `CallbackMinimumLevel = Level::Off` turns off `OnLogEntry`. A
+  message logged at `Off` is never written, even when forced.
+  `Level_ToString` gives "OFF", and `Level_FromString` accepts "OFF" and
+  "NONE". `LevelCount` stays 6 (the severity levels, not counting `Off`).
+  Code that switches over every `Level` value must handle `Off`.
+- `IASWLog::SetEnabled()`/`IsEnabled()`: a disabled logger writes nothing,
+  not even forced entries or the startup and shutdown lines, while its
+  output stays open and its level is kept (lock-free, like the level). Use
+  it to stop logging; `Close()` releases the output, but with
+  `AutoOpenClosePerWrite` the next entry reopens the file.
+- `GetMinimumLevel()`/`SetMinimumLevel()` and the new `ShouldLog(level)` are
+  now on `IASWLog`, so code holding only an `IASWLog&` can use them.
+  `ShouldLog()` is true if `Log()` would write an entry at that level (for a
+  multi-log, if any of its loggers would); use it to skip building an
+  expensive message.
+- `IASWLog::Flush()`, so code holding only an `IASWLog&` can push buffered
+  entries out, e.g. before a risky operation or with `FlushMode::Manual`.
+  The console logger flushes stdout and stderr, and a multi-log flushes
+  every logger it holds, returning false if any of them failed. It returns
+  false if the output isn't open, works while the logger is disabled, and
+  never throws. A custom logger must add `bool Flush() noexcept override`,
+  including one deriving from `TASWLogBase` (there is no default); one
+  deriving from `TASWTextLogBase` implements the hook
+  `bool FlushUnlocked() override` instead, which is called with the lock
+  held.
+- `IASWLog::Write(const TASWLogRecord&)`, the one method through which a
+  logger receives every entry, and `Raw`/`Forced` flags on
+  `TASWLogRecord`. A record can be passed on as is, e.g. to another logger.
+- `IASWLog::Reconfigure(const TASWLogConfig&)` changes an initialized
+  logger's settings safely while other threads log; entries written after it
+  returns use them. A file logger whose file path or
+  `AutoOpenClosePerWrite` changed closes the old file and opens the new one
+  (if that fails, `Reconfigure()` returns false, the settings are kept and
+  later entries retry the open); otherwise it flushes and keeps the file.
+  It doesn't change the minimum level (use `SetMinimumLevel()`) or write the
+  startup lines. A multi-log passes the settings on to every logger it
+  holds, like `Initialize()`.
+- `ASWLog_Version.h`, the single source of the version: the macros
+  `ASWLOG_VERSION_MAJOR`, `ASWLOG_VERSION_MINOR`, `ASWLOG_VERSION_PATCH`,
+  `ASWLOG_VERSION_PRERELEASE` (empty on a release, e.g. `dev.1` between
+  releases) and `ASWLOG_VERSION_STRING` (e.g. `1.1.0-dev.1`), usable in
+  `#if` to support several ASWLog versions, and the same values as
+  `ASWLog::VersionMajor`, `VersionMinor`, `VersionPatch`,
+  `VersionPreRelease` and `Version` constants. `GetVersionStr()` returns
+  `ASWLOG_VERSION_STRING`. Projects that list the ASWLog sources themselves
+  (rather than using the CMake target) must add `ASWLog_Version.cpp` and
+  `ASWLog_Version.h`.
+
+### Changed
+
+- The `*Fmt` methods no longer format an entry that wouldn't be written:
+  below the minimum level, at `Off`, or with the logger disabled (a forced
+  entry is skipped only at `Off` or while disabled). Such an entry also no
+  longer reaches the logger's `Log()`, which matters only for a custom
+  logger that ignores its level. Code implementing `IASWLog` directly must
+  add `IsEnabled`, `SetEnabled`, `GetMinimumLevel`, `SetMinimumLevel` and
+  `ShouldLog` (deriving from `TASWLogBase` needs no change). `TASWLogBase`'s
+  level is now private: a derived class that set `m_MinimumLevel` must call
+  `SetMinimumLevel()` instead.
+- The `*Fmt` methods check the format string against their arguments at
+  compile time, like `std::format`, so a mismatch such as
+  `LogInfoFmt("{} {}", 1)` no longer compiles (it used to log
+  `[ASWLog format error: ...]`). A format string that isn't a compile-time
+  constant, such as a `std::string` variable, must now be wrapped in the new
+  `ASWLog::RuntimeFormat(...)`, which keeps the check at run time and still
+  logs the format error on a mismatch. A custom `std::formatter` used with
+  them needs a `constexpr` `parse()`, as `std::format` already requires.
+  `TASWFormatString` is now a class template.
+- Every logging method now builds a `TASWLogRecord` and passes it to
+  `Write()`. `Log`, `LogRaw`, `LogForce`, `LogForceRaw` and the level
+  shortcuts (`LogTrace` ... `LogCritical`) are no longer virtual, and a
+  filtered `LogTrace` etc. is about 3x faster (one virtual call instead of
+  two). An entry's time, process id and thread id are read when the call is
+  made, on the calling thread, rather than once the logger holds its lock,
+  so the time is the moment of the call; all loggers of a multi-log show
+  the same time. Daily rolling only moves forward: an entry stamped just
+  before midnight that is written after the log rolled over goes into the
+  new day's log. Custom loggers must change: one deriving from
+  `TASWLogBase` replaces its `Log`/`LogRaw`/`LogForce`/`LogForceRaw`
+  overrides with `void WriteRecord(const TASWLogRecord&) override`, which
+  gets only entries that pass its enabled and level checks, already
+  stamped (use `record.Raw` and `record.Forced`); one implementing
+  `IASWLog` directly implements `Write()` and applies those checks itself.
+  `OnLogEntry` callbacks now take `(const TASWLogRecord& record,
+  std::string_view formattedLine)` instead of `(Level, std::string_view)`;
+  the level is `record.LogLevel`.
+- Logging never throws into the application, and the signatures now say
+  so: `Write()`, the `Log*` methods, the `*Fmt` methods, `Initialize()`,
+  `Open()` and `Close()` are `noexcept` (every `IASWLog` method except
+  `GetFullVersionStr()`), and `Initialize()`/`Open()`/`Close()` return
+  false on an unexpected exception. A startup line whose formatter throws
+  no longer makes `Initialize()` throw; the remaining startup lines are
+  skipped and the logger is initialized. Custom loggers must declare
+  `Initialize`, `Open`, `Close` and (when implementing `IASWLog` directly)
+  `Write` overrides `noexcept`; a `WriteRecord()` override may still
+  throw, since `TASWLogBase::Write()` drops the entry instead.
+- `TASWLogConfig` is regrouped by concern, so it's clear which settings a
+  logger uses: `Line` (`TASWLineConfig`, the line layout), `Startup`
+  (`TASWStartupConfig`), `Shutdown` (`TASWShutdownConfig`) and `File`
+  (`TASWFileConfig`, which the console logger and the multi-log ignore).
+  `InitialMinimumLevel` and `OnLogEntry` stay at the top. Defaults and
+  behavior are unchanged. Code that sets the config must rename its
+  fields (old -> new):
+  - `LogUTCDateTime` -> `Line.ShowTimestamp` (it turns the timestamp on
+    or off; it is always UTC)
+  - `LogLevelStr` -> `Line.ShowLevel`, `LogProcessId` ->
+    `Line.ShowProcessId`, `LogThreadId` -> `Line.ShowThreadId`
+  - `LogAppMem_WorkingSet` -> `Line.ShowWorkingSet`,
+    `LogAppMem_PeakWorkingSet` -> `Line.ShowPeakWorkingSet`
+  - `LogMethodName` -> `Line.ShowFunctionName`, `LogSourceLine` ->
+    `Line.ShowSourceLine`
+  - `LogLineEnding` -> `Line.Ending`, `Formatter` -> `Line.Formatter`
+  - `BannerMessage_Init` -> `Startup.Banner`
+  - `Init_LogApplicationInfo` -> `Startup.WriteApplicationInfo`,
+    `Init_LogCommandLine` -> `Startup.WriteCommandLine`,
+    `Init_LogDriveInfo` -> `Startup.WriteDriveInfo`,
+    `Init_LogMemoryUsage` -> `Startup.WriteMemoryUsage`,
+    `Init_LogOSInfo` -> `Startup.WriteOSInfo`, `Init_LogSysMemInfo` ->
+    `Startup.WriteSystemMemoryInfo`, `Init_LogTimeInfo` ->
+    `Startup.WriteTimeInfo`
+  - `WriteShutdownLog` -> `Shutdown.WriteLine`, `BannerMessage_Shutdown`
+    -> `Shutdown.Banner`
+  - `LogsFolderPath` -> `File.FolderPath`, `LogFilePath` ->
+    `File.FilePath`, `LogFlushMode` -> `File.Flush`
+  - `AutoOpenClosePerWrite`, `FlushInterval`, `OpenRetryCount`,
+    `OpenRetryDelay`, `CircuitBreakerResetDelay`, `EnableRotation`,
+    `MaxFileSizeBytes`, `RotationRetryDelay`, `EnableDailyRolling` and
+    `RetentionMaxAge` move into `File` under the same names (e.g.
+    `File.EnableRotation`)
+  - `ResolveLogFilePath()` -> `File.ResolvePath()`, `ResolveLogFileDir()`
+    -> `File.ResolveFolder()`
+  - `CallbackMinimumLevel` -> `OnLogEntryMinimumLevel`
+
+  A custom formatter reads the line options from `config.Line`.
+- `GetConfig()` returns the settings as an immutable snapshot,
+  `std::shared_ptr<const TASWLogConfig>`, instead of a reference to the
+  logger's own config; the non-const overload is removed. A snapshot stays
+  valid and unchanged after the settings change. To change a setting after
+  `Initialize()`, copy the snapshot, change the copy and pass it to
+  `Reconfigure()`:
+  `auto config = *logger.GetConfig(); config.Line.ShowThreadId = false; logger.Reconfigure(config);`.
+  Read fields through the pointer (`logger.GetConfig()->File.FilePath`).
+  Custom loggers must change: one implementing `IASWLog` directly, or
+  deriving from `TASWLogBase`, implements
+  `bool Reconfigure(const TASWLogConfig&) noexcept override`, and one
+  deriving from `TASWLogBase` stores the config with the protected
+  `SetConfig()` instead of assigning `m_Config` (now private), and reads it
+  with `GetConfigUnlocked()` while holding its own lock. One deriving from
+  `TASWTextLogBase` can override the new hook `ReconfigureUnlocked()`.
+
+### Fixed
+
+- A file logger with `AutoOpenClosePerWrite` now writes its shutdown line,
+  and a second `Initialize()` call fails as for any initialized logger.
+  Closing the file after each entry used to mark the logger as not
+  initialized, so the shutdown line was skipped and a repeated
+  `Initialize()` wrote the startup lines again.
+- Data races when changing settings while other threads log: changing a
+  field through `GetConfig()`'s reference, which had no lock, and calling
+  the `OnLogEntry` callback, which was read from the config after the
+  logger's lock was released. Settings now change only through
+  `Reconfigure()`, under the lock, and the callback is called from the
+  settings the entry was written with, so a callback may also reconfigure
+  the logger it belongs to.
+
 ## [0.45.0] - 2026-10-01
 
 ### Added

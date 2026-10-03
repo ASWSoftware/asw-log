@@ -1,6 +1,8 @@
 /* **************************************************************************
-Test_ASWLog_Config.h
+ASWLog_Version.cpp
 Author: Anthony S. West - ASW Software
+
+See header for info.
 
 Copyright 2026 Anthony S. West
 
@@ -18,40 +20,14 @@ limitations under the License.
 
 ************************************************************************** */
 
-#ifndef Test_ASWLog_ConfigH
-#define Test_ASWLog_ConfigH
 //---------------------------------------------------------------------------
-#include "ASWUnitTests_TestBase.h"
+// Module header
+#include "ASWLog_Version.h"
 //---------------------------------------------------------------------------
 
-namespace ASWUnitTests
+namespace ASWLog
 {
 
-///////////////////////////////////////////////////////////////////////////
-// TTest_ASWLog_Config
-///////////////////////////////////////////////////////////////////////////
-class TTest_ASWLog_Config : public TTestGroupBase
-{
-private:
-    typedef TTestGroupBase inherited;
-
-private: // Test methods
-    void Test_Defaults_MatchDocumentedValues();
-    void Test_ResolveFolder_CustomFolder();
-    void Test_ResolvePath_AbsolutePath();
-    void Test_ResolvePath_Defaults();
-
-public:
-    TTest_ASWLog_Config();
-    ~TTest_ASWLog_Config() override;
-
-    void SetUp_Group() override;
-    void SetUp_Test(ITestCase& testCase) override;
-    void TearDown_Group() override;
-    void TearDown_Test(ITestCase& testCase) override;
-};
-
-} // ASWUnitTests
-
 //---------------------------------------------------------------------------
-#endif // #ifndef Test_ASWLog_ConfigH
+
+} // namespace ASWLog

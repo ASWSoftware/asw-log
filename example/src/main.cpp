@@ -22,6 +22,8 @@ limitations under the License.
 
 //---------------------------------------------------------------------------
 #include <iostream>
+#include <string>
+#include <string_view>
 //---------------------------------------------------------------------------
 #include "ASWLog_ConsoleLog.h"
 #include "ASWLog_FileLog.h"
@@ -36,6 +38,15 @@ void SampleFunction(ASWLog::IASWLog& logger)
 
     // Testing C++20 inline type-safe string formatting layout
     logger.LogDebugFmt("Dynamic template formatting inside function: status={}, value={:.4f}", "ACTIVE", 3.14159);
+
+    // Format strings are checked against their arguments at compile time; a named constant works like a literal
+    static constexpr std::string_view StatusFormat = "Status of {}: {}";
+    logger.LogInfoFmt(StatusFormat, "SampleFunction", "OK");
+    // logger.LogInfoFmt("{} and {}", "only one"); // Doesn't compile: too few arguments
+
+    // A format string known only at run time (e.g. loaded from a file) is checked when the entry is formatted instead
+    const std::string loadedFormat = "Loaded format with value={}";
+    logger.LogInfoFmt(ASWLog::RuntimeFormat(loadedFormat), 42);
 }
 
 // Class example
@@ -79,15 +90,15 @@ int main(int argc, char* argv[])
     // Configure global singleton instance options
     ASWLog::TASWLogConfig globalConfig;
     globalConfig.InitialMinimumLevel = ASWLog::Level::Trace; // Trap all logging thresholds
-    globalConfig.LogFilePath         = generatedName;
-    globalConfig.BannerMessage_Init = "--- WELCOME TO ASWLogExample - GLOBAL CONFIG ---";
-    globalConfig.BannerMessage_Shutdown = "GLOBAL LOGGER - I'm outta here";
+    globalConfig.File.FilePath = generatedName;
+    globalConfig.Startup.Banner = "--- WELCOME TO ASWLogExample - GLOBAL CONFIG ---";
+    globalConfig.Shutdown.Banner = "GLOBAL LOGGER - I'm outta here";
 
     // Toggle properties on
-    globalConfig.LogSourceLine = true;
-    globalConfig.LogMethodName = true;
-    globalConfig.LogAppMem_WorkingSet = true;
-    globalConfig.LogAppMem_PeakWorkingSet = true;
+    globalConfig.Line.ShowSourceLine = true;
+    globalConfig.Line.ShowFunctionName = true;
+    globalConfig.Line.ShowWorkingSet = true;
+    globalConfig.Line.ShowPeakWorkingSet = true;
 
     // Get singleton instance - the logger supports singleton and non-singleton instances
     auto& globalLogger = ASWLog::TASWFileLog::GetInstance();
@@ -108,7 +119,7 @@ int main(int argc, char* argv[])
 
     std::cout << "Cleaning up old global logs...\n";
     globalLogger.LogInfo("Cleaning up old global logs...");
-    auto logDir = globalConfig.ResolveLogFileDir();
+    auto logDir = globalConfig.File.ResolveFolder();
     std::size_t nLogsDeleted = ASWLog::TASWFileLog::DeleteOldLogs(logDir, "*ExampleLog.txt", std::chrono::hours(1));
     globalLogger.LogInfoFmt("Deleted {} old global logs...", nLogsDeleted);
     std::cout << "Deleted " << nLogsDeleted << " old global logs...\n";
@@ -126,13 +137,13 @@ int main(int argc, char* argv[])
     std::cout << "Testing independent local stack instance execution...\n";
     ASWLog::TASWLogConfig localConfig;
     localConfig.InitialMinimumLevel = ASWLog::Level::Warn; // Skips trace/debug/info
-    localConfig.BannerMessage_Init = "Local logger - howdy";
-    localConfig.BannerMessage_Shutdown = "Local logger - cya";
-    localConfig.LogFilePath    = "local_standalone_errors.txt";
-    localConfig.LogUTCDateTime = true;
-    localConfig.LogLevelStr    = true;
-    localConfig.LogProcessId   = false;
-    localConfig.LogThreadId    = false;
+    localConfig.Startup.Banner = "Local logger - howdy";
+    localConfig.Shutdown.Banner = "Local logger - cya";
+    localConfig.File.FilePath = "local_standalone_errors.txt";
+    localConfig.Line.ShowTimestamp = true;
+    localConfig.Line.ShowLevel = true;
+    localConfig.Line.ShowProcessId = false;
+    localConfig.Line.ShowThreadId = false;
 
     ASWLog::TASWFileLog localLogger;
     if (localLogger.Initialize(localConfig))
@@ -152,10 +163,10 @@ int main(int argc, char* argv[])
     std::cout << "Testing console logger with color-coded output...\n";
     ASWLog::TASWLogConfig consoleConfig;
     consoleConfig.InitialMinimumLevel = ASWLog::Level::Trace;
-    consoleConfig.LogUTCDateTime = false; // Keep console lines short and readable
-    consoleConfig.LogProcessId = false;
-    consoleConfig.LogThreadId = false;
-    consoleConfig.WriteShutdownLog = false;
+    consoleConfig.Line.ShowTimestamp = false; // Keep console lines short and readable
+    consoleConfig.Line.ShowProcessId = false;
+    consoleConfig.Line.ShowThreadId = false;
+    consoleConfig.Shutdown.WriteLine = false;
 
     ASWLog::TASWConsoleLog consoleLogger;
     // Colors are used only on a console or terminal that shows them (ColorMode::Auto, the default); uncomment to

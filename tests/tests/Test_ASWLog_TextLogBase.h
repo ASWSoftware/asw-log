@@ -37,12 +37,21 @@ private:
 
 private: // Test methods
     void Test_Finalize_WritesShutdownLineFromDestructor();
+    void Test_Flush_CallsHookAndReturnsItsResult();
+    void Test_Flush_ThrowingHookDoesNotEscape();
     void Test_Formatter_FormatsEveryFileLine();
+    void Test_Initialize_ThrowingFormatterStillInitializes();
     void Test_Initialize_WritesStartupLinesThenCallsAfterEntry();
+    void Test_Log_AtLevelOffIsNeverWritten();
     void Test_Log_DroppedWhenNotReadyOrNotPrepared();
     void Test_Log_FormatsFiltersAndCallsAfterEntry();
+    void Test_Log_MinimumLevelOffAllowsOnlyForcedEntries();
     void Test_Log_ThrowingWriteDoesNotEscape();
     void Test_LogRaw_WritesMessageAsIs();
+    void Test_OnLogEntry_CallbackCanReconfigureTheLogger();
+    void Test_Reconfigure_AppliesNewConfigButKeepsLevel();
+    void Test_Reconfigure_IsSafeWhileOtherThreadsLog();
+    void Test_SetEnabled_FalseWritesNothing();
 
 public:
     TTest_ASWLog_TextLogBase();

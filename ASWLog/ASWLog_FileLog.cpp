@@ -302,13 +302,14 @@ TASWFileLog::~TASWFileLog()
 //---------------------------------------------------------------------------
 void TASWFileLog::AfterEntryUnlocked()
 {
-    // In this mode the file is only open while an entry (or Initialize()'s startup lines) is written
-    if (m_Config.AutoOpenClosePerWrite)
-        CloseUnlocked();
+    // In this mode the file is only open while an entry (or Initialize()'s startup lines) is written. Unlike Close(),
+    // this leaves the logger initialized.
+    if (GetConfigUnlocked().File.AutoOpenClosePerWrite)
+        CloseFileUnlocked();
 }
 
 //---------------------------------------------------------------------------
-bool TASWFileLog::CloseUnlocked()
+void TASWFileLog::CloseFileUnlocked()
 {
     if (m_FileStream.IsOpen())
     {
@@ -317,6 +318,12 @@ bool TASWFileLog::CloseUnlocked()
     }
 
     m_IsOpen.store(false, std::memory_order_release);
+}
+
+//---------------------------------------------------------------------------
+bool TASWFileLog::CloseUnlocked()
+{
+    CloseFileUnlocked();
     m_IsInitialized.store(false, std::memory_order_release);
     return true;
 }
@@ -379,23 +386,16 @@ bool TASWFileLog::EnsureReadyUnlocked()
         return true;
 
     // In this mode the file is opened for every write
-    if (m_Config.AutoOpenClosePerWrite)
+    if (GetConfigUnlocked().File.AutoOpenClosePerWrite)
         return OpenUnlocked();
 
     // Initialized but closed only happens when the file couldn't be reopened (e.g. after a rotation), since Close()
     // also clears the initialized state. Circuit breaker: try again once CircuitBreakerResetDelay has passed since the
     // last failed attempt, instead of paying for a failed open on every write while the file stays unavailable.
-    if (isInitialized && IsRetryDue(m_LastOpenFailure, NowUTC(), m_Config.CircuitBreakerResetDelay))
+    if (isInitialized && IsRetryDue(m_LastOpenFailure, NowUTC(), GetConfigUnlocked().File.CircuitBreakerResetDelay))
         return OpenUnlocked();
 
     return false;
-}
-
-//---------------------------------------------------------------------------
-bool TASWFileLog::Flush()
-{
-    std::lock_guard<std::mutex> lock(m_Mutex);
-    return FlushUnlocked();
 }
 
 //---------------------------------------------------------------------------
@@ -424,7 +424,7 @@ TASWFileLog& TASWFileLog::GetInstance()
 //---------------------------------------------------------------------------
 bool TASWFileLog::InitializeUnlocked()
 {
-    if (m_Config.EnableDailyRolling)
+    if (GetConfigUnlocked().File.EnableDailyRolling)
         RotateDailyLogFromEarlierDayUnlocked();
 
     if (!OpenUnlocked())
@@ -439,7 +439,7 @@ bool TASWFileLog::InitializeUnlocked()
 //---------------------------------------------------------------------------
 void TASWFileLog::MaybeFlush(bool isNewLine)
 {
-    const auto flushMode = m_Config.LogFlushMode;
+    const auto flushMode = GetConfigUnlocked().File.Flush;
     if (flushMode == FlushMode::EveryWrite || (flushMode == FlushMode::OnNewLine && isNewLine))
     {
         FlushUnlocked();
@@ -449,7 +449,7 @@ void TASWFileLog::MaybeFlush(bool isNewLine)
     if (flushMode == FlushMode::Periodic)
     {
         const auto now = std::chrono::steady_clock::now();
-        if (now - m_LastFlushTime >= m_Config.FlushInterval)
+        if (now - m_LastFlushTime >= GetConfigUnlocked().File.FlushInterval)
             FlushUnlocked();
     }
 }
@@ -464,14 +464,14 @@ bool TASWFileLog::OpenUnlocked()
         return true;
     }
 
-    const auto effectivePath = m_Config.ResolveLogFilePath();
+    const auto effectivePath = GetConfigUnlocked().File.ResolvePath();
     if (!effectivePath.parent_path().empty())
     {
         std::error_code errorCode;
         std::filesystem::create_directories(effectivePath.parent_path(), errorCode);
     }
 
-    const auto retryCount = std::max<int>(1, m_Config.OpenRetryCount);
+    const auto retryCount = std::max<int>(1, GetConfigUnlocked().File.OpenRetryCount);
     for (int attempt = 0; attempt < retryCount; ++attempt)
     {
         m_FileStream.clear();
@@ -479,8 +479,8 @@ bool TASWFileLog::OpenUnlocked()
         if (m_FileStream.IsOpen())
             break;
 
-        if (attempt + 1 < retryCount && m_Config.OpenRetryDelay.count() > 0)
-            std::this_thread::sleep_for(m_Config.OpenRetryDelay);
+        if (attempt + 1 < retryCount && GetConfigUnlocked().File.OpenRetryDelay.count() > 0)
+            std::this_thread::sleep_for(GetConfigUnlocked().File.OpenRetryDelay);
     }
 
     if (!m_FileStream.IsOpen())
@@ -510,14 +510,16 @@ bool TASWFileLog::OpenUnlocked()
 */
 bool TASWFileLog::PrepareWriteUnlocked(std::chrono::system_clock::time_point now)
 {
-    if (m_Config.EnableDailyRolling)
+    if (GetConfigUnlocked().File.EnableDailyRolling)
     {
+        // Only rolls forward (ISO dates compare as text): an entry stamped just before midnight can get the lock after
+        // another thread's entry has rolled the log over, and then goes into the new day's log
         const auto currentDateStr = Time::ToDateString(now);
-        if (currentDateStr != m_LastLogDateStr)
+        if (currentDateStr > m_LastLogDateStr)
         {
             // Name the backup for the day its content is from, not the day that just started. A log shared with other
             // processes may already have been rolled over by one of them, so there the file's last write decides.
-            if (m_Config.AutoOpenClosePerWrite)
+            if (GetConfigUnlocked().File.AutoOpenClosePerWrite)
                 RotateDailyLogFromEarlierDayUnlocked();
             else
                 RotateLogFilesUnlocked("daily", m_LastLogDateStr);
@@ -528,13 +530,44 @@ bool TASWFileLog::PrepareWriteUnlocked(std::chrono::system_clock::time_point now
 
     // Uses the size tracked by the stream, since on Windows the size read through the path isn't current while open.
     // After a failed rotation (e.g. another program holds the file), waits RotationRetryDelay before trying again.
-    if (m_Config.EnableRotation && m_FileStream.IsOpen() && m_FileStream.GetSize() >= m_Config.MaxFileSizeBytes &&
-        IsRetryDue(m_LastRotationFailure, now, m_Config.RotationRetryDelay))
+    if (GetConfigUnlocked().File.EnableRotation && m_FileStream.IsOpen() && m_FileStream.GetSize() >= GetConfigUnlocked().File.MaxFileSizeBytes &&
+        IsRetryDue(m_LastRotationFailure, now, GetConfigUnlocked().File.RotationRetryDelay))
     {
         RotateLogFilesUnlocked("size", ToBackupTimeLabel(now));
     }
 
     return m_FileStream.IsOpen();
+}
+
+//---------------------------------------------------------------------------
+/*
+    TASWFileLog::ReconfigureUnlocked
+
+    If the file path or AutoOpenClosePerWrite changed, closes the old file and starts on the new one as Initialize()
+    does (rolling over a file from an earlier day, if daily rolling is on, then opening it). With AutoOpenClosePerWrite
+    the new file is closed again until the next entry, but opening it here reports a file that can't be opened. A
+    failed open keeps the logger initialized, so later entries try again (see EnsureReadyUnlocked()).
+
+    Otherwise the file stays open: flushes what the previous flush mode may have buffered, and the other settings take
+    effect with the next entry.
+*/
+bool TASWFileLog::ReconfigureUnlocked(const TASWLogConfig& previous)
+{
+    const auto& file = GetConfigUnlocked().File;
+    if (file.ResolvePath() == previous.File.ResolvePath() &&
+        file.AutoOpenClosePerWrite == previous.File.AutoOpenClosePerWrite)
+    {
+        if (m_FileStream.IsOpen())
+            FlushUnlocked();
+
+        return true;
+    }
+
+    CloseFileUnlocked();
+    const bool isOpen = InitializeUnlocked();
+    AfterEntryUnlocked();
+
+    return isOpen;
 }
 
 //---------------------------------------------------------------------------
@@ -559,7 +592,7 @@ bool TASWFileLog::RotateLogFiles(std::string_view reasonTag)
 */
 void TASWFileLog::RotateDailyLogFromEarlierDayUnlocked()
 {
-    const auto logPath = m_Config.ResolveLogFilePath();
+    const auto logPath = GetConfigUnlocked().File.ResolvePath();
 
     std::error_code errorCode;
     const auto fileSize = std::filesystem::file_size(logPath, errorCode);
@@ -593,7 +626,7 @@ bool TASWFileLog::RotateLogFilesUnlocked(std::string_view reasonTag, std::string
         m_IsOpen.store(false, std::memory_order_release);
     }
 
-    const auto logPath = m_Config.ResolveLogFilePath();
+    const auto logPath = GetConfigUnlocked().File.ResolvePath();
 
     std::error_code errorCode;
     if (std::filesystem::exists(logPath, errorCode))
@@ -622,10 +655,10 @@ bool TASWFileLog::RotateLogFilesUnlocked(std::string_view reasonTag, std::string
         return false;
     }
 
-    if (m_Config.RetentionMaxAge.count() > 0)
+    if (GetConfigUnlocked().File.RetentionMaxAge.count() > 0)
     {
-        DeleteOldLogs(m_Config.ResolveLogFileDir(),
-            std::format("{}.*.bak", PathToUTF8String(m_Config.ResolveLogFilePath().stem())), m_Config.RetentionMaxAge);
+        DeleteOldLogs(GetConfigUnlocked().File.ResolveFolder(),
+            std::format("{}.*.bak", PathToUTF8String(GetConfigUnlocked().File.ResolvePath().stem())), GetConfigUnlocked().File.RetentionMaxAge);
     }
 
     if (wasOpen)

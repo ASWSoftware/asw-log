@@ -7,12 +7,14 @@ ASWLog is a thread-safe light-weight C++ logging tool for Windows and Linux proj
 - Portable C++20 logger for Windows and Linux, with CMake and RAD Studio examples.
 - Thread-safe file logging with singleton or independent logger instances.
 - Configurable log levels, metadata, line endings, flushing, file paths, and rotation.
-- Formatted, raw, forced, and force-raw logging APIs with source-location support.
-- Runtime `Open()`, `Close()`, `Flush()`, reconfiguration, and log rotation controls.
+- Formatted, raw, forced, and force-raw logging APIs with source-location support. Format strings are checked
+  against their arguments at compile time; wrap one built at run time in `ASWLog::RuntimeFormat()`.
+- Runtime `Open()`, `Close()`, `Flush()` and log rotation controls, and `Reconfigure()` to change settings safely
+  while other threads log.
 - Optional application and system memory, OS, drive, time, and command-line diagnostics.
 - Retry handling for temporary file access conflicts and Windows reader-sharing support.
 - Wildcard-based cleanup for logs older than a specified age.
-- Extensible: assign your own formatter (`IASWLogFormatter`) to `TASWLogConfig::Formatter` for your own line layout,
+- Extensible: assign your own formatter (`IASWLogFormatter`) to `TASWLogConfig::Line.Formatter` for your own line layout,
   or derive a new text logger from `TASWTextLogBase` and implement only its output.
 
 # Donations:
@@ -66,6 +68,21 @@ cmake --build example/cmake/build --config Release
 ```
 
 The executable is written to `example/build/bin/Release/ASWLogExample.exe`, alongside RAD Studio output.
+
+## Versions
+
+ASWLog follows [Semantic Versioning](https://semver.org). Releases are tagged on `main` (e.g. `v1.1.0`). Between
+releases, the `develop` branch carries the next planned version with a pre-release, e.g. `1.1.0-dev.1`, which comes
+before `1.1.0`. `ASWLog/ASWLog_Version.h` has the version as macros, for code that supports several ASWLog versions,
+and as constants in the `ASWLog` namespace:
+
+```
+#include "ASWLog_Version.h"
+
+#if ASWLOG_VERSION_MAJOR > 1 || (ASWLOG_VERSION_MAJOR == 1 && ASWLOG_VERSION_MINOR >= 1)
+    // Uses something added in 1.1 (also present in 1.1.0-dev.N builds)
+#endif
+```
 
 # Unit Tests
 

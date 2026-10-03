@@ -104,6 +104,10 @@ call :CopyFile "ASWLog\ASWLog_Utils.cpp" "%TARGET_DIR%\ASWLog\ASWLog_Utils.cpp"
 if errorlevel 1 exit /b 1
 call :CopyFile "ASWLog\ASWLog_Utils.h" "%TARGET_DIR%\ASWLog\ASWLog_Utils.h"
 if errorlevel 1 exit /b 1
+call :CopyFile "ASWLog\ASWLog_Version.cpp" "%TARGET_DIR%\ASWLog\ASWLog_Version.cpp"
+if errorlevel 1 exit /b 1
+call :CopyFile "ASWLog\ASWLog_Version.h" "%TARGET_DIR%\ASWLog\ASWLog_Version.h"
+if errorlevel 1 exit /b 1
 
 call :CopyFile "example\cmake\CMakeLists.txt" "%TARGET_DIR%\example\cmake\CMakeLists.txt"
 if errorlevel 1 exit /b 1

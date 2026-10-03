@@ -42,20 +42,21 @@ namespace ASWLog
 /////////////////////////////////////////////////////////////////////////////
 // TASWMultiLog
 //
-// Fans a single Log/LogRaw/LogForce/LogForceRaw call out to several
-// independently-owned IASWLog sinks (e.g. a TASWFileLog and a
-// TASWConsoleLog). Registered sinks are non-owning pointers; the caller is
+// Fans each entry out to several independently-owned IASWLog sinks (e.g. a
+// TASWFileLog and a TASWConsoleLog), passing the same record, stamped once,
+// to each sink's Write(). Registered sinks are non-owning pointers; the caller is
 // responsible for their lifetime, which is typically an existing singleton
 // (TASWFileLog::GetInstance()) or a longer-lived instance owned elsewhere.
 //
-// This class's own runtime level (seeded from GetConfig().InitialMinimumLevel
+// This class's own runtime level (seeded from the config's InitialMinimumLevel
 // at Initialize() time, read/write via SetMinimumLevel()/GetMinimumLevel())
 // acts as an optional composite-level pre-filter gate, checked before fanning
 // Log()/LogRaw() out (default Trace = no extra filtering); LogForce()/
 // LogForceRaw() bypass it, matching force semantics elsewhere. Each sink
-// still applies its own level independently. All other
-// fields on this class's config (rotation, retention, banners, OnLogEntry,
-// etc.) are inert, since the composite performs no I/O of its own.
+// still applies its own level independently. SetEnabled(false) on the
+// composite stops all fan-out, forced entries included. All other
+// settings in this class's config (Line, Startup, Shutdown, File,
+// OnLogEntry) are inert, since the composite performs no I/O of its own.
 /////////////////////////////////////////////////////////////////////////////
 class TASWMultiLog : public TASWLogBase
 {
@@ -65,13 +66,12 @@ private:
 private:
     std::vector<IASWLog*> m_Sinks;
     mutable std::mutex m_ListMutex; // Protects only the sink list; each sink manages its own internal thread-safety.
-    // Serializes Initialize()/Close() changes to m_IsInitialized and m_Config. Never held while calling into a sink,
-    // which may call back into this logger (e.g. from an OnLogEntry callback).
+    // Serializes Initialize()/Reconfigure()/Close() changes to m_IsInitialized and the config (the lock under which
+    // this class calls SetConfig()). Never held while calling into a sink, which may call back into this logger (e.g.
+    // from an OnLogEntry callback).
     std::mutex m_StateMutex;
 
 private:
-    template<typename TLogCall>
-    void FanOut(const TLogCall& logCall) const noexcept;
     std::vector<IASWLog*> SnapshotSinks() const;
 
 protected:
@@ -79,6 +79,9 @@ protected:
     {
         return "TASWMultiLog";
     }
+
+    // Passes the record, stamped once by Write(), to every registered sink's Write(), so they all show the same time
+    void WriteRecord(const TASWLogRecord& record) override;
 
 public:
     TASWMultiLog() = default;
@@ -100,17 +103,22 @@ public:
     // may correctly return false in that case, e.g. a singleton initialized elsewhere before being added here) rather
     // than treating that as a failure. Returns true only if every sink ends up initialized or open. Returns false without
     // doing anything if this composite is already initialized; after Close() it can be initialized again. Thread-safe.
-    bool Initialize(const TASWLogConfig& config) override;
+    bool Initialize(const TASWLogConfig& config) noexcept override;
+    // Stores the config and passes it to every registered sink's Reconfigure(), even if one fails. Returns true only if
+    // every sink's Reconfigure() succeeds; false without doing anything if this composite isn't initialized. A sink
+    // that needs settings of its own is reconfigured directly instead. Thread-safe.
+    bool Reconfigure(const TASWLogConfig& config) noexcept override;
 
-    bool Open() override;
-    bool Close() override;
+    bool Open() noexcept override;
+    bool Close() noexcept override;
+    // Flushes every registered sink, even if one fails, whether or not this composite is enabled. Returns true only if
+    // every sink's Flush() succeeds (vacuously true if none are registered).
+    bool Flush() noexcept override;
     bool IsOpen() const noexcept override; // True if every registered sink reports open (vacuously true if none are registered).
 
-    void Log(Level level, std::string_view message, std::source_location loc = std::source_location::current()) override;
-    void LogRaw(Level level, std::string_view message, std::source_location loc = std::source_location::current()) override;
-
-    void LogForce(Level level, std::string_view message, std::source_location loc = std::source_location::current()) override;
-    void LogForceRaw(Level level, std::string_view message, std::source_location loc = std::source_location::current()) override;
+    // True if this composite's own gate passes (enabled, not Off, minimum level) and at least one registered sink's
+    // ShouldLog() is true (false if none are registered).
+    bool ShouldLog(Level level) const noexcept override;
 };
 
 } // namespace ASWLog

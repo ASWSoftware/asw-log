@@ -26,7 +26,9 @@ limitations under the License.
 //---------------------------------------------------------------------------
 #include <algorithm>
 #include <atomic>
+#include <chrono>
 #include <filesystem>
+#include <format>
 #include <fstream>
 #include <iterator>
 #include <source_location>
@@ -40,7 +42,35 @@ limitations under the License.
 //---------------------------------------------------------------------------
 #include "ASWLog_FileLog.h"
 #include "ASWLog_MultiLog.h"
+#include "ASWLog_Utils.h"
 //---------------------------------------------------------------------------
+
+namespace
+{
+
+// A value whose formatting is counted in MultiLogFormatCount, to check how often a *Fmt call through a multi-log formats
+struct TMultiLogCountedValue
+{
+};
+
+int MultiLogFormatCount = 0;
+
+} // namespace
+
+template<>
+struct std::formatter<TMultiLogCountedValue>
+{
+    constexpr std::format_parse_context::iterator parse(std::format_parse_context& context)
+    {
+        return context.begin();
+    }
+
+    std::format_context::iterator format(const TMultiLogCountedValue& /*value*/, std::format_context& context) const
+    {
+        ++MultiLogFormatCount;
+        return std::format_to(context.out(), "counted");
+    }
+};
 
 namespace ASWUnitTests
 {
@@ -51,7 +81,78 @@ namespace
 const auto GroupBaseTempDir = std::filesystem::temp_directory_path() / "aswlog_multilog_tests";
 const auto TestTempDir = GroupBaseTempDir / "test";
 
-// A sink whose logging methods all throw, standing in for a faulty custom IASWLog
+// A sink that records each entry it writes, named for the logging method that makes such a record, e.g.
+// "LogForce:text", and the records themselves. Like any TASWLogBase sink it applies its own level (Info by default).
+class TRecordingLogger final : public ASWLog::TASWLogBase
+{
+protected:
+    std::string_view GetLoggerClassName() const noexcept override
+    {
+        return "TRecordingLogger";
+    }
+
+    void WriteRecord(const ASWLog::TASWLogRecord& record) override
+    {
+        const char* method = record.Raw ? (record.Forced ? "LogForceRaw:" : "LogRaw:") : (record.Forced ? "LogForce:" : "Log:");
+        Calls.push_back(std::string(method).append(record.Message));
+        Records.push_back(record);
+        Records.back().Message = {}; // The caller's message is only valid during the call; Calls keeps a copy
+    }
+
+public:
+    std::vector<std::string> Calls;
+    std::vector<ASWLog::TASWLogRecord> Records; // Every field but Message
+    bool FlushResult = true; // Returned by Flush()
+    bool ReconfigureResult = true; // Returned by Reconfigure()
+
+    bool Initialize(const ASWLog::TASWLogConfig& /*config*/) noexcept override
+    {
+        return true;
+    }
+
+    bool Reconfigure(const ASWLog::TASWLogConfig& config) noexcept override
+    {
+        Calls.emplace_back("Reconfigure");
+        [[maybe_unused]] const auto previousConfig = SetConfig(config);
+        return ReconfigureResult;
+    }
+
+    bool Open() noexcept override
+    {
+        return true;
+    }
+
+    bool Close() noexcept override
+    {
+        return true;
+    }
+
+    bool Flush() noexcept override
+    {
+        Calls.emplace_back("Flush");
+        return FlushResult;
+    }
+
+    bool IsOpen() const noexcept override
+    {
+        return true;
+    }
+};
+
+// A TASWMultiLog whose clock the test sets, through TASWLogBase's NowUTC() hook
+class TFixedClockMultiLog final : public ASWLog::TASWMultiLog
+{
+public:
+    std::chrono::system_clock::time_point CurrentTime{};
+
+protected:
+    std::chrono::system_clock::time_point NowUTC() const noexcept override
+    {
+        return CurrentTime;
+    }
+};
+
+// A sink that throws for every entry, standing in for a faulty custom IASWLog
 class TThrowingLogger final : public ASWLog::TASWLogBase
 {
 protected:
@@ -60,45 +161,40 @@ protected:
         return "TThrowingLogger";
     }
 
+    void WriteRecord(const ASWLog::TASWLogRecord& /*record*/) override
+    {
+        throw std::runtime_error("sink failed");
+    }
+
 public:
-    bool Initialize(const ASWLog::TASWLogConfig& /*config*/) override
+    bool Initialize(const ASWLog::TASWLogConfig& /*config*/) noexcept override
     {
         return true;
     }
 
-    bool Open() override
+    bool Reconfigure(const ASWLog::TASWLogConfig& /*config*/) noexcept override
+    {
+        return false;
+    }
+
+    bool Open() noexcept override
     {
         return true;
     }
 
-    bool Close() override
+    bool Close() noexcept override
     {
         return true;
+    }
+
+    bool Flush() noexcept override
+    {
+        return false; // Flush() is noexcept, so a faulty sink can only report the failure
     }
 
     bool IsOpen() const noexcept override
     {
         return true;
-    }
-
-    void Log(ASWLog::Level /*level*/, std::string_view /*message*/, std::source_location /*loc*/) override
-    {
-        throw std::runtime_error("sink failed");
-    }
-
-    void LogRaw(ASWLog::Level /*level*/, std::string_view /*message*/, std::source_location /*loc*/) override
-    {
-        throw std::runtime_error("sink failed");
-    }
-
-    void LogForce(ASWLog::Level /*level*/, std::string_view /*message*/, std::source_location /*loc*/) override
-    {
-        throw std::runtime_error("sink failed");
-    }
-
-    void LogForceRaw(ASWLog::Level /*level*/, std::string_view /*message*/, std::source_location /*loc*/) override
-    {
-        throw std::runtime_error("sink failed");
     }
 };
 
@@ -116,23 +212,23 @@ std::string ReadFileText(const std::filesystem::path& path)
 ASWLog::TASWLogConfig MakeFileConfig(const std::filesystem::path& dir, const std::filesystem::path& file, ASWLog::Level minLevel)
 {
     ASWLog::TASWLogConfig config;
-    config.LogsFolderPath = dir;
-    config.LogFilePath = file;
+    config.File.FolderPath = dir;
+    config.File.FilePath = file;
     config.InitialMinimumLevel = minLevel;
-    config.LogUTCDateTime = false;
-    config.LogLevelStr = false;
-    config.LogProcessId = false;
-    config.LogThreadId = false;
-    config.LogMethodName = false;
-    config.LogSourceLine = false;
-    config.OpenRetryCount = 1;
-    config.WriteShutdownLog = false;
-    config.Init_LogTimeInfo = false;
-    config.Init_LogOSInfo = false;
-    config.Init_LogDriveInfo = false;
-    config.Init_LogSysMemInfo = false;
-    config.Init_LogApplicationInfo = false;
-    config.Init_LogMemoryUsage = false;
+    config.Line.ShowTimestamp = false;
+    config.Line.ShowLevel = false;
+    config.Line.ShowProcessId = false;
+    config.Line.ShowThreadId = false;
+    config.Line.ShowFunctionName = false;
+    config.Line.ShowSourceLine = false;
+    config.File.OpenRetryCount = 1;
+    config.Shutdown.WriteLine = false;
+    config.Startup.WriteTimeInfo = false;
+    config.Startup.WriteOSInfo = false;
+    config.Startup.WriteDriveInfo = false;
+    config.Startup.WriteSystemMemoryInfo = false;
+    config.Startup.WriteApplicationInfo = false;
+    config.Startup.WriteMemoryUsage = false;
     return config;
 }
 
@@ -152,16 +248,26 @@ TTest_ASWLog_MultiLog::TTest_ASWLog_MultiLog()
     RegisterTest(&TTest_ASWLog_MultiLog::Test_AddLogger_RejectsSelfRegistration, "AddLogger_RejectsSelfRegistration");
     RegisterTest(&TTest_ASWLog_MultiLog::Test_Close_AllowsInitializeAgain, "Close_AllowsInitializeAgain");
     RegisterTest(&TTest_ASWLog_MultiLog::Test_Contains_ReflectsRegistrationState, "Contains_ReflectsRegistrationState");
+    RegisterTest(&TTest_ASWLog_MultiLog::Test_Flush_ReachesEverySinkEvenAfterAFailure, "Flush_ReachesEverySinkEvenAfterAFailure");
+    RegisterTest(&TTest_ASWLog_MultiLog::Test_Flush_SucceedsWithNoSinks, "Flush_SucceedsWithNoSinks");
+    RegisterTest(&TTest_ASWLog_MultiLog::Test_Flush_WorksWhileDisabled, "Flush_WorksWhileDisabled");
+    RegisterTest(&TTest_ASWLog_MultiLog::Test_Flush_WritesBufferedEntriesOfEveryFileSink, "Flush_WritesBufferedEntriesOfEveryFileSink");
     RegisterTest(&TTest_ASWLog_MultiLog::Test_GetLoggerCount_ReflectsAddAndRemove, "GetLoggerCount_ReflectsAddAndRemove");
     RegisterTest(&TTest_ASWLog_MultiLog::Test_GetLoggers_ReturnsSnapshotOfRegisteredSinks, "GetLoggers_ReturnsSnapshotOfRegisteredSinks");
     RegisterTest(&TTest_ASWLog_MultiLog::Test_Initialize_ConcurrentCallsSucceedOnce, "Initialize_ConcurrentCallsSucceedOnce");
     RegisterTest(&TTest_ASWLog_MultiLog::Test_IsOpen_RequiresAllSinksOpen, "IsOpen_RequiresAllSinksOpen");
+    RegisterTest(&TTest_ASWLog_MultiLog::Test_Log_AtLevelOffIsNotFannedOut, "Log_AtLevelOffIsNotFannedOut");
     RegisterTest(&TTest_ASWLog_MultiLog::Test_Log_FansOutToAllRegisteredSinks, "Log_FansOutToAllRegisteredSinks");
     RegisterTest(&TTest_ASWLog_MultiLog::Test_Log_ThrowingSinkDoesNotStopOtherSinks, "Log_ThrowingSinkDoesNotStopOtherSinks");
+    RegisterTest(&TTest_ASWLog_MultiLog::Test_LogFmt_FormatsOnceForAllSinks, "LogFmt_FormatsOnceForAllSinks");
     RegisterTest(&TTest_ASWLog_MultiLog::Test_LogForce_BypassesCompositeGate, "LogForce_BypassesCompositeGate");
+    RegisterTest(&TTest_ASWLog_MultiLog::Test_Reconfigure_PassesConfigToEverySink, "Reconfigure_PassesConfigToEverySink");
     RegisterTest(&TTest_ASWLog_MultiLog::Test_RemoveAllLoggers_ClearsRegistrationAndReturnsCount, "RemoveAllLoggers_ClearsRegistrationAndReturnsCount");
     RegisterTest(&TTest_ASWLog_MultiLog::Test_RemoveLogger_StopsReceivingEntries, "RemoveLogger_StopsReceivingEntries");
+    RegisterTest(&TTest_ASWLog_MultiLog::Test_SetEnabled_FalseStopsFanOut, "SetEnabled_FalseStopsFanOut");
     RegisterTest(&TTest_ASWLog_MultiLog::Test_SetMinimumLevel_GatesFanOutBeforeSinks, "SetMinimumLevel_GatesFanOutBeforeSinks");
+    RegisterTest(&TTest_ASWLog_MultiLog::Test_ShouldLog_RequiresCompositeGateAndAnySink, "ShouldLog_RequiresCompositeGateAndAnySink");
+    RegisterTest(&TTest_ASWLog_MultiLog::Test_Write_PassesOneStampedRecordToEverySink, "Write_PassesOneStampedRecordToEverySink");
 }
 //---------------------------------------------------------------------------
 TTest_ASWLog_MultiLog::~TTest_ASWLog_MultiLog()
@@ -282,6 +388,94 @@ void TTest_ASWLog_MultiLog::Test_Contains_ReflectsRegistrationState()
     sinkA.Close();
 }
 //---------------------------------------------------------------------------
+void TTest_ASWLog_MultiLog::Test_Flush_ReachesEverySinkEvenAfterAFailure()
+{
+    // Arrange: the first sink's flush fails
+    TRecordingLogger failingSink;
+    failingSink.FlushResult = false;
+    TRecordingLogger sink;
+
+    ASWLog::TASWMultiLog multiLog;
+    multiLog.AddLogger(failingSink);
+    multiLog.AddLogger(sink);
+
+    // Act
+    const bool flushedWithFailure = multiLog.Flush();
+    failingSink.FlushResult = true;
+    const bool flushed = multiLog.Flush();
+
+    // Assert
+    const std::vector<std::string> twoFlushes{ "Flush", "Flush" };
+    CheckFalse(flushedWithFailure, __func__, __LINE__, "Flush() should return false if any sink's flush fails");
+    CheckTrue(flushed, __func__, __LINE__, "Flush() should return true once every sink's flush succeeds");
+    CheckTrue(failingSink.Calls == twoFlushes, __func__, __LINE__, "Each Flush() should reach the failing sink");
+    CheckTrue(sink.Calls == twoFlushes, __func__, __LINE__, "A sink's failed flush should not stop the other sinks from being flushed");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_MultiLog::Test_Flush_SucceedsWithNoSinks()
+{
+    // Arrange
+    ASWLog::TASWMultiLog multiLog;
+
+    // Act & Assert
+    CheckTrue(multiLog.Flush(), __func__, __LINE__, "Flush() with no registered sinks should succeed, like IsOpen()");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_MultiLog::Test_Flush_WorksWhileDisabled()
+{
+    // Arrange
+    TRecordingLogger sink;
+    ASWLog::TASWMultiLog multiLog;
+    multiLog.AddLogger(sink);
+    multiLog.SetEnabled(false);
+
+    // Act
+    const bool flushed = multiLog.Flush();
+
+    // Assert
+    CheckTrue(flushed, __func__, __LINE__, "Flush() should succeed while the composite is disabled");
+    CheckTrue(sink.Calls == std::vector<std::string>{ "Flush" }, __func__, __LINE__, "A disabled composite should still flush its sinks; disabling only stops new entries");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_MultiLog::Test_Flush_WritesBufferedEntriesOfEveryFileSink()
+{
+    // Arrange: FlushMode::Manual keeps each entry in the file's buffer until Flush()
+    const auto fileA = TestTempDir / "flush_sink_a.log";
+    const auto fileB = TestTempDir / "flush_sink_b.log";
+    auto configA = MakeFileConfig(TestTempDir, fileA, ASWLog::Level::Trace);
+    auto configB = MakeFileConfig(TestTempDir, fileB, ASWLog::Level::Trace);
+    configA.File.Flush = ASWLog::FlushMode::Manual;
+    configB.File.Flush = ASWLog::FlushMode::Manual;
+
+    ASWLog::TASWFileLog sinkA;
+    ASWLog::TASWFileLog sinkB;
+    CheckTrue(sinkA.Initialize(configA), __func__, __LINE__, "sinkA should initialize");
+    CheckTrue(sinkB.Initialize(configB), __func__, __LINE__, "sinkB should initialize");
+
+    ASWLog::TASWMultiLog multiLog;
+    multiLog.AddLogger(sinkA);
+    multiLog.AddLogger(sinkB);
+    ASWLog::IASWLog& logger = multiLog; // As generic code would flush it
+
+    // Act
+    logger.LogInfo("buffered_entry");
+    const auto contentsBeforeA = ReadFileText(fileA);
+    const auto contentsBeforeB = ReadFileText(fileB);
+    const bool flushed = logger.Flush();
+    const auto contentsAfterA = ReadFileText(fileA);
+    const auto contentsAfterB = ReadFileText(fileB);
+
+    sinkA.Close();
+    sinkB.Close();
+
+    // Assert
+    CheckTrue(contentsBeforeA.find("buffered_entry") == std::string::npos, __func__, __LINE__, "Before Flush(), sinkA's entry should still be buffered");
+    CheckTrue(contentsBeforeB.find("buffered_entry") == std::string::npos, __func__, __LINE__, "Before Flush(), sinkB's entry should still be buffered");
+    CheckTrue(flushed, __func__, __LINE__, "Flush() should succeed");
+    CheckTrue(contentsAfterA.find("buffered_entry") != std::string::npos, __func__, __LINE__, "Flush() should write sinkA's buffered entry to its file");
+    CheckTrue(contentsAfterB.find("buffered_entry") != std::string::npos, __func__, __LINE__, "Flush() should write sinkB's buffered entry to its file");
+}
+//---------------------------------------------------------------------------
 void TTest_ASWLog_MultiLog::Test_GetLoggerCount_ReflectsAddAndRemove()
 {
     // Arrange
@@ -350,7 +544,7 @@ void TTest_ASWLog_MultiLog::Test_Initialize_ConcurrentCallsSucceedOnce()
 
     // A large config takes longer to copy, which widens the gap an unsynchronized check-then-set would leave
     ASWLog::TASWLogConfig config;
-    config.BannerMessage_Init.assign(64 * 1024, 'x');
+    config.Startup.Banner.assign(64 * 1024, 'x');
 
     // Act: in each round, several threads call Initialize on a new composite at the same moment
     for (int round = 0; round < roundCount; ++round)
@@ -406,6 +600,33 @@ void TTest_ASWLog_MultiLog::Test_IsOpen_RequiresAllSinksOpen()
     CheckFalse(multiLog.IsOpen(), __func__, __LINE__, "Composite should report closed if any registered sink is closed");
 
     sinkA.Close();
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_MultiLog::Test_Log_AtLevelOffIsNotFannedOut()
+{
+    // Arrange
+    TRecordingLogger sink;
+    ASWLog::TASWMultiLog multiLog;
+    multiLog.AddLogger(sink);
+    multiLog.SetMinimumLevel(ASWLog::Level::Trace);
+
+    // Act
+    multiLog.Log(ASWLog::Level::Off, "off");
+    multiLog.LogRaw(ASWLog::Level::Off, "off_raw");
+    multiLog.LogForce(ASWLog::Level::Off, "off_forced");
+    multiLog.LogForceRaw(ASWLog::Level::Off, "off_forced_raw");
+    const auto callsAtOffLevel = sink.Calls;
+
+    multiLog.SetMinimumLevel(ASWLog::Level::Off);
+    multiLog.LogCritical("critical");
+    multiLog.LogRaw(ASWLog::Level::Critical, "critical_raw");
+    multiLog.LogForce(ASWLog::Level::Info, "forced");
+    multiLog.LogForceRaw(ASWLog::Level::Info, "forced_raw");
+
+    // Assert
+    CheckTrue(callsAtOffLevel.empty(), __func__, __LINE__, "A message at Off should not reach any sink, even when forced");
+    CheckTrue(sink.Calls == std::vector<std::string>{ "LogForce:forced", "LogForceRaw:forced_raw" }, __func__, __LINE__,
+        "With the composite's minimum level at Off, only forced entries should be fanned out");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_MultiLog::Test_Log_FansOutToAllRegisteredSinks()
@@ -471,6 +692,29 @@ void TTest_ASWLog_MultiLog::Test_Log_ThrowingSinkDoesNotStopOtherSinks()
     CheckTrue(contents.find("force_raw_message") != std::string::npos, __func__, __LINE__, "LogForceRaw should still reach the other sinks");
 }
 //---------------------------------------------------------------------------
+void TTest_ASWLog_MultiLog::Test_LogFmt_FormatsOnceForAllSinks()
+{
+    // Arrange: two sinks at the default minimum level (Info), and a composite that lets everything through
+    TRecordingLogger sinkA;
+    TRecordingLogger sinkB;
+    ASWLog::TASWMultiLog multiLog;
+    multiLog.AddLogger(sinkA);
+    multiLog.AddLogger(sinkB);
+    multiLog.SetMinimumLevel(ASWLog::Level::Trace);
+    MultiLogFormatCount = 0;
+
+    // Act
+    multiLog.LogDebugFmt("{}", TMultiLogCountedValue{});
+    const int countAfterFilteredEntry = MultiLogFormatCount;
+    multiLog.LogInfoFmt("{}", TMultiLogCountedValue{});
+
+    // Assert
+    CheckEquals(0, countAfterFilteredEntry, __func__, __LINE__, "An entry no sink would write should not be formatted");
+    CheckEquals(1, MultiLogFormatCount, __func__, __LINE__, "An entry should be formatted once, however many sinks get it");
+    CheckTrue(sinkA.Calls == std::vector<std::string>{ "Log:counted" } && sinkB.Calls == sinkA.Calls, __func__, __LINE__,
+        "Both sinks should get the formatted entry");
+}
+//---------------------------------------------------------------------------
 void TTest_ASWLog_MultiLog::Test_LogForce_BypassesCompositeGate()
 {
     // Arrange
@@ -489,6 +733,40 @@ void TTest_ASWLog_MultiLog::Test_LogForce_BypassesCompositeGate()
 
     // Assert
     CheckTrue(ReadFileText(fileA).find("forced_past_composite_gate") != std::string::npos, __func__, __LINE__, "LogForce should bypass the composite's own MinimumLevel gate");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_MultiLog::Test_Reconfigure_PassesConfigToEverySink()
+{
+    // Arrange: the first sink's Reconfigure() fails
+    TRecordingLogger failingSink;
+    failingSink.ReconfigureResult = false;
+    TRecordingLogger sink;
+
+    ASWLog::TASWMultiLog multiLog;
+    multiLog.AddLogger(failingSink);
+    multiLog.AddLogger(sink);
+
+    ASWLog::TASWLogConfig config;
+    config.Startup.Banner = "reconfigured";
+
+    // Act
+    const bool reconfiguredBeforeInitialize = multiLog.Reconfigure(config);
+    const auto callsBeforeInitialize = sink.Calls;
+    multiLog.Initialize(ASWLog::TASWLogConfig{});
+    const bool reconfiguredWithFailure = multiLog.Reconfigure(config);
+    failingSink.ReconfigureResult = true;
+    const bool reconfigured = multiLog.Reconfigure(config);
+
+    // Assert
+    const std::vector<std::string> twoReconfigures{ "Reconfigure", "Reconfigure" };
+    CheckFalse(reconfiguredBeforeInitialize, __func__, __LINE__, "Reconfigure() should fail before Initialize()");
+    CheckTrue(callsBeforeInitialize.empty(), __func__, __LINE__, "Reconfigure() before Initialize() should not reach the sinks");
+    CheckFalse(reconfiguredWithFailure, __func__, __LINE__, "Reconfigure() should return false if any sink's Reconfigure() fails");
+    CheckTrue(reconfigured, __func__, __LINE__, "Reconfigure() should return true once every sink's Reconfigure() succeeds");
+    CheckTrue(failingSink.Calls == twoReconfigures, __func__, __LINE__, "Each Reconfigure() should reach the failing sink");
+    CheckTrue(sink.Calls == twoReconfigures, __func__, __LINE__, "A sink's failed Reconfigure() should not stop the other sinks");
+    CheckEquals(std::string("reconfigured"), sink.GetConfig()->Startup.Banner, __func__, __LINE__, "Each sink should get the new config");
+    CheckEquals(std::string("reconfigured"), multiLog.GetConfig()->Startup.Banner, __func__, __LINE__, "The multi-log should keep the new config");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_MultiLog::Test_RemoveAllLoggers_ClearsRegistrationAndReturnsCount()
@@ -546,6 +824,32 @@ void TTest_ASWLog_MultiLog::Test_RemoveLogger_StopsReceivingEntries()
     CheckTrue(contents.find("after_removal") == std::string::npos, __func__, __LINE__, "Message logged after removal should not reach the sink");
 }
 //---------------------------------------------------------------------------
+void TTest_ASWLog_MultiLog::Test_SetEnabled_FalseStopsFanOut()
+{
+    // Arrange
+    TRecordingLogger sink;
+    ASWLog::TASWMultiLog multiLog;
+    multiLog.AddLogger(sink);
+    multiLog.SetMinimumLevel(ASWLog::Level::Trace);
+
+    // Act
+    multiLog.SetEnabled(false);
+    multiLog.LogCritical("critical");
+    multiLog.LogRaw(ASWLog::Level::Critical, "critical_raw");
+    multiLog.LogForce(ASWLog::Level::Critical, "forced");
+    multiLog.LogForceRaw(ASWLog::Level::Critical, "forced_raw");
+    multiLog.LogForceFmt(ASWLog::Level::Critical, "{}", "forced_fmt");
+    const auto callsWhileDisabled = sink.Calls;
+
+    multiLog.SetEnabled(true);
+    multiLog.LogInfo("enabled_again");
+
+    // Assert
+    CheckTrue(callsWhileDisabled.empty(), __func__, __LINE__, "A disabled composite should fan out nothing, not even forced entries");
+    CheckTrue(sink.IsEnabled(), __func__, __LINE__, "Disabling the composite should not change its sinks");
+    CheckTrue(sink.Calls == std::vector<std::string>{ "Log:enabled_again" }, __func__, __LINE__, "Fan-out should resume once enabled again");
+}
+//---------------------------------------------------------------------------
 void TTest_ASWLog_MultiLog::Test_SetMinimumLevel_GatesFanOutBeforeSinks()
 {
     // Arrange
@@ -568,6 +872,76 @@ void TTest_ASWLog_MultiLog::Test_SetMinimumLevel_GatesFanOutBeforeSinks()
     // Assert
     CheckTrue(contents.find("blocked_by_composite_gate") == std::string::npos, __func__, __LINE__, "Composite MinimumLevel should gate fan-out even though the sink's own level would allow it");
     CheckTrue(contents.find("passes_composite_gate") != std::string::npos, __func__, __LINE__, "Entries at or above the composite level should still reach the sink");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_MultiLog::Test_ShouldLog_RequiresCompositeGateAndAnySink()
+{
+    // Arrange
+    TRecordingLogger errorSink;
+    TRecordingLogger warnSink;
+    errorSink.SetMinimumLevel(ASWLog::Level::Error);
+    warnSink.SetMinimumLevel(ASWLog::Level::Warn);
+    ASWLog::TASWMultiLog multiLog;
+    multiLog.SetMinimumLevel(ASWLog::Level::Trace);
+    const bool shouldLogWithoutSinks = multiLog.ShouldLog(ASWLog::Level::Critical);
+    multiLog.AddLogger(errorSink);
+    multiLog.AddLogger(warnSink);
+
+    // Act
+    const bool shouldLogInfo = multiLog.ShouldLog(ASWLog::Level::Info);
+    const bool shouldLogWarn = multiLog.ShouldLog(ASWLog::Level::Warn);
+
+    warnSink.SetEnabled(false);
+    const bool shouldLogWarnWithWarnSinkDisabled = multiLog.ShouldLog(ASWLog::Level::Warn);
+    const bool shouldLogErrorWithWarnSinkDisabled = multiLog.ShouldLog(ASWLog::Level::Error);
+
+    multiLog.SetMinimumLevel(ASWLog::Level::Critical);
+    const bool shouldLogErrorBelowCompositeLevel = multiLog.ShouldLog(ASWLog::Level::Error);
+
+    multiLog.SetMinimumLevel(ASWLog::Level::Trace);
+    multiLog.SetEnabled(false);
+    const bool shouldLogErrorWithCompositeDisabled = multiLog.ShouldLog(ASWLog::Level::Error);
+
+    // Assert
+    CheckFalse(shouldLogWithoutSinks, __func__, __LINE__, "A composite with no sinks should log nothing");
+    CheckFalse(shouldLogInfo, __func__, __LINE__, "No sink accepts Info");
+    CheckTrue(shouldLogWarn, __func__, __LINE__, "One sink accepts Warn, which is enough");
+    CheckFalse(shouldLogWarnWithWarnSinkDisabled, __func__, __LINE__, "A disabled sink should not count");
+    CheckTrue(shouldLogErrorWithWarnSinkDisabled, __func__, __LINE__, "The enabled sink still accepts Error");
+    CheckFalse(shouldLogErrorBelowCompositeLevel, __func__, __LINE__, "The composite's own minimum level should apply first");
+    CheckFalse(shouldLogErrorWithCompositeDisabled, __func__, __LINE__, "A disabled composite should log nothing");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_MultiLog::Test_Write_PassesOneStampedRecordToEverySink()
+{
+    // Arrange: sinks on the system clock behind a composite with a fixed clock; sinkB only takes Error and above
+    TRecordingLogger sinkA;
+    TRecordingLogger sinkB;
+    sinkB.SetMinimumLevel(ASWLog::Level::Error);
+
+    TFixedClockMultiLog multiLog;
+    multiLog.CurrentTime = std::chrono::system_clock::time_point(std::chrono::hours(1000));
+    multiLog.SetMinimumLevel(ASWLog::Level::Trace);
+    multiLog.AddLogger(sinkA);
+    multiLog.AddLogger(sinkB);
+
+    // Act
+    multiLog.LogWarn("warn");
+    multiLog.LogForceRaw(ASWLog::Level::Debug, "forced_raw");
+
+    // Assert
+    CheckTrue(sinkA.Calls == std::vector<std::string>{ "Log:warn", "LogForceRaw:forced_raw" }, __func__, __LINE__,
+        "sinkA should get both entries, with their Raw and Forced flags");
+    CheckTrue(sinkB.Calls == std::vector<std::string>{ "LogForceRaw:forced_raw" }, __func__, __LINE__,
+        "sinkB should apply its own level, so only the forced entry reaches it");
+
+    std::vector<ASWLog::TASWLogRecord> records = sinkA.Records;
+    records.insert(records.end(), sinkB.Records.begin(), sinkB.Records.end());
+    for (const auto& record : records)
+    {
+        CheckTrue(record.Timestamp == multiLog.CurrentTime, __func__, __LINE__, "Each sink should keep the composite's stamp, not read its own clock");
+        CheckEquals(static_cast<int64_t>(ASWLog::GetCurrentOSThreadId()), static_cast<int64_t>(record.ThreadId), __func__, __LINE__, "The record should carry the logging thread's id");
+    }
 }
 //---------------------------------------------------------------------------
 
