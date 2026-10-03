@@ -64,6 +64,9 @@ private: // Test methods
     void Test_MultiThreadedStress_WritesAllMessagesToDisk_OpenClose();
     void Test_OnLogEntry_FiresForQualifyingLevelsOnly();
     void Test_OnLogEntry_ReentrantCallbackDoesNotDeadlock();
+    void Test_Reconfigure_FlushesEntriesBufferedByPreviousMode();
+    void Test_Reconfigure_MovesOutputToNewFile();
+    void Test_Reconfigure_UnopenableFileFailsButLoggerStaysInitialized();
     void Test_RetentionMaxAge_DefaultDisabledPreservesOldBackups();
     void Test_RetentionMaxAge_DeletesExpiredBackupsAfterRotation();
     void Test_RotateLogFiles_KeepsEveryBackup();

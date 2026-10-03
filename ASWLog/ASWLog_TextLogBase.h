@@ -66,7 +66,7 @@ protected:
 
 private:
     void AppendLineEnding(std::string& line) const;
-    void DispatchLogCallback(const TASWLogRecord& record, std::string_view formattedLine) const noexcept;
+    void DispatchLogCallback(const TASWLogConfig& config, const TASWLogRecord& record, std::string_view formattedLine) const noexcept;
     void WriteApplicationInfo();
     void WriteDriveInfo();
     void WriteInfoLine(std::string_view message, std::source_location loc = std::source_location::current());
@@ -111,6 +111,11 @@ protected:
     // Returns true by default.
     virtual bool PrepareWriteUnlocked(std::chrono::system_clock::time_point now);
 
+    // Called by Reconfigure() after it has stored the new config (GetConfigUnlocked()), to apply it to the output, e.g.
+    // a file logger opens a new file. 'previous' is the config it replaced. Returning false fails Reconfigure(), but the
+    // new config is kept. Returns true by default.
+    virtual bool ReconfigureUnlocked(const TASWLogConfig& previous);
+
     // Writes a finished line. 'endsLine' is true if 'line' ends with the line ending (false for a Raw record).
     virtual void WriteLineUnlocked(Level level, std::string_view line, bool endsLine) = 0;
 
@@ -121,6 +126,8 @@ protected: // TASWLogBase hook
 public:
     // A startup line that fails (e.g. its formatter throws) doesn't fail Initialize(): the rest are skipped
     bool Initialize(const TASWLogConfig& config) noexcept final;
+    // Waits for an entry being written, then stores the config and calls ReconfigureUnlocked()
+    bool Reconfigure(const TASWLogConfig& config) noexcept final;
 
     bool Open() noexcept final;
     bool Close() noexcept final;

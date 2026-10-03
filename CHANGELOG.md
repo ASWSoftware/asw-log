@@ -43,6 +43,15 @@ see [0.26.1](#0261---2026-09-17) for the initial versioned baseline.
 - `IASWLog::Write(const TASWLogRecord&)`, the one method through which a
   logger receives every entry, and `Raw`/`Forced` flags on
   `TASWLogRecord`. A record can be passed on as is, e.g. to another logger.
+- `IASWLog::Reconfigure(const TASWLogConfig&)` changes an initialized
+  logger's settings safely while other threads log; entries written after it
+  returns use them. A file logger whose file path or
+  `AutoOpenClosePerWrite` changed closes the old file and opens the new one
+  (if that fails, `Reconfigure()` returns false, the settings are kept and
+  later entries retry the open); otherwise it flushes and keeps the file.
+  It doesn't change the minimum level (use `SetMinimumLevel()`) or write the
+  startup lines. A multi-log passes the settings on to every logger it
+  holds, like `Initialize()`.
 
 ### Changed
 
@@ -130,6 +139,21 @@ see [0.26.1](#0261---2026-09-17) for the initial versioned baseline.
   - `CallbackMinimumLevel` -> `OnLogEntryMinimumLevel`
 
   A custom formatter reads the line options from `config.Line`.
+- `GetConfig()` returns the settings as an immutable snapshot,
+  `std::shared_ptr<const TASWLogConfig>`, instead of a reference to the
+  logger's own config; the non-const overload is removed. A snapshot stays
+  valid and unchanged after the settings change. To change a setting after
+  `Initialize()`, copy the snapshot, change the copy and pass it to
+  `Reconfigure()`:
+  `auto config = *logger.GetConfig(); config.Line.ShowThreadId = false; logger.Reconfigure(config);`.
+  Read fields through the pointer (`logger.GetConfig()->File.FilePath`).
+  Custom loggers must change: one implementing `IASWLog` directly, or
+  deriving from `TASWLogBase`, implements
+  `bool Reconfigure(const TASWLogConfig&) noexcept override`, and one
+  deriving from `TASWLogBase` stores the config with the protected
+  `SetConfig()` instead of assigning `m_Config` (now private), and reads it
+  with `GetConfigUnlocked()` while holding its own lock. One deriving from
+  `TASWTextLogBase` can override the new hook `ReconfigureUnlocked()`.
 
 ### Fixed
 
@@ -138,6 +162,13 @@ see [0.26.1](#0261---2026-09-17) for the initial versioned baseline.
   Closing the file after each entry used to mark the logger as not
   initialized, so the shutdown line was skipped and a repeated
   `Initialize()` wrote the startup lines again.
+- Data races when changing settings while other threads log: changing a
+  field through `GetConfig()`'s reference, which had no lock, and calling
+  the `OnLogEntry` callback, which was read from the config after the
+  logger's lock was released. Settings now change only through
+  `Reconfigure()`, under the lock, and the callback is called from the
+  settings the entry was written with, so a callback may also reconfigure
+  the logger it belongs to.
 
 ## [0.45.0] - 2026-10-01
 

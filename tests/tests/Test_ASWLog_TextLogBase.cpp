@@ -24,6 +24,7 @@ limitations under the License.
 // Module header
 #include "Test_ASWLog_TextLogBase.h"
 //---------------------------------------------------------------------------
+#include <atomic>
 #include <chrono>
 #include <cstddef>
 #include <filesystem>
@@ -33,6 +34,7 @@ limitations under the License.
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <thread>
 #include <vector>
 //---------------------------------------------------------------------------
 #include "ASWUnitTests_Registry.h"
@@ -70,8 +72,12 @@ public:
     bool IsReady = true; // Result of EnsureReadyUnlocked() while initialized and open
     bool AcceptsWrites = true; // Result of PrepareWriteUnlocked()
     bool FlushResult = true; // Result of FlushUnlocked()
+    bool ReconfigureResult = true; // Result of ReconfigureUnlocked()
     bool ThrowsOnFlush = false;
     bool ThrowsOnWrite = false;
+    // What ReconfigureUnlocked() saw: the banner of the config it replaced, and of the config stored by then
+    std::vector<std::string> ReconfiguredFromBanners;
+    std::vector<std::string> ReconfiguredToBanners;
 
 protected:
     void AfterEntryUnlocked() override
@@ -120,6 +126,13 @@ protected:
     bool PrepareWriteUnlocked(std::chrono::system_clock::time_point /*now*/) override
     {
         return AcceptsWrites;
+    }
+
+    bool ReconfigureUnlocked(const ASWLog::TASWLogConfig& previous) override
+    {
+        ReconfiguredFromBanners.push_back(previous.Startup.Banner);
+        ReconfiguredToBanners.push_back(GetConfigUnlocked().Startup.Banner);
+        return ReconfigureResult;
     }
 
     void WriteLineUnlocked(ASWLog::Level /*level*/, std::string_view line, bool endsLine) override
@@ -220,6 +233,9 @@ TTest_ASWLog_TextLogBase::TTest_ASWLog_TextLogBase()
     RegisterTest(&TTest_ASWLog_TextLogBase::Test_Log_MinimumLevelOffAllowsOnlyForcedEntries, "Log_MinimumLevelOffAllowsOnlyForcedEntries");
     RegisterTest(&TTest_ASWLog_TextLogBase::Test_Log_ThrowingWriteDoesNotEscape, "Log_ThrowingWriteDoesNotEscape");
     RegisterTest(&TTest_ASWLog_TextLogBase::Test_LogRaw_WritesMessageAsIs, "LogRaw_WritesMessageAsIs");
+    RegisterTest(&TTest_ASWLog_TextLogBase::Test_OnLogEntry_CallbackCanReconfigureTheLogger, "OnLogEntry_CallbackCanReconfigureTheLogger");
+    RegisterTest(&TTest_ASWLog_TextLogBase::Test_Reconfigure_AppliesNewConfigButKeepsLevel, "Reconfigure_AppliesNewConfigButKeepsLevel");
+    RegisterTest(&TTest_ASWLog_TextLogBase::Test_Reconfigure_IsSafeWhileOtherThreadsLog, "Reconfigure_IsSafeWhileOtherThreadsLog");
     RegisterTest(&TTest_ASWLog_TextLogBase::Test_SetEnabled_FalseWritesNothing, "SetEnabled_FalseWritesNothing");
 }
 //---------------------------------------------------------------------------
@@ -590,6 +606,150 @@ void TTest_ASWLog_TextLogBase::Test_LogRaw_WritesMessageAsIs()
     // Assert
     CheckTrue(output.Lines == std::vector<std::string>{ "partial", " line\n" }, __func__, __LINE__, "Raw entries should be written as is, without a format or a line ending");
     CheckTrue(output.EndsLine == std::vector<bool>{ false, false }, __func__, __LINE__, "A raw entry doesn't end its line");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_TextLogBase::Test_OnLogEntry_CallbackCanReconfigureTheLogger()
+{
+    // Arrange: a callback that replaces the config it belongs to, e.g. to turn itself off after the first error. The
+    // running callback (and the state it captured) must stay alive until it returns, and calling back into the logger
+    // must not deadlock.
+    TMemoryOutput output;
+    TMemoryTextLog log(output);
+    std::vector<std::string> calls;
+    const auto configWithoutCallback = MakeQuietConfig();
+    const std::string callbackState = "callback_state"; // Copied into the callback, so the config owns it
+
+    auto config = MakeQuietConfig();
+    config.OnLogEntry = [&log, &calls, &configWithoutCallback, callbackState](const ASWLog::TASWLogRecord&, std::string_view) {
+            const bool reconfigured = log.Reconfigure(configWithoutCallback);
+            calls.push_back(callbackState + (reconfigured ? ":reconfigured" : ":failed"));
+        };
+    CheckTrue(log.Initialize(config), __func__, __LINE__, "Initialize should succeed");
+
+    // Act
+    log.LogError("first_error");
+    log.LogError("second_error");
+
+    // Assert
+    CheckTrue(calls == std::vector<std::string>{ "callback_state:reconfigured" }, __func__, __LINE__,
+        "The callback should run once, reconfigure the logger, and still have its own state afterwards");
+    CheckTrue(output.Lines == std::vector<std::string>{ "[ERROR]: first_error\n", "[ERROR]: second_error\n" }, __func__,
+        __LINE__, "Both entries should be written");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_TextLogBase::Test_Reconfigure_AppliesNewConfigButKeepsLevel()
+{
+    // Arrange
+    TMemoryOutput output;
+    TMemoryTextLog log(output);
+
+    auto firstConfig = MakeQuietConfig();
+    firstConfig.Startup.Banner = "first";
+
+    auto secondConfig = MakeQuietConfig();
+    secondConfig.Startup.Banner = "second";
+    secondConfig.Line.ShowLevel = false;
+    secondConfig.InitialMinimumLevel = ASWLog::Level::Error;
+
+    // Act
+    const bool reconfiguredBeforeInitialize = log.Reconfigure(secondConfig);
+    CheckTrue(log.Initialize(firstConfig), __func__, __LINE__, "Initialize should succeed");
+    log.SetMinimumLevel(ASWLog::Level::Debug);
+    log.LogDebug("before");
+    const bool reconfigured = log.Reconfigure(secondConfig);
+    log.LogDebug("after");
+
+    log.ReconfigureResult = false;
+    secondConfig.Startup.Banner = "third";
+    const bool reconfiguredWithFailingHook = log.Reconfigure(secondConfig);
+
+    // Assert
+    CheckFalse(reconfiguredBeforeInitialize, __func__, __LINE__, "Reconfigure() should fail before Initialize()");
+    CheckTrue(reconfigured, __func__, __LINE__, "Reconfigure() should succeed once initialized");
+    CheckTrue(output.Lines == std::vector<std::string>{ "[INFO]: first\n", "[DEBUG]: before\n", ": after\n" }, __func__,
+        __LINE__, "Entries after Reconfigure() should use the new line layout, and Reconfigure() should write no startup lines");
+    CheckEquals(static_cast<int>(ASWLog::Level::Debug), static_cast<int>(log.GetMinimumLevel()), __func__, __LINE__,
+        "Reconfigure() should keep the minimum level set with SetMinimumLevel(), not apply InitialMinimumLevel");
+    CheckTrue(log.ReconfiguredFromBanners == std::vector<std::string>{ "first", "second" }, __func__, __LINE__,
+        "ReconfigureUnlocked() should get the config it replaced (and not be called before Initialize())");
+    CheckTrue(log.ReconfiguredToBanners == std::vector<std::string>{ "second", "third" }, __func__, __LINE__,
+        "The new config should be stored before ReconfigureUnlocked() is called");
+    CheckFalse(reconfiguredWithFailingHook, __func__, __LINE__, "Reconfigure() should fail if ReconfigureUnlocked() fails");
+    CheckEquals(std::string("third"), log.GetConfig()->Startup.Banner, __func__, __LINE__,
+        "The new config should be kept when ReconfigureUnlocked() fails");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_TextLogBase::Test_Reconfigure_IsSafeWhileOtherThreadsLog()
+{
+    // Arrange: one thread keeps switching between configs that differ in the line layout, the formatter and the
+    // callback, while others log. Run under ThreadSanitizer (CI) to find data races.
+    constexpr int ThreadCount = 4;
+    constexpr int EntriesPerThread = 2000;
+    constexpr int MinimumReconfigureCount = 3;
+
+    TMemoryOutput output;
+    auto callbackCount = std::make_shared<std::atomic<int> >(0);
+
+    auto plainConfig = MakeQuietConfig();
+    plainConfig.Line.ShowLevel = false;
+
+    auto callbackConfig = MakeQuietConfig();
+    callbackConfig.OnLogEntryMinimumLevel = ASWLog::Level::Info;
+    callbackConfig.OnLogEntry = [callbackCount](const ASWLog::TASWLogRecord&, std::string_view) {
+            callbackCount->fetch_add(1, std::memory_order_relaxed);
+        };
+
+    auto formatterConfig = MakeQuietConfig();
+    formatterConfig.Line.Formatter = std::make_shared<TPipeFormatter>();
+
+    TMemoryTextLog log(output);
+    CheckTrue(log.Initialize(plainConfig), __func__, __LINE__, "Initialize should succeed");
+
+    // Act
+    std::atomic<bool> loggingDone{ false };
+    int reconfigureCount = 0;
+    int failedReconfigureCount = 0;
+    std::thread reconfigurer([&] {
+        const ASWLog::TASWLogConfig* configs[] = { &callbackConfig, &formatterConfig, &plainConfig };
+        for (std::size_t i = 0; !loggingDone.load() || i < MinimumReconfigureCount; ++i)
+        {
+            if (!log.Reconfigure(*configs[i % 3]))
+                ++failedReconfigureCount;
+
+            ++reconfigureCount;
+        }
+            });
+
+    std::vector<std::thread> loggers;
+    for (int threadIndex = 0; threadIndex < ThreadCount; ++threadIndex)
+    {
+        loggers.emplace_back([&log] {
+                for (int entry = 0; entry < EntriesPerThread; ++entry)
+                    log.LogInfo("entry");
+            });
+    }
+
+    for (auto& thread : loggers)
+        thread.join();
+
+    loggingDone.store(true);
+    reconfigurer.join();
+
+    // Assert: every line has one of the three layouts
+    std::size_t unexpectedLines = 0;
+    for (const auto& line : output.Lines)
+    {
+        if (line != "[INFO]: entry\n" && line != ": entry\n" && line != "INFO|entry\n")
+            ++unexpectedLines;
+    }
+
+    CheckEquals(static_cast<std::size_t>(ThreadCount * EntriesPerThread), output.Lines.size(), __func__, __LINE__,
+        "Every entry should be written while the logger is reconfigured");
+    CheckEquals(static_cast<std::size_t>(0), unexpectedLines, __func__, __LINE__, "Every line should be written with one whole config");
+    CheckTrue(reconfigureCount >= MinimumReconfigureCount, __func__, __LINE__, "The logger should have been reconfigured");
+    CheckEquals(0, failedReconfigureCount, __func__, __LINE__, "Every Reconfigure() should succeed");
+    CheckTrue(callbackCount->load() <= ThreadCount * EntriesPerThread, __func__, __LINE__,
+        "OnLogEntry should be called at most once per entry");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_TextLogBase::Test_SetEnabled_FalseWritesNothing()

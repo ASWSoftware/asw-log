@@ -26,10 +26,13 @@ limitations under the License.
 //---------------------------------------------------------------------------
 #include <chrono>
 #include <format>
+#include <memory>
 #include <source_location>
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <type_traits>
+#include <utility>
 //---------------------------------------------------------------------------
 #include "ASWUnitTests_Registry.h"
 //---------------------------------------------------------------------------
@@ -136,9 +139,18 @@ protected:
 public:
     bool Initialize(const ASWLog::TASWLogConfig& config) noexcept override
     {
-        m_Config = config;
-        SetMinimumLevel(m_Config.InitialMinimumLevel);
+        [[maybe_unused]] const auto previousConfig = SetConfig(config);
+        SetMinimumLevel(config.InitialMinimumLevel);
         m_IsInitialized.store(true, std::memory_order_release);
+        return true;
+    }
+
+    bool Reconfigure(const ASWLog::TASWLogConfig& config) noexcept override
+    {
+        if (!m_IsInitialized.load(std::memory_order_acquire))
+            return false;
+
+        [[maybe_unused]] const auto previousConfig = SetConfig(config);
         return true;
     }
 
@@ -177,7 +189,7 @@ public:
 TTest_ASWLog_Base::TTest_ASWLog_Base()
     : inherited("ASWLog_Base_Tests")
 {
-    RegisterTest(&TTest_ASWLog_Base::Test_GetConfig_ReturnsLiveMutableReference, "GetConfig_ReturnsLiveMutableReference");
+    RegisterTest(&TTest_ASWLog_Base::Test_GetConfig_ReturnsUnchangingSnapshot, "GetConfig_ReturnsUnchangingSnapshot");
     RegisterTest(&TTest_ASWLog_Base::Test_GetFullVersionStr_ContainsVersion, "GetFullVersionStr_ContainsVersion");
     RegisterTest(&TTest_ASWLog_Base::Test_Interface_MethodsAreNoexcept, "Interface_MethodsAreNoexcept");
     RegisterTest(&TTest_ASWLog_Base::Test_LogFormatMethods_AcceptEveryArgumentKind, "LogFormatMethods_AcceptEveryArgumentKind");
@@ -218,25 +230,36 @@ void TTest_ASWLog_Base::TearDown_Test(ITestCase& /*testCase*/)
 // /////// Begin tests after this line ///////////////////////
 
 //---------------------------------------------------------------------------
-void TTest_ASWLog_Base::Test_GetConfig_ReturnsLiveMutableReference()
+void TTest_ASWLog_Base::Test_GetConfig_ReturnsUnchangingSnapshot()
 {
-    // Arrange
+    // Arrange: the snapshot is read-only, so it can't be changed behind the logger's back
+    static_assert(std::is_same_v<decltype(std::declval<const ASWLog::IASWLog&>().GetConfig()),
+        std::shared_ptr<const ASWLog::TASWLogConfig> >);
+
     TTestLogger logger;
-    const TTestLogger& constLogger = logger;
+    const auto defaultConfig = logger.GetConfig();
 
-    // Assert: defaults are visible through the non-const overload
-    CheckEquals(static_cast<int32_t>(ASWLog::Level::Info), static_cast<int32_t>(logger.GetConfig().InitialMinimumLevel), __func__, __LINE__, "Default minimum level should be Info");
+    ASWLog::TASWLogConfig firstConfig;
+    firstConfig.Startup.Banner = "first";
+    ASWLog::TASWLogConfig secondConfig;
+    secondConfig.Startup.Banner = "second";
 
-    // Act: mutate through the reference returned by the non-const overload
-    logger.GetConfig().InitialMinimumLevel = ASWLog::Level::Error;
+    // Act
+    logger.Initialize(firstConfig);
+    const auto firstSnapshot = logger.GetConfig();
+    const bool reconfigured = logger.Reconfigure(secondConfig);
+    const auto secondSnapshot = logger.GetConfig();
 
-    // Assert: the mutation persists on subsequent reads, proving GetConfig() returns a live
-    // reference rather than a copy - callers rely on this to configure a logger in place
-    // (e.g. `logger.GetConfig().InitialMinimumLevel = X;`) before calling Initialize().
-    CheckEquals(static_cast<int32_t>(ASWLog::Level::Error), static_cast<int32_t>(logger.GetConfig().InitialMinimumLevel), __func__, __LINE__, "GetConfig() should return a live reference so external mutation persists");
-
-    // Assert: the const overload observes the same underlying config, not a stale copy
-    CheckEquals(static_cast<int32_t>(ASWLog::Level::Error), static_cast<int32_t>(constLogger.GetConfig().InitialMinimumLevel), __func__, __LINE__, "The const GetConfig() overload should observe the same underlying config as the non-const overload");
+    // Assert
+    CheckTrue(defaultConfig != nullptr && defaultConfig->Startup.Banner.empty(), __func__, __LINE__,
+        "Before Initialize(), GetConfig() should return the default config");
+    CheckTrue(reconfigured, __func__, __LINE__, "Reconfigure() should succeed once initialized");
+    CheckEquals(std::string("first"), firstSnapshot->Startup.Banner, __func__, __LINE__,
+        "A snapshot should keep the settings it was taken with after Reconfigure()");
+    CheckEquals(std::string("second"), secondSnapshot->Startup.Banner, __func__, __LINE__,
+        "GetConfig() should return the settings passed to Reconfigure()");
+    CheckEquals(std::string("first"), firstConfig.Startup.Banner, __func__, __LINE__,
+        "The config passed to Initialize() should be copied, not kept");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_Base::Test_GetFullVersionStr_ContainsVersion()
@@ -264,7 +287,9 @@ void TTest_ASWLog_Base::Test_Interface_MethodsAreNoexcept()
     const std::string runtimeFormat = "{} {}";
 
     // Assert: checked at compile time, so this test fails to compile if one of them can throw
+    static_assert(noexcept(logger.GetConfig()));
     static_assert(noexcept(logger.Initialize(config)));
+    static_assert(noexcept(logger.Reconfigure(config)));
     static_assert(noexcept(logger.Open()));
     static_assert(noexcept(logger.Close()));
     static_assert(noexcept(logger.Write(record)));

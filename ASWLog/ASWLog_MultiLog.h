@@ -48,7 +48,7 @@ namespace ASWLog
 // responsible for their lifetime, which is typically an existing singleton
 // (TASWFileLog::GetInstance()) or a longer-lived instance owned elsewhere.
 //
-// This class's own runtime level (seeded from GetConfig().InitialMinimumLevel
+// This class's own runtime level (seeded from the config's InitialMinimumLevel
 // at Initialize() time, read/write via SetMinimumLevel()/GetMinimumLevel())
 // acts as an optional composite-level pre-filter gate, checked before fanning
 // Log()/LogRaw() out (default Trace = no extra filtering); LogForce()/
@@ -66,8 +66,9 @@ private:
 private:
     std::vector<IASWLog*> m_Sinks;
     mutable std::mutex m_ListMutex; // Protects only the sink list; each sink manages its own internal thread-safety.
-    // Serializes Initialize()/Close() changes to m_IsInitialized and m_Config. Never held while calling into a sink,
-    // which may call back into this logger (e.g. from an OnLogEntry callback).
+    // Serializes Initialize()/Reconfigure()/Close() changes to m_IsInitialized and the config (the lock under which
+    // this class calls SetConfig()). Never held while calling into a sink, which may call back into this logger (e.g.
+    // from an OnLogEntry callback).
     std::mutex m_StateMutex;
 
 private:
@@ -103,6 +104,10 @@ public:
     // than treating that as a failure. Returns true only if every sink ends up initialized or open. Returns false without
     // doing anything if this composite is already initialized; after Close() it can be initialized again. Thread-safe.
     bool Initialize(const TASWLogConfig& config) noexcept override;
+    // Stores the config and passes it to every registered sink's Reconfigure(), even if one fails. Returns true only if
+    // every sink's Reconfigure() succeeds; false without doing anything if this composite isn't initialized. A sink
+    // that needs settings of its own is reconfigured directly instead. Thread-safe.
+    bool Reconfigure(const TASWLogConfig& config) noexcept override;
 
     bool Open() noexcept override;
     bool Close() noexcept override;

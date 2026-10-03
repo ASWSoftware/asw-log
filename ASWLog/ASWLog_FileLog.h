@@ -130,6 +130,7 @@ protected: // TASWTextLogBase hooks
     bool InitializeUnlocked() override;
     bool OpenUnlocked() override;
     bool PrepareWriteUnlocked(std::chrono::system_clock::time_point now) override;
+    bool ReconfigureUnlocked(const TASWLogConfig& previous) override;
     void WriteLineUnlocked(Level level, std::string_view line, bool endsLine) override;
 
 protected:

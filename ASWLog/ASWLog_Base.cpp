@@ -42,6 +42,16 @@ namespace ASWLog
 /////////////////////////////////////////////////////////////////////////////
 
 //---------------------------------------------------------------------------
+std::shared_ptr<const TASWLogConfig> TASWLogBase::SetConfig(const TASWLogConfig& config)
+{
+    auto snapshot = std::make_shared<const TASWLogConfig>(config);
+
+    std::lock_guard<std::mutex> lock(m_ConfigMutex);
+    m_Config.swap(snapshot);
+    return snapshot;
+}
+
+//---------------------------------------------------------------------------
 void TASWLogBase::StampRecord(TASWLogRecord& record) const noexcept
 {
     if (record.Timestamp == std::chrono::system_clock::time_point{})

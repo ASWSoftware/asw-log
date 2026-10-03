@@ -123,12 +123,13 @@ bool TASWMultiLog::Initialize(const TASWLogConfig& config) noexcept
     try
     {
         {
+            std::shared_ptr<const TASWLogConfig> previousConfig; // Released after the lock (see SetConfig())
             std::lock_guard<std::mutex> lock(m_StateMutex);
             if (m_IsInitialized.load(std::memory_order_acquire))
                 return false;
 
-            m_Config = config;
-            SetMinimumLevel(m_Config.InitialMinimumLevel);
+            previousConfig = SetConfig(config);
+            SetMinimumLevel(config.InitialMinimumLevel);
             m_IsInitialized.store(true, std::memory_order_release);
         }
 
@@ -179,6 +180,35 @@ bool TASWMultiLog::Open() noexcept
     catch (...)
     {
         return false; // Couldn't copy the sink list (out of memory)
+    }
+}
+
+//---------------------------------------------------------------------------
+bool TASWMultiLog::Reconfigure(const TASWLogConfig& config) noexcept
+{
+    try
+    {
+        {
+            std::shared_ptr<const TASWLogConfig> previousConfig; // Released after the lock (see SetConfig())
+            std::lock_guard<std::mutex> lock(m_StateMutex);
+            if (!m_IsInitialized.load(std::memory_order_acquire))
+                return false;
+
+            previousConfig = SetConfig(config);
+        }
+
+        bool allSucceeded = true;
+        for (auto* sink : SnapshotSinks())
+        {
+            if (!sink->Reconfigure(config))
+                allSucceeded = false;
+        }
+
+        return allSucceeded;
+    }
+    catch (...)
+    {
+        return false;
     }
 }
 

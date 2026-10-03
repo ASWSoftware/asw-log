@@ -31,6 +31,7 @@ limitations under the License.
 #include <fstream>
 #include <iterator>
 #include <string>
+#include <system_error>
 #include <thread>
 #include <vector>
 
@@ -221,6 +222,9 @@ TTest_ASWLog_FileLog::TTest_ASWLog_FileLog()
     RegisterTest(&TTest_ASWLog_FileLog::Test_MultiThreadedStress_WritesAllMessagesToDisk_OpenClose, "MultiThreadedStress_WritesAllMessagesToDisk_OpenClose");
     RegisterTest(&TTest_ASWLog_FileLog::Test_OnLogEntry_FiresForQualifyingLevelsOnly, "OnLogEntry_FiresForQualifyingLevelsOnly");
     RegisterTest(&TTest_ASWLog_FileLog::Test_OnLogEntry_ReentrantCallbackDoesNotDeadlock, "OnLogEntry_ReentrantCallbackDoesNotDeadlock");
+    RegisterTest(&TTest_ASWLog_FileLog::Test_Reconfigure_FlushesEntriesBufferedByPreviousMode, "Reconfigure_FlushesEntriesBufferedByPreviousMode");
+    RegisterTest(&TTest_ASWLog_FileLog::Test_Reconfigure_MovesOutputToNewFile, "Reconfigure_MovesOutputToNewFile");
+    RegisterTest(&TTest_ASWLog_FileLog::Test_Reconfigure_UnopenableFileFailsButLoggerStaysInitialized, "Reconfigure_UnopenableFileFailsButLoggerStaysInitialized");
     RegisterTest(&TTest_ASWLog_FileLog::Test_RetentionMaxAge_DefaultDisabledPreservesOldBackups, "RetentionMaxAge_DefaultDisabledPreservesOldBackups");
     RegisterTest(&TTest_ASWLog_FileLog::Test_RetentionMaxAge_DeletesExpiredBackupsAfterRotation, "RetentionMaxAge_DeletesExpiredBackupsAfterRotation");
     RegisterTest(&TTest_ASWLog_FileLog::Test_RotateLogFiles_KeepsEveryBackup, "RotateLogFiles_KeepsEveryBackup");
@@ -1322,6 +1326,103 @@ void TTest_ASWLog_FileLog::Test_OnLogEntry_ReentrantCallbackDoesNotDeadlock()
     CheckTrue(initialized, __func__, __LINE__, "Initialize should succeed");
     CheckTrue(reentered, __func__, __LINE__, "Callback should have fired and re-entered the logger");
     CheckTrue(contents.find("reentrant_message") != std::string::npos, __func__, __LINE__, "Re-entrant Log call from the callback should complete and be written");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_FileLog::Test_Reconfigure_FlushesEntriesBufferedByPreviousMode()
+{
+    // Arrange: FlushMode::Manual keeps each entry in the file's buffer until it is flushed
+    const auto logFile = TestTempDir / "reconfigure_flush.log";
+    auto config = MakeRotationTestConfig(logFile);
+    config.File.Flush = ASWLog::FlushMode::Manual;
+
+    ASWLog::TASWFileLog logger;
+    CheckTrue(logger.Initialize(config), __func__, __LINE__, "Initialize should succeed");
+
+    // Act
+    logger.LogInfo("buffered_entry");
+    const auto contentsBefore = ReadFileText(logFile);
+    config.File.Flush = ASWLog::FlushMode::EveryWrite;
+    const bool reconfigured = logger.Reconfigure(config);
+    const auto contentsAfterReconfigure = ReadFileText(logFile);
+    logger.LogInfo("flushed_entry");
+    const auto contentsAfterEntry = ReadFileText(logFile);
+
+    // Assert
+    CheckTrue(contentsBefore.find("buffered_entry") == std::string::npos, __func__, __LINE__,
+        "With FlushMode::Manual, the entry should still be buffered");
+    CheckTrue(reconfigured, __func__, __LINE__, "Reconfigure() should succeed");
+    CheckEquals(std::string(": buffered_entry\n"), contentsAfterReconfigure, __func__, __LINE__,
+        "Reconfigure() should flush the entries buffered under the previous flush mode");
+    CheckEquals(std::string(": buffered_entry\n: flushed_entry\n"), contentsAfterEntry, __func__, __LINE__,
+        "The new flush mode should apply to the next entry");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_FileLog::Test_Reconfigure_MovesOutputToNewFile()
+{
+    // Arrange
+    const auto firstFile = TestTempDir / "reconfigure_first.log";
+    const auto secondFile = TestTempDir / "reconfigure_second.log";
+    auto config = MakeRotationTestConfig(firstFile);
+
+    ASWLog::TASWFileLog logger;
+    CheckTrue(logger.Initialize(config), __func__, __LINE__, "Initialize should succeed");
+
+    // Act
+    logger.LogInfo("to_first");
+    config.File.FilePath = secondFile;
+    const bool movedToSecond = logger.Reconfigure(config);
+    logger.LogInfo("to_second");
+
+    // On Windows, an open file can't be deleted, which shows that the first file was closed
+    const auto firstContents = ReadFileText(firstFile);
+    std::error_code removeError;
+    const bool firstFileRemoved = std::filesystem::remove(firstFile, removeError);
+
+    config.File.AutoOpenClosePerWrite = true;
+    const bool switchedToAutoOpenClose = logger.Reconfigure(config);
+    const bool openAfterSwitch = logger.IsOpen();
+    logger.LogInfo("auto_open_close");
+
+    // Assert
+    CheckTrue(movedToSecond, __func__, __LINE__, "Reconfigure() to a new file path should succeed");
+    CheckEquals(std::string(": to_first\n"), firstContents, __func__, __LINE__, "Entries before Reconfigure() should stay in the first file");
+    CheckTrue(firstFileRemoved, __func__, __LINE__, "Reconfigure() should close the first file");
+    CheckTrue(switchedToAutoOpenClose, __func__, __LINE__, "Reconfigure() to File.AutoOpenClosePerWrite should succeed");
+    CheckFalse(openAfterSwitch, __func__, __LINE__, "With File.AutoOpenClosePerWrite, the file should stay closed until the next entry");
+    CheckEquals(std::string(": to_second\n: auto_open_close\n"), ReadFileText(secondFile), __func__, __LINE__,
+        "Entries after Reconfigure() should go to the new file, in either open mode");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_FileLog::Test_Reconfigure_UnopenableFileFailsButLoggerStaysInitialized()
+{
+    // Arrange: a "folder" that is a file can't hold the new log, on any OS and for any user
+    using namespace std::chrono_literals;
+    const auto logFile = TestTempDir / "reconfigure_kept.log";
+    const auto notAFolder = TestTempDir / "not_a_folder";
+    std::ofstream(notAFolder) << "file";
+
+    auto config = MakeRotationTestConfig(logFile);
+    config.File.CircuitBreakerResetDelay = 0ms;
+
+    auto unopenableConfig = config;
+    unopenableConfig.File.FilePath = notAFolder / "unopenable.log";
+
+    ASWLog::TASWFileLog logger;
+    CheckTrue(logger.Initialize(config), __func__, __LINE__, "Initialize should succeed");
+
+    // Act
+    const bool reconfiguredToUnopenable = logger.Reconfigure(unopenableConfig);
+    logger.LogInfo("dropped");
+    const bool reconfiguredBack = logger.Reconfigure(config);
+    logger.LogInfo("written");
+
+    // Assert
+    CheckFalse(reconfiguredToUnopenable, __func__, __LINE__, "Reconfigure() should fail if the new file can't be opened");
+    CheckTrue(logger.GetConfig()->File.FilePath == config.File.FilePath, __func__, __LINE__,
+        "GetConfig() should return the config of the last Reconfigure()");
+    CheckTrue(reconfiguredBack, __func__, __LINE__, "The logger should stay initialized after the failure, so it can be reconfigured again");
+    CheckEquals(std::string(": written\n"), ReadFileText(logFile), __func__, __LINE__,
+        "Logging should resume in the file of the last Reconfigure()");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_FileLog::Test_RetentionMaxAge_DefaultDisabledPreservesOldBackups()

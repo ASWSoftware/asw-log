@@ -30,6 +30,8 @@ limitations under the License.
 #include <atomic>
 #include <chrono>
 #include <format>
+#include <memory>
+#include <mutex>
 #include <source_location>
 #include <string>
 #include <string_view>
@@ -54,11 +56,31 @@ private:
     std::atomic<Level> m_MinimumLevel{ Level::Info };
     std::atomic<bool> m_IsEnabled{ true };
 
+    // The config, an immutable snapshot that SetConfig() replaces as a whole (never null). The pointer is changed with
+    // m_ConfigMutex held, by a thread that also holds the derived logger's own lock; GetConfig() reads it with
+    // m_ConfigMutex held, and the derived logger with its own lock held (see GetConfigUnlocked()).
+    mutable std::mutex m_ConfigMutex;
+    std::shared_ptr<const TASWLogConfig> m_Config{ std::make_shared<const TASWLogConfig>() };
+
 protected:
-    TASWLogConfig m_Config;
     std::atomic<bool> m_IsInitialized{ false };
 
 protected:
+    // The current config as a snapshot that stays valid after the lock is released, e.g. to call OnLogEntry outside
+    // it. Same locking rule as GetConfigUnlocked().
+    std::shared_ptr<const TASWLogConfig> GetConfigSnapshotUnlocked() const noexcept
+    {
+        return m_Config;
+    }
+
+    // The current config, for a derived logger's own code. Call it only while holding the lock under which the logger
+    // calls SetConfig() (e.g. TASWTextLogBase's m_Mutex), so the config can't be replaced meanwhile. Elsewhere, use
+    // GetConfig().
+    const TASWLogConfig& GetConfigUnlocked() const noexcept
+    {
+        return *m_Config;
+    }
+
     // Pure virtual helper so the base class knows what implementation name to print
     virtual std::string_view GetLoggerClassName() const noexcept = 0;
 
@@ -76,6 +98,12 @@ protected:
     {
         return std::chrono::system_clock::now();
     }
+
+    // Replaces the config with a snapshot of 'config' (see GetConfig()), for Initialize() and Reconfigure(). The caller
+    // must hold the derived logger's own lock (see GetConfigUnlocked()). Returns the previous config, so the caller can
+    // release it after its lock: destroying it can run other code (e.g. the destructors of OnLogEntry's captures).
+    // Throws std::bad_alloc if the snapshot can't be made; the config is then unchanged.
+    std::shared_ptr<const TASWLogConfig> SetConfig(const TASWLogConfig& config);
 
     // Fills in the record's Timestamp (from NowUTC()), ProcessId and ThreadId if they are zero, keeping those already
     // set. Write() calls it; a logger that writes entries of its own (e.g. startup lines) can too.
@@ -97,13 +125,9 @@ public:
         return std::format("{} - Base version {}", GetLoggerClassName(), GetVersionStr());
     }
 
-    TASWLogConfig& GetConfig() noexcept final
+    std::shared_ptr<const TASWLogConfig> GetConfig() const noexcept final
     {
-        return m_Config;
-    }
-
-    const TASWLogConfig& GetConfig() const noexcept final
-    {
+        std::lock_guard<std::mutex> lock(m_ConfigMutex);
         return m_Config;
     }
 
@@ -117,9 +141,9 @@ public:
         m_IsEnabled.store(enabled, std::memory_order_relaxed);
     }
 
-    // Lock-free runtime level gate. Initialize() seeds this from m_Config.InitialMinimumLevel;
-    // afterward this atomic (not m_Config.InitialMinimumLevel) is the authoritative value
-    // used by Write() to skip locking entirely for filtered entries.
+    // Lock-free runtime level gate. Initialize() seeds this from the config's InitialMinimumLevel
+    // (Reconfigure() doesn't); afterward this atomic is the authoritative value used by Write()
+    // to skip locking entirely for filtered entries.
     Level GetMinimumLevel() const noexcept final
     {
         return m_MinimumLevel.load(std::memory_order_relaxed);

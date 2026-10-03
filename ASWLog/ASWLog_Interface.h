@@ -30,6 +30,7 @@ limitations under the License.
 #include <concepts>
 #include <exception>
 #include <format>
+#include <memory>
 #include <source_location>
 #include <string>
 #include <string_view>
@@ -162,11 +163,23 @@ public:
     virtual std::string_view GetVersionStr() const noexcept = 0;
     virtual std::string GetFullVersionStr() const = 0;
 
-    virtual TASWLogConfig& GetConfig() noexcept = 0;
-    virtual const TASWLogConfig& GetConfig() const noexcept = 0;
+    // The logger's current settings, as an immutable snapshot that stays valid and unchanged after Reconfigure()
+    // replaces it. To change a setting, copy it, change the copy and pass it to Reconfigure():
+    //     auto config = *logger.GetConfig();
+    //     config.Line.ShowThreadId = false;
+    //     logger.Reconfigure(config);
+    virtual std::shared_ptr<const TASWLogConfig> GetConfig() const noexcept = 0;
 
-    // Initialize(), Open() and Close() return false if they fail, including on an unexpected exception.
+    // Initialize(), Reconfigure(), Open() and Close() return false if they fail, including on an unexpected exception.
     virtual bool Initialize(const TASWLogConfig& config) noexcept = 0;
+    // Replaces the settings of an initialized logger, safely while other threads log: the entries written after it
+    // returns use the new settings. A file logger whose file path or AutoOpenClosePerWrite changed closes the old file
+    // and opens the new one. Doesn't change the minimum level (InitialMinimumLevel only seeds it at Initialize(); use
+    // SetMinimumLevel()) and doesn't write the startup lines. A multi-log passes the settings on to every logger it
+    // holds, like Initialize(). Returns false if the logger isn't initialized (use Initialize()), or if the new
+    // settings couldn't be applied, e.g. the new file couldn't be opened: they are kept, and the file logger tries
+    // again on later entries (see TASWFileConfig::CircuitBreakerResetDelay).
+    virtual bool Reconfigure(const TASWLogConfig& config) noexcept = 0;
 
     virtual bool Open() noexcept = 0;
     // Closes the output (e.g. the log file). This doesn't always stop logging: a file logger with

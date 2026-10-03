@@ -103,10 +103,18 @@ public:
     std::vector<std::string> Calls;
     std::vector<ASWLog::TASWLogRecord> Records; // Every field but Message
     bool FlushResult = true; // Returned by Flush()
+    bool ReconfigureResult = true; // Returned by Reconfigure()
 
     bool Initialize(const ASWLog::TASWLogConfig& /*config*/) noexcept override
     {
         return true;
+    }
+
+    bool Reconfigure(const ASWLog::TASWLogConfig& config) noexcept override
+    {
+        Calls.emplace_back("Reconfigure");
+        [[maybe_unused]] const auto previousConfig = SetConfig(config);
+        return ReconfigureResult;
     }
 
     bool Open() noexcept override
@@ -162,6 +170,11 @@ public:
     bool Initialize(const ASWLog::TASWLogConfig& /*config*/) noexcept override
     {
         return true;
+    }
+
+    bool Reconfigure(const ASWLog::TASWLogConfig& /*config*/) noexcept override
+    {
+        return false;
     }
 
     bool Open() noexcept override
@@ -248,6 +261,7 @@ TTest_ASWLog_MultiLog::TTest_ASWLog_MultiLog()
     RegisterTest(&TTest_ASWLog_MultiLog::Test_Log_ThrowingSinkDoesNotStopOtherSinks, "Log_ThrowingSinkDoesNotStopOtherSinks");
     RegisterTest(&TTest_ASWLog_MultiLog::Test_LogFmt_FormatsOnceForAllSinks, "LogFmt_FormatsOnceForAllSinks");
     RegisterTest(&TTest_ASWLog_MultiLog::Test_LogForce_BypassesCompositeGate, "LogForce_BypassesCompositeGate");
+    RegisterTest(&TTest_ASWLog_MultiLog::Test_Reconfigure_PassesConfigToEverySink, "Reconfigure_PassesConfigToEverySink");
     RegisterTest(&TTest_ASWLog_MultiLog::Test_RemoveAllLoggers_ClearsRegistrationAndReturnsCount, "RemoveAllLoggers_ClearsRegistrationAndReturnsCount");
     RegisterTest(&TTest_ASWLog_MultiLog::Test_RemoveLogger_StopsReceivingEntries, "RemoveLogger_StopsReceivingEntries");
     RegisterTest(&TTest_ASWLog_MultiLog::Test_SetEnabled_FalseStopsFanOut, "SetEnabled_FalseStopsFanOut");
@@ -719,6 +733,40 @@ void TTest_ASWLog_MultiLog::Test_LogForce_BypassesCompositeGate()
 
     // Assert
     CheckTrue(ReadFileText(fileA).find("forced_past_composite_gate") != std::string::npos, __func__, __LINE__, "LogForce should bypass the composite's own MinimumLevel gate");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_MultiLog::Test_Reconfigure_PassesConfigToEverySink()
+{
+    // Arrange: the first sink's Reconfigure() fails
+    TRecordingLogger failingSink;
+    failingSink.ReconfigureResult = false;
+    TRecordingLogger sink;
+
+    ASWLog::TASWMultiLog multiLog;
+    multiLog.AddLogger(failingSink);
+    multiLog.AddLogger(sink);
+
+    ASWLog::TASWLogConfig config;
+    config.Startup.Banner = "reconfigured";
+
+    // Act
+    const bool reconfiguredBeforeInitialize = multiLog.Reconfigure(config);
+    const auto callsBeforeInitialize = sink.Calls;
+    multiLog.Initialize(ASWLog::TASWLogConfig{});
+    const bool reconfiguredWithFailure = multiLog.Reconfigure(config);
+    failingSink.ReconfigureResult = true;
+    const bool reconfigured = multiLog.Reconfigure(config);
+
+    // Assert
+    const std::vector<std::string> twoReconfigures{ "Reconfigure", "Reconfigure" };
+    CheckFalse(reconfiguredBeforeInitialize, __func__, __LINE__, "Reconfigure() should fail before Initialize()");
+    CheckTrue(callsBeforeInitialize.empty(), __func__, __LINE__, "Reconfigure() before Initialize() should not reach the sinks");
+    CheckFalse(reconfiguredWithFailure, __func__, __LINE__, "Reconfigure() should return false if any sink's Reconfigure() fails");
+    CheckTrue(reconfigured, __func__, __LINE__, "Reconfigure() should return true once every sink's Reconfigure() succeeds");
+    CheckTrue(failingSink.Calls == twoReconfigures, __func__, __LINE__, "Each Reconfigure() should reach the failing sink");
+    CheckTrue(sink.Calls == twoReconfigures, __func__, __LINE__, "A sink's failed Reconfigure() should not stop the other sinks");
+    CheckEquals(std::string("reconfigured"), sink.GetConfig()->Startup.Banner, __func__, __LINE__, "Each sink should get the new config");
+    CheckEquals(std::string("reconfigured"), multiLog.GetConfig()->Startup.Banner, __func__, __LINE__, "The multi-log should keep the new config");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_MultiLog::Test_RemoveAllLoggers_ClearsRegistrationAndReturnsCount()
