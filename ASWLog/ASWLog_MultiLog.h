@@ -71,8 +71,6 @@ private:
     std::mutex m_StateMutex;
 
 private:
-    template<typename TLogCall>
-    void FanOut(const TLogCall& logCall) const noexcept;
     std::vector<IASWLog*> SnapshotSinks() const;
 
 protected:
@@ -104,10 +102,10 @@ public:
     // may correctly return false in that case, e.g. a singleton initialized elsewhere before being added here) rather
     // than treating that as a failure. Returns true only if every sink ends up initialized or open. Returns false without
     // doing anything if this composite is already initialized; after Close() it can be initialized again. Thread-safe.
-    bool Initialize(const TASWLogConfig& config) override;
+    bool Initialize(const TASWLogConfig& config) noexcept override;
 
-    bool Open() override;
-    bool Close() override;
+    bool Open() noexcept override;
+    bool Close() noexcept override;
     // Flushes every registered sink, even if one fails, whether or not this composite is enabled. Returns true only if
     // every sink's Flush() succeeds (vacuously true if none are registered).
     bool Flush() noexcept override;
@@ -116,7 +114,6 @@ public:
     // True if this composite's own gate passes (enabled, not Off, minimum level) and at least one registered sink's
     // ShouldLog() is true (false if none are registered).
     bool ShouldLog(Level level) const noexcept override;
-
 };
 
 } // namespace ASWLog

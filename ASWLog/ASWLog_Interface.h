@@ -82,7 +82,7 @@ struct TASWFormatString
 
     template<typename T>
     requires std::convertible_to<const T&, std::string_view>
-    consteval TASWFormatString(const T& format, std::source_location location = std::source_location::current())
+    consteval TASWFormatString(const T& format, std::source_location location = std::source_location::current()) noexcept
         : Format(format),
           Location(location)
     {
@@ -136,6 +136,10 @@ private:
 // Interface for the logger. Every logging method ends in Write(), the one
 // method a logger implements to receive entries (a logger deriving from
 // TASWLogBase implements its WriteRecord() hook instead).
+//
+// Logging never throws into the application: every method except
+// GetFullVersionStr() is noexcept, and failures are reported by a false
+// result or by dropping the entry.
 /////////////////////////////////////////////////////////////////////////////
 class IASWLog
 {
@@ -161,12 +165,13 @@ public:
     virtual TASWLogConfig& GetConfig() noexcept = 0;
     virtual const TASWLogConfig& GetConfig() const noexcept = 0;
 
-    virtual bool Initialize(const TASWLogConfig& config) = 0;
+    // Initialize(), Open() and Close() return false if they fail, including on an unexpected exception.
+    virtual bool Initialize(const TASWLogConfig& config) noexcept = 0;
 
-    virtual bool Open() = 0;
+    virtual bool Open() noexcept = 0;
     // Closes the output (e.g. the log file). This doesn't always stop logging: a file logger with
     // TASWLogConfig::AutoOpenClosePerWrite reopens its file for the next entry. Use SetEnabled(false) to stop logging.
-    virtual bool Close() = 0;
+    virtual bool Close() noexcept = 0;
     // Pushes the entries written so far out of the logger's buffers (e.g. a file's buffer to the operating system), for
     // use before a risky operation or with FlushMode::Manual. Works while disabled, since it writes no new entries.
     // Returns false if the output isn't open or the flush failed (a multi-log: if any of its loggers' flushes failed).
@@ -192,58 +197,58 @@ public:
     // Receives every entry: from the logging methods below, or passed on by another logger (e.g. a multi-log). Writes
     // it unless the logger is disabled, its level is Off, or it is below the minimum level and not record.Forced. A
     // logger that writes it first fills in the record's Timestamp, ProcessId and ThreadId if they are still zero, on
-    // the calling thread (see TASWLogRecord).
-    virtual void Write(const TASWLogRecord& record) = 0;
+    // the calling thread (see TASWLogRecord). An entry that can't be written (e.g. out of memory) is dropped.
+    virtual void Write(const TASWLogRecord& record) noexcept = 0;
 
     // --- Non-virtual Inline Logging Methods ---
     // Each passes a record with the caller's source location to Write(). LogRaw() writes the message as is, without the
     // line layout or a line ending (e.g. a multi-line HTTP body); LogForce() writes it whatever the minimum level.
-    inline void Log(Level level, std::string_view msg, std::source_location loc = std::source_location::current())
+    inline void Log(Level level, std::string_view msg, std::source_location loc = std::source_location::current()) noexcept
     {
         Write(MakeRecord(level, msg, loc, false, false));
     }
 
-    inline void LogRaw(Level level, std::string_view msg, std::source_location loc = std::source_location::current())
+    inline void LogRaw(Level level, std::string_view msg, std::source_location loc = std::source_location::current()) noexcept
     {
         Write(MakeRecord(level, msg, loc, true, false));
     }
 
-    inline void LogForce(Level level, std::string_view msg, std::source_location loc = std::source_location::current())
+    inline void LogForce(Level level, std::string_view msg, std::source_location loc = std::source_location::current()) noexcept
     {
         Write(MakeRecord(level, msg, loc, false, true));
     }
 
-    inline void LogForceRaw(Level level, std::string_view msg, std::source_location loc = std::source_location::current())
+    inline void LogForceRaw(Level level, std::string_view msg, std::source_location loc = std::source_location::current()) noexcept
     {
         Write(MakeRecord(level, msg, loc, true, true));
     }
 
-    inline void LogTrace(std::string_view msg, std::source_location loc = std::source_location::current())
+    inline void LogTrace(std::string_view msg, std::source_location loc = std::source_location::current()) noexcept
     {
         Write(MakeRecord(Level::Trace, msg, loc, false, false));
     }
 
-    inline void LogDebug(std::string_view msg, std::source_location loc = std::source_location::current())
+    inline void LogDebug(std::string_view msg, std::source_location loc = std::source_location::current()) noexcept
     {
         Write(MakeRecord(Level::Debug, msg, loc, false, false));
     }
 
-    inline void LogInfo(std::string_view msg, std::source_location loc = std::source_location::current())
+    inline void LogInfo(std::string_view msg, std::source_location loc = std::source_location::current()) noexcept
     {
         Write(MakeRecord(Level::Info, msg, loc, false, false));
     }
 
-    inline void LogWarn(std::string_view msg, std::source_location loc = std::source_location::current())
+    inline void LogWarn(std::string_view msg, std::source_location loc = std::source_location::current()) noexcept
     {
         Write(MakeRecord(Level::Warn, msg, loc, false, false));
     }
 
-    inline void LogError(std::string_view msg, std::source_location loc = std::source_location::current())
+    inline void LogError(std::string_view msg, std::source_location loc = std::source_location::current()) noexcept
     {
         Write(MakeRecord(Level::Error, msg, loc, false, false));
     }
 
-    inline void LogCritical(std::string_view msg, std::source_location loc = std::source_location::current())
+    inline void LogCritical(std::string_view msg, std::source_location loc = std::source_location::current()) noexcept
     {
         Write(MakeRecord(Level::Critical, msg, loc, false, false));
     }
@@ -255,65 +260,65 @@ public:
     // wouldn't be written isn't formatted: see ShouldLog(), and, for the LogForce*Fmt() methods, IsEnabled() and
     // Level::Off. The type_identity_t keeps 'fmt' from taking part in deducing Args, like std::format's parameter.
     template<typename ... Args>
-    inline void LogFmt(Level level, TASWFormatString<std::type_identity_t<Args>...> fmt, Args&&... args)
+    inline void LogFmt(Level level, TASWFormatString<std::type_identity_t<Args>...> fmt, Args&&... args) noexcept
     {
         if (ShouldLog(level))
             Log(level, fmt.FormatMessage(args ...), fmt.Location);
     }
 
     template<typename ... Args>
-    inline void LogRawFmt(Level level, TASWFormatString<std::type_identity_t<Args>...> fmt, Args&&... args)
+    inline void LogRawFmt(Level level, TASWFormatString<std::type_identity_t<Args>...> fmt, Args&&... args) noexcept
     {
         if (ShouldLog(level))
             LogRaw(level, fmt.FormatMessage(args ...), fmt.Location);
     }
 
     template<typename ... Args>
-    inline void LogForceFmt(Level level, TASWFormatString<std::type_identity_t<Args>...> fmt, Args&&... args)
+    inline void LogForceFmt(Level level, TASWFormatString<std::type_identity_t<Args>...> fmt, Args&&... args) noexcept
     {
         if (level != Level::Off && IsEnabled())
             LogForce(level, fmt.FormatMessage(args ...), fmt.Location);
     }
 
     template<typename ... Args>
-    inline void LogForceRawFmt(Level level, TASWFormatString<std::type_identity_t<Args>...> fmt, Args&&... args)
+    inline void LogForceRawFmt(Level level, TASWFormatString<std::type_identity_t<Args>...> fmt, Args&&... args) noexcept
     {
         if (level != Level::Off && IsEnabled())
             LogForceRaw(level, fmt.FormatMessage(args ...), fmt.Location);
     }
 
     template<typename ... Args>
-    inline void LogTraceFmt(TASWFormatString<std::type_identity_t<Args>...> fmt, Args&&... args)
+    inline void LogTraceFmt(TASWFormatString<std::type_identity_t<Args>...> fmt, Args&&... args) noexcept
     {
         LogFmt(Level::Trace, fmt, std::forward<Args>(args) ...);
     }
 
     template<typename ... Args>
-    inline void LogDebugFmt(TASWFormatString<std::type_identity_t<Args>...> fmt, Args&&... args)
+    inline void LogDebugFmt(TASWFormatString<std::type_identity_t<Args>...> fmt, Args&&... args) noexcept
     {
         LogFmt(Level::Debug, fmt, std::forward<Args>(args) ...);
     }
 
     template<typename ... Args>
-    inline void LogInfoFmt(TASWFormatString<std::type_identity_t<Args>...> fmt, Args&&... args)
+    inline void LogInfoFmt(TASWFormatString<std::type_identity_t<Args>...> fmt, Args&&... args) noexcept
     {
         LogFmt(Level::Info, fmt, std::forward<Args>(args) ...);
     }
 
     template<typename ... Args>
-    inline void LogWarnFmt(TASWFormatString<std::type_identity_t<Args>...> fmt, Args&&... args)
+    inline void LogWarnFmt(TASWFormatString<std::type_identity_t<Args>...> fmt, Args&&... args) noexcept
     {
         LogFmt(Level::Warn, fmt, std::forward<Args>(args) ...);
     }
 
     template<typename ... Args>
-    inline void LogErrorFmt(TASWFormatString<std::type_identity_t<Args>...> fmt, Args&&... args)
+    inline void LogErrorFmt(TASWFormatString<std::type_identity_t<Args>...> fmt, Args&&... args) noexcept
     {
         LogFmt(Level::Error, fmt, std::forward<Args>(args) ...);
     }
 
     template<typename ... Args>
-    inline void LogCriticalFmt(TASWFormatString<std::type_identity_t<Args>...> fmt, Args&&... args)
+    inline void LogCriticalFmt(TASWFormatString<std::type_identity_t<Args>...> fmt, Args&&... args) noexcept
     {
         LogFmt(Level::Critical, fmt, std::forward<Args>(args) ...);
     }

@@ -104,17 +104,17 @@ public:
     std::vector<ASWLog::TASWLogRecord> Records; // Every field but Message
     bool FlushResult = true; // Returned by Flush()
 
-    bool Initialize(const ASWLog::TASWLogConfig& /*config*/) override
+    bool Initialize(const ASWLog::TASWLogConfig& /*config*/) noexcept override
     {
         return true;
     }
 
-    bool Open() override
+    bool Open() noexcept override
     {
         return true;
     }
 
-    bool Close() override
+    bool Close() noexcept override
     {
         return true;
     }
@@ -159,17 +159,17 @@ protected:
     }
 
 public:
-    bool Initialize(const ASWLog::TASWLogConfig& /*config*/) override
+    bool Initialize(const ASWLog::TASWLogConfig& /*config*/) noexcept override
     {
         return true;
     }
 
-    bool Open() override
+    bool Open() noexcept override
     {
         return true;
     }
 
-    bool Close() override
+    bool Close() noexcept override
     {
         return true;
     }

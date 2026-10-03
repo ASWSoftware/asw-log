@@ -54,10 +54,17 @@ void TASWTextLogBase::AppendLineEnding(std::string& line) const
 }
 
 //---------------------------------------------------------------------------
-bool TASWTextLogBase::Close()
+bool TASWTextLogBase::Close() noexcept
 {
-    std::lock_guard<std::mutex> lock(m_Mutex);
-    return CloseUnlocked();
+    try
+    {
+        std::lock_guard<std::mutex> lock(m_Mutex);
+        return CloseUnlocked();
+    }
+    catch (...)
+    {
+        return false;
+    }
 }
 
 //---------------------------------------------------------------------------
@@ -130,32 +137,47 @@ bool TASWTextLogBase::Flush() noexcept
 }
 
 //---------------------------------------------------------------------------
-bool TASWTextLogBase::Initialize(const TASWLogConfig& config)
+bool TASWTextLogBase::Initialize(const TASWLogConfig& config) noexcept
 {
-    std::lock_guard<std::mutex> lock(m_Mutex);
-    if (m_IsInitialized.load(std::memory_order_acquire))
+    try
+    {
+        std::lock_guard<std::mutex> lock(m_Mutex);
+        if (m_IsInitialized.load(std::memory_order_acquire))
+        {
+            return false;
+        }
+
+        m_Config = config;
+        SetMinimumLevel(m_Config.InitialMinimumLevel);
+
+        if (!InitializeUnlocked())
+        {
+            return false;
+        }
+
+        // The output is ready, so the startup lines are best effort: if one throws (e.g. a formatter that throws, or
+        // out of memory while gathering the system info), the rest are skipped but the logger is still initialized
+        try
+        {
+            if (!m_Config.BannerMessage_Init.empty())
+            {
+                WriteInfoLine(m_Config.BannerMessage_Init);
+            }
+
+            WriteInitializationInfo();
+        }
+        catch (...)
+        {
+        }
+
+        AfterEntryUnlocked();
+
+        return true;
+    }
+    catch (...)
     {
         return false;
     }
-
-    m_Config = config;
-    SetMinimumLevel(m_Config.InitialMinimumLevel);
-
-    if (!InitializeUnlocked())
-    {
-        return false;
-    }
-
-    if (!m_Config.BannerMessage_Init.empty())
-    {
-        WriteInfoLine(m_Config.BannerMessage_Init);
-    }
-
-    WriteInitializationInfo();
-
-    AfterEntryUnlocked();
-
-    return true;
 }
 
 //---------------------------------------------------------------------------
@@ -165,10 +187,17 @@ bool TASWTextLogBase::IsOpen() const noexcept
 }
 
 //---------------------------------------------------------------------------
-bool TASWTextLogBase::Open()
+bool TASWTextLogBase::Open() noexcept
 {
-    std::lock_guard<std::mutex> lock(m_Mutex);
-    return OpenUnlocked();
+    try
+    {
+        std::lock_guard<std::mutex> lock(m_Mutex);
+        return OpenUnlocked();
+    }
+    catch (...)
+    {
+        return false;
+    }
 }
 
 //---------------------------------------------------------------------------
@@ -297,30 +326,24 @@ void TASWTextLogBase::WriteOSInfo()
 /*
     TASWTextLogBase::WriteRecord
 
-    Writes one entry passed to Write(), then calls OnLogEntry. Never throws, so that logging can't throw into the
-    application: if writing fails (e.g. out of memory), the entry is dropped.
+    Writes one entry passed to Write(), then calls OnLogEntry. If writing throws (e.g. out of memory, or a formatter
+    that throws), TASWLogBase::Write() drops the entry.
 */
-void TASWTextLogBase::WriteRecord(const TASWLogRecord& record) noexcept
+void TASWTextLogBase::WriteRecord(const TASWLogRecord& record)
 {
-    try
+    std::string writtenLine;
     {
-        std::string writtenLine;
-        {
-            std::lock_guard<std::mutex> lock(m_Mutex);
-            if (!EnsureReadyUnlocked())
-                return;
+        std::lock_guard<std::mutex> lock(m_Mutex);
+        if (!EnsureReadyUnlocked())
+            return;
 
-            writtenLine = WriteLogEntry(record);
+        writtenLine = WriteLogEntry(record);
 
-            AfterEntryUnlocked();
-        }
-
-        if (!writtenLine.empty())
-            DispatchLogCallback(record, writtenLine);
+        AfterEntryUnlocked();
     }
-    catch (...)
-    {
-    }
+
+    if (!writtenLine.empty())
+        DispatchLogCallback(record, writtenLine);
 }
 
 //---------------------------------------------------------------------------

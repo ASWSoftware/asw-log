@@ -82,6 +82,16 @@ see [0.26.1](#0261---2026-09-17) for the initial versioned baseline.
   `OnLogEntry` callbacks now take `(const TASWLogRecord& record,
   std::string_view formattedLine)` instead of `(Level, std::string_view)`;
   the level is `record.LogLevel`.
+- Logging never throws into the application, and the signatures now say
+  so: `Write()`, the `Log*` methods, the `*Fmt` methods, `Initialize()`,
+  `Open()` and `Close()` are `noexcept` (every `IASWLog` method except
+  `GetFullVersionStr()`), and `Initialize()`/`Open()`/`Close()` return
+  false on an unexpected exception. A startup line whose formatter throws
+  no longer makes `Initialize()` throw; the remaining startup lines are
+  skipped and the logger is initialized. Custom loggers must declare
+  `Initialize`, `Open`, `Close` and (when implementing `IASWLog` directly)
+  `Write` overrides `noexcept`; a `WriteRecord()` override may still
+  throw, since `TASWLogBase::Write()` drops the entry instead.
 
 ## [0.45.0] - 2026-10-01
 

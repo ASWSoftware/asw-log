@@ -153,6 +153,16 @@ public:
     }
 };
 
+// A faulty user formatter: throws for every line (IASWLogFormatter::Format() may throw; the line is then dropped)
+class TThrowingFormatter final : public ASWLog::IASWLogFormatter
+{
+public:
+    std::string Format(const ASWLog::TASWLogRecord& /*record*/, const ASWLog::TASWLogConfig& /*config*/) const override
+    {
+        throw std::runtime_error("format failed");
+    }
+};
+
 // A config with no startup or shutdown lines, and only the level in each line, e.g. "[INFO]: message\n"
 ASWLog::TASWLogConfig MakeQuietConfig()
 {
@@ -202,6 +212,7 @@ TTest_ASWLog_TextLogBase::TTest_ASWLog_TextLogBase()
     RegisterTest(&TTest_ASWLog_TextLogBase::Test_Flush_CallsHookAndReturnsItsResult, "Flush_CallsHookAndReturnsItsResult");
     RegisterTest(&TTest_ASWLog_TextLogBase::Test_Flush_ThrowingHookDoesNotEscape, "Flush_ThrowingHookDoesNotEscape");
     RegisterTest(&TTest_ASWLog_TextLogBase::Test_Formatter_FormatsEveryFileLine, "Formatter_FormatsEveryFileLine");
+    RegisterTest(&TTest_ASWLog_TextLogBase::Test_Initialize_ThrowingFormatterStillInitializes, "Initialize_ThrowingFormatterStillInitializes");
     RegisterTest(&TTest_ASWLog_TextLogBase::Test_Initialize_WritesStartupLinesThenCallsAfterEntry, "Initialize_WritesStartupLinesThenCallsAfterEntry");
     RegisterTest(&TTest_ASWLog_TextLogBase::Test_Log_AtLevelOffIsNeverWritten, "Log_AtLevelOffIsNeverWritten");
     RegisterTest(&TTest_ASWLog_TextLogBase::Test_Log_DroppedWhenNotReadyOrNotPrepared, "Log_DroppedWhenNotReadyOrNotPrepared");
@@ -346,6 +357,38 @@ void TTest_ASWLog_TextLogBase::Test_Formatter_FormatsEveryFileLine()
     CheckEquals(static_cast<std::size_t>(3), callbackLines.size(), __func__, __LINE__, "OnLogEntry should get the three logged entries");
     if (callbackLines.size() == 3)
         CheckEquals(std::string("INFO|hello\n"), callbackLines[0], __func__, __LINE__, "OnLogEntry should get the line in the formatter's layout");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_TextLogBase::Test_Initialize_ThrowingFormatterStillInitializes()
+{
+    // Arrange: a startup line goes through a formatter that throws
+    TMemoryOutput output;
+    auto config = MakeQuietConfig();
+    config.BannerMessage_Init = "banner";
+    config.Formatter = std::make_shared<TThrowingFormatter>();
+
+    TMemoryTextLog log(output);
+    bool initialized = false;
+    bool threw = false;
+
+    // Act
+    try
+    {
+        initialized = log.Initialize(config);
+        log.LogInfo("formatted"); // Dropped, since its line can't be formatted
+        log.LogRaw(ASWLog::Level::Info, "raw"); // Written: raw entries don't use the formatter
+    }
+    catch (...)
+    {
+        threw = true;
+    }
+
+    // Assert
+    CheckFalse(threw, __func__, __LINE__, "A throwing formatter should not throw out of Initialize() or the Log* methods");
+    CheckTrue(initialized, __func__, __LINE__, "Initialize() should succeed: the startup lines are best effort once the output is open");
+    CheckTrue(log.IsOpen(), __func__, __LINE__, "The logger should be open");
+    CheckTrue(output.Lines == std::vector<std::string>{ "raw" }, __func__, __LINE__, "Only the raw entry should be written");
+    CheckEquals(2, output.AfterEntryCount, __func__, __LINE__, "AfterEntryUnlocked should still run after the startup lines, and after the raw entry");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_TextLogBase::Test_Initialize_WritesStartupLinesThenCallsAfterEntry()

@@ -106,6 +106,7 @@ public:
     int WriteRecordCount = 0;
     std::chrono::system_clock::time_point FixedNow{}; // What NowUTC() returns, if set
     mutable int NowUTCCount = 0; // How many times NowUTC() was called
+    bool ThrowsOnWrite = false; // WriteRecord() throws, like a faulty custom logger
 
 protected:
     std::string_view GetLoggerClassName() const noexcept override
@@ -121,6 +122,9 @@ protected:
 
     void WriteRecord(const ASWLog::TASWLogRecord& record) override
     {
+        if (ThrowsOnWrite)
+            throw std::runtime_error("write failed");
+
         ++WriteRecordCount;
         LastLevel = record.LogLevel;
         LastMessage = std::string(record.Message);
@@ -130,7 +134,7 @@ protected:
     }
 
 public:
-    bool Initialize(const ASWLog::TASWLogConfig& config) override
+    bool Initialize(const ASWLog::TASWLogConfig& config) noexcept override
     {
         m_Config = config;
         SetMinimumLevel(m_Config.InitialMinimumLevel);
@@ -138,13 +142,13 @@ public:
         return true;
     }
 
-    bool Open() override
+    bool Open() noexcept override
     {
         m_IsInitialized.store(true, std::memory_order_release);
         return true;
     }
 
-    bool Close() override
+    bool Close() noexcept override
     {
         m_IsInitialized.store(false, std::memory_order_release);
         return true;
@@ -175,6 +179,7 @@ TTest_ASWLog_Base::TTest_ASWLog_Base()
 {
     RegisterTest(&TTest_ASWLog_Base::Test_GetConfig_ReturnsLiveMutableReference, "GetConfig_ReturnsLiveMutableReference");
     RegisterTest(&TTest_ASWLog_Base::Test_GetFullVersionStr_ContainsVersion, "GetFullVersionStr_ContainsVersion");
+    RegisterTest(&TTest_ASWLog_Base::Test_Interface_MethodsAreNoexcept, "Interface_MethodsAreNoexcept");
     RegisterTest(&TTest_ASWLog_Base::Test_LogFormatMethods_AcceptEveryArgumentKind, "LogFormatMethods_AcceptEveryArgumentKind");
     RegisterTest(&TTest_ASWLog_Base::Test_LogFormatMethods_LogErrorInsteadOfThrowing, "LogFormatMethods_LogErrorInsteadOfThrowing");
     RegisterTest(&TTest_ASWLog_Base::Test_LogFormatMethods_PassCallerLocation, "LogFormatMethods_PassCallerLocation");
@@ -186,6 +191,7 @@ TTest_ASWLog_Base::TTest_ASWLog_Base()
     RegisterTest(&TTest_ASWLog_Base::Test_Write_AppliesEnabledOffAndLevelChecks, "Write_AppliesEnabledOffAndLevelChecks");
     RegisterTest(&TTest_ASWLog_Base::Test_Write_KeepsFieldsAlreadyStamped, "Write_KeepsFieldsAlreadyStamped");
     RegisterTest(&TTest_ASWLog_Base::Test_Write_StampsOnlyWrittenEntries, "Write_StampsOnlyWrittenEntries");
+    RegisterTest(&TTest_ASWLog_Base::Test_Write_ThrowingWriteRecordDropsEntry, "Write_ThrowingWriteRecordDropsEntry");
 }
 //---------------------------------------------------------------------------
 TTest_ASWLog_Base::~TTest_ASWLog_Base()
@@ -244,6 +250,47 @@ void TTest_ASWLog_Base::Test_GetFullVersionStr_ContainsVersion()
 
     // Assert
     CheckEquals(expected, version, __func__, __LINE__, "Full version string should combine the logger class name and the version number");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_Base::Test_Interface_MethodsAreNoexcept()
+{
+    // Arrange: through the interface, as a caller holding an IASWLog& sees it. String views rather than literals, since
+    // the standard doesn't make converting a literal to std::string_view noexcept.
+    TTestLogger testLogger;
+    ASWLog::IASWLog& logger = testLogger;
+    const ASWLog::TASWLogConfig config;
+    const ASWLog::TASWLogRecord record;
+    const std::string_view message = "message";
+    const std::string runtimeFormat = "{} {}";
+
+    // Assert: checked at compile time, so this test fails to compile if one of them can throw
+    static_assert(noexcept(logger.Initialize(config)));
+    static_assert(noexcept(logger.Open()));
+    static_assert(noexcept(logger.Close()));
+    static_assert(noexcept(logger.Write(record)));
+    static_assert(noexcept(logger.Log(ASWLog::Level::Info, message)));
+    static_assert(noexcept(logger.LogRaw(ASWLog::Level::Info, message)));
+    static_assert(noexcept(logger.LogForce(ASWLog::Level::Info, message)));
+    static_assert(noexcept(logger.LogForceRaw(ASWLog::Level::Info, message)));
+    static_assert(noexcept(logger.LogTrace(message)));
+    static_assert(noexcept(logger.LogDebug(message)));
+    static_assert(noexcept(logger.LogInfo(message)));
+    static_assert(noexcept(logger.LogWarn(message)));
+    static_assert(noexcept(logger.LogError(message)));
+    static_assert(noexcept(logger.LogCritical(message)));
+    static_assert(noexcept(logger.LogFmt(ASWLog::Level::Info, "{} {}", 1, message)));
+    static_assert(noexcept(logger.LogRawFmt(ASWLog::Level::Info, "{}", 1)));
+    static_assert(noexcept(logger.LogForceFmt(ASWLog::Level::Info, "{}", 1)));
+    static_assert(noexcept(logger.LogForceRawFmt(ASWLog::Level::Info, "{}", 1)));
+    static_assert(noexcept(logger.LogTraceFmt("{}", 1)));
+    static_assert(noexcept(logger.LogDebugFmt("{}", 1)));
+    static_assert(noexcept(logger.LogInfoFmt("{}", 1)));
+    static_assert(noexcept(logger.LogWarnFmt("{}", 1)));
+    static_assert(noexcept(logger.LogErrorFmt("{}", 1)));
+    static_assert(noexcept(logger.LogCriticalFmt("{}", 1)));
+    static_assert(noexcept(logger.LogInfoFmt(ASWLog::RuntimeFormat(runtimeFormat), 1, 2)));
+
+    CheckTrue(logger.ShouldLog(ASWLog::Level::Info), __func__, __LINE__, "The noexcept checks above are made at compile time");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_Base::Test_LogFormatMethods_AcceptEveryArgumentKind()
@@ -630,6 +677,24 @@ void TTest_ASWLog_Base::Test_Write_StampsOnlyWrittenEntries()
     CheckTrue(logger.LastRecord.Timestamp == logger.FixedNow, __func__, __LINE__, "The Timestamp should come from the logger's NowUTC()");
     CheckEquals(static_cast<int64_t>(ASWLog::GetCurrentOSProcessId()), static_cast<int64_t>(logger.LastRecord.ProcessId), __func__, __LINE__, "The ProcessId should be this process's");
     CheckEquals(static_cast<int64_t>(ASWLog::GetCurrentOSThreadId()), static_cast<int64_t>(logger.LastRecord.ThreadId), __func__, __LINE__, "The ThreadId should be the calling thread's");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_Base::Test_Write_ThrowingWriteRecordDropsEntry()
+{
+    // Arrange: a custom logger whose WriteRecord() throws. Without the catch in TASWLogBase::Write(), the exception
+    // would leave a noexcept function and call std::terminate, ending the test run.
+    TTestLogger logger;
+    logger.ThrowsOnWrite = true;
+
+    // Act
+    logger.LogError("dropped");
+    logger.LogForceRaw(ASWLog::Level::Critical, "dropped_too");
+    logger.ThrowsOnWrite = false;
+    logger.LogError("written");
+
+    // Assert
+    CheckEquals(1, logger.WriteRecordCount, __func__, __LINE__, "Only the entry written after the failures should be recorded");
+    CheckEquals(std::string("written"), logger.LastMessage, __func__, __LINE__, "The logger should keep working after WriteRecord() threw");
 }
 //---------------------------------------------------------------------------
 

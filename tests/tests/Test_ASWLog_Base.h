@@ -38,6 +38,7 @@ private:
 private: // Test methods
     void Test_GetConfig_ReturnsLiveMutableReference();
     void Test_GetFullVersionStr_ContainsVersion();
+    void Test_Interface_MethodsAreNoexcept();
     void Test_LogFormatMethods_AcceptEveryArgumentKind();
     void Test_LogFormatMethods_LogErrorInsteadOfThrowing();
     void Test_LogFormatMethods_PassCallerLocation();
@@ -49,6 +50,7 @@ private: // Test methods
     void Test_Write_AppliesEnabledOffAndLevelChecks();
     void Test_Write_KeepsFieldsAlreadyStamped();
     void Test_Write_StampsOnlyWrittenEntries();
+    void Test_Write_ThrowingWriteRecordDropsEntry();
 
 public:
     TTest_ASWLog_Base();

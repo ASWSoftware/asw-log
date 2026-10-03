@@ -115,14 +115,15 @@ protected:
     virtual void WriteLineUnlocked(Level level, std::string_view line, bool endsLine) = 0;
 
 protected: // TASWLogBase hook
-    // Writes the entry under m_Mutex, through the hooks above, then calls OnLogEntry. Never throws.
-    void WriteRecord(const TASWLogRecord& record) noexcept final;
+    // Writes the entry under m_Mutex, through the hooks above, then calls OnLogEntry
+    void WriteRecord(const TASWLogRecord& record) final;
 
 public:
-    bool Initialize(const TASWLogConfig& config) final;
+    // A startup line that fails (e.g. its formatter throws) doesn't fail Initialize(): the rest are skipped
+    bool Initialize(const TASWLogConfig& config) noexcept final;
 
-    bool Open() final;
-    bool Close() final;
+    bool Open() noexcept final;
+    bool Close() noexcept final;
     bool Flush() noexcept final;
     bool IsOpen() const noexcept final;
 };

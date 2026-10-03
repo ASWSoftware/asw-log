@@ -82,7 +82,8 @@ protected:
     void StampRecord(TASWLogRecord& record) const noexcept;
 
     // Called by Write() with each entry this logger writes: it passed the enabled, Level::Off and minimum level checks
-    // (see Write()), and has its Timestamp, ProcessId and ThreadId filled in. Called on the logging thread.
+    // (see Write()), and has its Timestamp, ProcessId and ThreadId filled in. Called on the logging thread. May throw:
+    // Write() catches the exception and drops the entry, so it never reaches the application.
     virtual void WriteRecord(const TASWLogRecord& record) = 0;
 
 public:
@@ -136,8 +137,9 @@ public:
 
 public:
     // Applies this logger's checks (enabled, not Level::Off, and the minimum level unless record.Forced), then stamps
-    // the record (see StampRecord()) and passes it to WriteRecord(). A filtered entry is never stamped.
-    void Write(const TASWLogRecord& record) final;
+    // the record (see StampRecord()) and passes it to WriteRecord(). A filtered entry is never stamped. If
+    // WriteRecord() throws, the entry is dropped.
+    void Write(const TASWLogRecord& record) noexcept final;
 };
 
 } // namespace ASWLog
