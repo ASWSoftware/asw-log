@@ -156,23 +156,23 @@ bool CanBlockFiles()
 ASWLog::TASWLogConfig MakeRotationTestConfig(const std::filesystem::path& logFile)
 {
     ASWLog::TASWLogConfig config;
-    config.LogsFolderPath = TestTempDir;
-    config.LogFilePath = logFile;
+    config.File.FolderPath = TestTempDir;
+    config.File.FilePath = logFile;
     config.InitialMinimumLevel = ASWLog::Level::Trace;
-    config.LogUTCDateTime = false;
-    config.LogLevelStr = false;
-    config.LogProcessId = false;
-    config.LogThreadId = false;
-    config.LogMethodName = false;
-    config.LogSourceLine = false;
-    config.Init_LogTimeInfo = false;
-    config.Init_LogOSInfo = false;
-    config.Init_LogDriveInfo = false;
-    config.Init_LogSysMemInfo = false;
-    config.Init_LogApplicationInfo = false;
-    config.Init_LogMemoryUsage = false;
-    config.OpenRetryCount = 1;
-    config.WriteShutdownLog = false;
+    config.Line.ShowTimestamp = false;
+    config.Line.ShowLevel = false;
+    config.Line.ShowProcessId = false;
+    config.Line.ShowThreadId = false;
+    config.Line.ShowFunctionName = false;
+    config.Line.ShowSourceLine = false;
+    config.Startup.WriteTimeInfo = false;
+    config.Startup.WriteOSInfo = false;
+    config.Startup.WriteDriveInfo = false;
+    config.Startup.WriteSystemMemoryInfo = false;
+    config.Startup.WriteApplicationInfo = false;
+    config.Startup.WriteMemoryUsage = false;
+    config.File.OpenRetryCount = 1;
+    config.Shutdown.WriteLine = false;
     return config;
 }
 
@@ -327,7 +327,7 @@ void TTest_ASWLog_FileLog::Test_DailyRolling_KeepsExistingBackupForSameDate()
     using namespace std::chrono_literals;
     const auto logFile = TestTempDir / "rolling_existing.log";
     auto config = MakeRotationTestConfig(logFile);
-    config.EnableDailyRolling = true;
+    config.File.EnableDailyRolling = true;
 
     // A backup for the same day already exists, e.g. left by an earlier run
     const auto existingBackup = TestTempDir / "rolling_existing.daily.2026-01-15.bak";
@@ -367,7 +367,7 @@ void TTest_ASWLog_FileLog::Test_DailyRolling_KeepsLeftoverLogFromSameDay()
     std::filesystem::last_write_time(logFile, std::chrono::file_clock::now() - 2h);
 
     auto config = MakeRotationTestConfig(logFile);
-    config.EnableDailyRolling = true;
+    config.File.EnableDailyRolling = true;
 
     TFixedClockFileLog logger;
     logger.CurrentTime = std::chrono::sys_days{ 2026y / 1 / 15 } + 10h;
@@ -391,7 +391,7 @@ void TTest_ASWLog_FileLog::Test_DailyRolling_NamesBackupForContentDate()
     using namespace std::chrono_literals;
     const auto logFile = TestTempDir / "rolling.log";
     auto config = MakeRotationTestConfig(logFile);
-    config.EnableDailyRolling = true;
+    config.File.EnableDailyRolling = true;
 
     const auto dayOne = std::chrono::sys_days{ 2026y / 1 / 15 };
     TFixedClockFileLog logger;
@@ -428,7 +428,7 @@ void TTest_ASWLog_FileLog::Test_DailyRolling_RotatesLeftoverLogFromEarlierDay()
     std::filesystem::last_write_time(logFile, std::chrono::file_clock::now() - 30h);
 
     auto config = MakeRotationTestConfig(logFile);
-    config.EnableDailyRolling = true;
+    config.File.EnableDailyRolling = true;
 
     TFixedClockFileLog logger;
     logger.CurrentTime = std::chrono::sys_days{ 2026y / 1 / 15 } + 10h;
@@ -450,12 +450,12 @@ void TTest_ASWLog_FileLog::Test_DailyRolling_RotatesLeftoverLogFromEarlierDay()
 //---------------------------------------------------------------------------
 void TTest_ASWLog_FileLog::Test_DailyRolling_SharedLogRollsOverOnce()
 {
-    // Arrange: two loggers sharing one log, as two processes would (AutoOpenClosePerWrite), both logging at 23:59 UTC
+    // Arrange: two loggers sharing one log, as two processes would (File.AutoOpenClosePerWrite), both logging at 23:59 UTC
     using namespace std::chrono_literals;
     const auto logFile = TestTempDir / "shared.log";
     auto config = MakeRotationTestConfig(logFile);
-    config.EnableDailyRolling = true;
-    config.AutoOpenClosePerWrite = true;
+    config.File.EnableDailyRolling = true;
+    config.File.AutoOpenClosePerWrite = true;
 
     const auto dayOne = std::chrono::sys_days{ 2026y / 1 / 15 };
     TFixedClockFileLog firstLogger;
@@ -609,7 +609,7 @@ void TTest_ASWLog_FileLog::Test_FailedReopen_RetriesAndResumesLogging()
     using namespace std::chrono_literals;
     const auto logFile = TestTempDir / "reopen.log";
     auto config = MakeRotationTestConfig(logFile);
-    config.CircuitBreakerResetDelay = 200ms;
+    config.File.CircuitBreakerResetDelay = 200ms;
 
     const auto startTime = std::chrono::sys_days{ 2026y / 1 / 15 } + 10h;
     TFixedClockFileLog logger;
@@ -629,7 +629,7 @@ void TTest_ASWLog_FileLog::Test_FailedReopen_RetriesAndResumesLogging()
         logger.LogInfo("during_outage");
     }
 
-    // The file is available again, but the circuit breaker waits CircuitBreakerResetDelay before trying it
+    // The file is available again, but the circuit breaker waits File.CircuitBreakerResetDelay before trying it
     logger.CurrentTime = startTime + 100ms;
     logger.LogInfo("too_soon");
     logger.CurrentTime = startTime + 250ms;
@@ -644,8 +644,8 @@ void TTest_ASWLog_FileLog::Test_FailedReopen_RetriesAndResumesLogging()
     CheckFalse(openDuringOutage, __func__, __LINE__, "The log should report closed after it couldn't be reopened");
     CheckTrue(contents.find("before_outage") != std::string::npos, __func__, __LINE__, "Entries before the outage should be kept");
     CheckTrue(contents.find("during_outage") == std::string::npos, __func__, __LINE__, "Entries while the file can't be opened are dropped");
-    CheckTrue(contents.find("too_soon") == std::string::npos, __func__, __LINE__, "The reopen should not be retried before CircuitBreakerResetDelay has passed");
-    CheckTrue(contents.find("after_recovery") != std::string::npos, __func__, __LINE__, "Logging should resume once CircuitBreakerResetDelay has passed and the file can be opened");
+    CheckTrue(contents.find("too_soon") == std::string::npos, __func__, __LINE__, "The reopen should not be retried before File.CircuitBreakerResetDelay has passed");
+    CheckTrue(contents.find("after_recovery") != std::string::npos, __func__, __LINE__, "Logging should resume once File.CircuitBreakerResetDelay has passed and the file can be opened");
     CheckTrue(openAfterRecovery, __func__, __LINE__, "The log should report open again after recovering");
 }
 //---------------------------------------------------------------------------
@@ -658,7 +658,7 @@ void TTest_ASWLog_FileLog::Test_FailedReopen_ZeroResetDelayRetriesOnNextWrite()
     using namespace std::chrono_literals;
     const auto logFile = TestTempDir / "reopen_zero.log";
     auto config = MakeRotationTestConfig(logFile);
-    config.CircuitBreakerResetDelay = 0ms;
+    config.File.CircuitBreakerResetDelay = 0ms;
 
     TFixedClockFileLog logger;
     logger.CurrentTime = std::chrono::sys_days{ 2026y / 1 / 15 } + 10h;
@@ -676,7 +676,7 @@ void TTest_ASWLog_FileLog::Test_FailedReopen_ZeroResetDelayRetriesOnNextWrite()
     // Assert
     CheckTrue(initialized, __func__, __LINE__, "Initialize should succeed");
     CheckFalse(rotated, __func__, __LINE__, "RotateLogFiles should fail while the file is held");
-    CheckTrue(ReadFileText(logFile).find("next_write") != std::string::npos, __func__, __LINE__, "With CircuitBreakerResetDelay 0, the next write should reopen the file");
+    CheckTrue(ReadFileText(logFile).find("next_write") != std::string::npos, __func__, __LINE__, "With File.CircuitBreakerResetDelay 0, the next write should reopen the file");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_FileLog::Test_FailedSizeRotation_WaitsBeforeRetrying()
@@ -688,9 +688,9 @@ void TTest_ASWLog_FileLog::Test_FailedSizeRotation_WaitsBeforeRetrying()
     using namespace std::chrono_literals;
     const auto logFile = TestTempDir / "rotate_retry.log";
     auto config = MakeRotationTestConfig(logFile);
-    config.EnableRotation = true;
-    config.MaxFileSizeBytes = 50;
-    config.RotationRetryDelay = 200ms;
+    config.File.EnableRotation = true;
+    config.File.MaxFileSizeBytes = 50;
+    config.File.RotationRetryDelay = 200ms;
 
     const auto startTime = std::chrono::sys_days{ 2026y / 1 / 15 } + 10h;
     TFixedClockFileLog logger;
@@ -705,7 +705,7 @@ void TTest_ASWLog_FileLog::Test_FailedSizeRotation_WaitsBeforeRetrying()
         logger.LogInfo("line_two");
     }
 
-    // Still within RotationRetryDelay: no new rotation attempt yet
+    // Still within File.RotationRetryDelay: no new rotation attempt yet
     logger.CurrentTime = startTime + 100ms;
     logger.LogInfo("line_three");
     logger.CurrentTime = startTime + 250ms;
@@ -727,9 +727,9 @@ void TTest_ASWLog_FileLog::Test_FailedSizeRotation_WaitsBeforeRetrying()
 
     const auto currentContents = ReadFileText(logFile);
     CheckTrue(initialized, __func__, __LINE__, "Initialize should succeed");
-    CheckEquals(static_cast<size_t>(1), backupCount, __func__, __LINE__, "The rotation should succeed once RotationRetryDelay has passed");
+    CheckEquals(static_cast<size_t>(1), backupCount, __func__, __LINE__, "The rotation should succeed once File.RotationRetryDelay has passed");
     CheckTrue(backupContents.find("line_two") != std::string::npos, __func__, __LINE__, "The entry written when the rotation failed should still reach the file");
-    CheckTrue(backupContents.find("line_three") != std::string::npos, __func__, __LINE__, "A failed rotation should not be retried before RotationRetryDelay has passed");
+    CheckTrue(backupContents.find("line_three") != std::string::npos, __func__, __LINE__, "A failed rotation should not be retried before File.RotationRetryDelay has passed");
     CheckTrue(currentContents.find("line_four") != std::string::npos, __func__, __LINE__, "The entry after the retry interval should go to the new log file");
     CheckTrue(currentContents.find("line_three") == std::string::npos, __func__, __LINE__, "The new log file should only hold entries after the successful rotation");
 }
@@ -739,7 +739,7 @@ void TTest_ASWLog_FileLog::Test_Flush_WritesBufferedManualModeEntries()
     // Arrange: FlushMode::Manual keeps each entry in the file's buffer until Flush()
     const auto logFile = TestTempDir / "flush_manual.log";
     auto config = MakeRotationTestConfig(logFile);
-    config.LogFlushMode = ASWLog::FlushMode::Manual;
+    config.File.Flush = ASWLog::FlushMode::Manual;
 
     ASWLog::TASWFileLog fileLog;
     ASWLog::IASWLog& logger = fileLog; // As generic code would flush it
@@ -777,23 +777,23 @@ void TTest_ASWLog_FileLog::Test_InitializeAndLogInfo_WritesText()
     const auto logFile = TestTempDir / "aswlog_runtime.log";
 
     ASWLog::TASWLogConfig config;
-    config.LogsFolderPath = TestTempDir;
-    config.LogFilePath = logFile;
-    config.LogUTCDateTime = false;
-    config.LogLevelStr = false;
-    config.LogProcessId = false;
-    config.LogThreadId = false;
-    config.LogAppMem_WorkingSet = false;
-    config.LogAppMem_PeakWorkingSet = false;
-    config.LogMethodName = false;
-    config.LogSourceLine = false;
-    config.Init_LogTimeInfo = false;
-    config.Init_LogOSInfo = false;
-    config.Init_LogDriveInfo = false;
-    config.Init_LogSysMemInfo = false;
-    config.Init_LogApplicationInfo = false;
-    config.Init_LogMemoryUsage = false;
-    config.OpenRetryCount = 1;
+    config.File.FolderPath = TestTempDir;
+    config.File.FilePath = logFile;
+    config.Line.ShowTimestamp = false;
+    config.Line.ShowLevel = false;
+    config.Line.ShowProcessId = false;
+    config.Line.ShowThreadId = false;
+    config.Line.ShowWorkingSet = false;
+    config.Line.ShowPeakWorkingSet = false;
+    config.Line.ShowFunctionName = false;
+    config.Line.ShowSourceLine = false;
+    config.Startup.WriteTimeInfo = false;
+    config.Startup.WriteOSInfo = false;
+    config.Startup.WriteDriveInfo = false;
+    config.Startup.WriteSystemMemoryInfo = false;
+    config.Startup.WriteApplicationInfo = false;
+    config.Startup.WriteMemoryUsage = false;
+    config.File.OpenRetryCount = 1;
 
     ASWLog::TASWFileLog logger;
 
@@ -816,12 +816,12 @@ void TTest_ASWLog_FileLog::Test_Initialize_SuppressesInfoBannersBelowMinimumLeve
     const auto logFile = TestTempDir / "suppressed_banners.log";
 
     ASWLog::TASWLogConfig config;
-    config.LogsFolderPath = TestTempDir;
-    config.LogFilePath = logFile;
+    config.File.FolderPath = TestTempDir;
+    config.File.FilePath = logFile;
     config.InitialMinimumLevel = ASWLog::Level::Warn;
-    config.BannerMessage_Init = "should_not_appear_banner";
-    config.OpenRetryCount = 1;
-    // Init_Log* toggles are left at their defaults (all true) so this test exercises
+    config.Startup.Banner = "should_not_appear_banner";
+    config.File.OpenRetryCount = 1;
+    // Startup.Write* toggles are left at their defaults (all true) so this test exercises
     // every internal Info-level banner writer, not just a subset.
 
     ASWLog::TASWFileLog logger;
@@ -835,7 +835,7 @@ void TTest_ASWLog_FileLog::Test_Initialize_SuppressesInfoBannersBelowMinimumLeve
 
     // Assert
     CheckTrue(initialized, __func__, __LINE__, "Initialize should succeed");
-    CheckTrue(contents.find("should_not_appear_banner") == std::string::npos, __func__, __LINE__, "BannerMessage_Init (Info level) should be suppressed when InitialMinimumLevel is Error");
+    CheckTrue(contents.find("should_not_appear_banner") == std::string::npos, __func__, __LINE__, "Startup.Banner (Info level) should be suppressed when InitialMinimumLevel is Error");
     CheckTrue(contents.find("Time:") == std::string::npos, __func__, __LINE__, "Init time info (Info level) should be suppressed when InitialMinimumLevel is Error");
     CheckTrue(contents.find("OS:") == std::string::npos, __func__, __LINE__, "Init OS info (Info level) should be suppressed when InitialMinimumLevel is Error");
     CheckTrue(contents.find("Drive:") == std::string::npos, __func__, __LINE__, "Init drive info (Info level) should be suppressed when InitialMinimumLevel is Error");
@@ -851,16 +851,16 @@ void TTest_ASWLog_FileLog::Test_LogFormatMethods_FormatsMessage()
     const auto logFile = TestTempDir / "format_message.log";
 
     ASWLog::TASWLogConfig config;
-    config.LogsFolderPath = TestTempDir;
-    config.LogFilePath = logFile;
+    config.File.FolderPath = TestTempDir;
+    config.File.FilePath = logFile;
     config.InitialMinimumLevel = ASWLog::Level::Trace;
-    config.LogUTCDateTime = false;
-    config.LogLevelStr = false;
-    config.LogProcessId = false;
-    config.LogThreadId = false;
-    config.LogMethodName = false;
-    config.LogSourceLine = false;
-    config.OpenRetryCount = 1;
+    config.Line.ShowTimestamp = false;
+    config.Line.ShowLevel = false;
+    config.Line.ShowProcessId = false;
+    config.Line.ShowThreadId = false;
+    config.Line.ShowFunctionName = false;
+    config.Line.ShowSourceLine = false;
+    config.File.OpenRetryCount = 1;
 
     ASWLog::TASWFileLog logger;
 
@@ -886,10 +886,10 @@ void TTest_ASWLog_FileLog::Test_LogFormatMethods_WriteCallerSourceLine()
     const auto logFile = TestTempDir / "fmt_location.log";
 
     ASWLog::TASWLogConfig config;
-    config.LogsFolderPath = TestTempDir;
-    config.LogFilePath = logFile;
-    config.LogSourceLine = true;
-    config.OpenRetryCount = 1;
+    config.File.FolderPath = TestTempDir;
+    config.File.FilePath = logFile;
+    config.Line.ShowSourceLine = true;
+    config.File.OpenRetryCount = 1;
 
     ASWLog::TASWFileLog logger;
 
@@ -903,8 +903,8 @@ void TTest_ASWLog_FileLog::Test_LogFormatMethods_WriteCallerSourceLine()
     const auto contents = ReadFileText(logFile);
     const auto expected = "[Test_ASWLog_FileLog.cpp:" + std::to_string(callLine) + "]: located 1";
     CheckTrue(initialized, __func__, __LINE__, "Initialize should succeed");
-    CheckTrue(contents.find(expected) != std::string::npos, __func__, __LINE__, "LogSourceLine should show the file and line of the LogInfoFmt call: " + expected);
-    CheckTrue(contents.find("ASWLog_Interface.h") == std::string::npos, __func__, __LINE__, "LogSourceLine should not show the header that implements the *Fmt methods");
+    CheckTrue(contents.find(expected) != std::string::npos, __func__, __LINE__, "Line.ShowSourceLine should show the file and line of the LogInfoFmt call: " + expected);
+    CheckTrue(contents.find("ASWLog_Interface.h") == std::string::npos, __func__, __LINE__, "Line.ShowSourceLine should not show the header that implements the *Fmt methods");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_FileLog::Test_LogLineMetadata_Options()
@@ -913,18 +913,18 @@ void TTest_ASWLog_FileLog::Test_LogLineMetadata_Options()
     const auto logFile = TestTempDir / "metadata_line.log";
 
     ASWLog::TASWLogConfig config;
-    config.LogsFolderPath = TestTempDir;
-    config.LogFilePath = logFile;
+    config.File.FolderPath = TestTempDir;
+    config.File.FilePath = logFile;
     config.InitialMinimumLevel = ASWLog::Level::Trace;
-    config.LogUTCDateTime = true;
-    config.LogLevelStr = true;
-    config.LogProcessId = true;
-    config.LogThreadId = true;
-    config.LogAppMem_WorkingSet = true;
-    config.LogAppMem_PeakWorkingSet = true;
-    config.LogMethodName = true;
-    config.LogSourceLine = true;
-    config.OpenRetryCount = 1;
+    config.Line.ShowTimestamp = true;
+    config.Line.ShowLevel = true;
+    config.Line.ShowProcessId = true;
+    config.Line.ShowThreadId = true;
+    config.Line.ShowWorkingSet = true;
+    config.Line.ShowPeakWorkingSet = true;
+    config.Line.ShowFunctionName = true;
+    config.Line.ShowSourceLine = true;
+    config.File.OpenRetryCount = 1;
 
     ASWLog::TASWFileLog logger;
 
@@ -937,13 +937,13 @@ void TTest_ASWLog_FileLog::Test_LogLineMetadata_Options()
 
     // Assert
     CheckTrue(initialized, __func__, __LINE__, "Initialize should succeed");
-    CheckTrue(contents.find("Z") != std::string::npos, __func__, __LINE__, "LogUTCDateTime should add a UTC timestamp");
-    CheckTrue(contents.find("INFO") != std::string::npos, __func__, __LINE__, "LogLevelStr should include the log level");
-    CheckTrue(contents.find("[P:") != std::string::npos, __func__, __LINE__, "LogProcessId should include the process id");
-    CheckTrue(contents.find("[T:") != std::string::npos, __func__, __LINE__, "LogThreadId should include the thread id");
-    CheckTrue(contents.find("[WS:") != std::string::npos, __func__, __LINE__, "LogAppMem_WorkingSet should include working set memory");
-    CheckTrue(contents.find("[PWS:") != std::string::npos, __func__, __LINE__, "LogAppMem_PeakWorkingSet should include peak working set memory");
-    CheckTrue(contents.find("Test_LogLineMetadata_Options") != std::string::npos, __func__, __LINE__, "LogMethodName should include the calling method name");
+    CheckTrue(contents.find("Z") != std::string::npos, __func__, __LINE__, "Line.ShowTimestamp should add a UTC timestamp");
+    CheckTrue(contents.find("INFO") != std::string::npos, __func__, __LINE__, "Line.ShowLevel should include the log level");
+    CheckTrue(contents.find("[P:") != std::string::npos, __func__, __LINE__, "Line.ShowProcessId should include the process id");
+    CheckTrue(contents.find("[T:") != std::string::npos, __func__, __LINE__, "Line.ShowThreadId should include the thread id");
+    CheckTrue(contents.find("[WS:") != std::string::npos, __func__, __LINE__, "Line.ShowWorkingSet should include working set memory");
+    CheckTrue(contents.find("[PWS:") != std::string::npos, __func__, __LINE__, "Line.ShowPeakWorkingSet should include peak working set memory");
+    CheckTrue(contents.find("Test_LogLineMetadata_Options") != std::string::npos, __func__, __LINE__, "Line.ShowFunctionName should include the calling method name");
     CheckTrue(contents.find("metadata_message") != std::string::npos, __func__, __LINE__, "Metadata log line should still contain the message");
 }
 //---------------------------------------------------------------------------
@@ -953,16 +953,16 @@ void TTest_ASWLog_FileLog::Test_LogNewLineAndForceOptions()
     const auto logFile = TestTempDir / "newline_force.log";
 
     ASWLog::TASWLogConfig config;
-    config.LogsFolderPath = TestTempDir;
-    config.LogFilePath = logFile;
+    config.File.FolderPath = TestTempDir;
+    config.File.FilePath = logFile;
     config.InitialMinimumLevel = ASWLog::Level::Error;
-    config.LogUTCDateTime = false;
-    config.LogLevelStr = false;
-    config.LogProcessId = false;
-    config.LogThreadId = false;
-    config.LogMethodName = false;
-    config.LogSourceLine = false;
-    config.OpenRetryCount = 1;
+    config.Line.ShowTimestamp = false;
+    config.Line.ShowLevel = false;
+    config.Line.ShowProcessId = false;
+    config.Line.ShowThreadId = false;
+    config.Line.ShowFunctionName = false;
+    config.Line.ShowSourceLine = false;
+    config.File.OpenRetryCount = 1;
 
     ASWLog::TASWFileLog logger;
 
@@ -988,8 +988,8 @@ void TTest_ASWLog_FileLog::Test_LogProcessAndThreadIds_AreOSIds()
     // Arrange
     const auto logFile = TestTempDir / "os_ids.log";
     auto config = MakeRotationTestConfig(logFile);
-    config.LogProcessId = true;
-    config.LogThreadId = true;
+    config.Line.ShowProcessId = true;
+    config.Line.ShowThreadId = true;
 
     ASWLog::TASWFileLog logger;
     const bool initialized = logger.Initialize(config);
@@ -1022,16 +1022,16 @@ void TTest_ASWLog_FileLog::Test_LogRawOptions()
     const auto logFile = TestTempDir / "raw.log";
 
     ASWLog::TASWLogConfig config;
-    config.LogsFolderPath = TestTempDir;
-    config.LogFilePath = logFile;
+    config.File.FolderPath = TestTempDir;
+    config.File.FilePath = logFile;
     config.InitialMinimumLevel = ASWLog::Level::Trace;
-    config.LogUTCDateTime = false;
-    config.LogLevelStr = false;
-    config.LogProcessId = false;
-    config.LogThreadId = false;
-    config.LogMethodName = false;
-    config.LogSourceLine = false;
-    config.OpenRetryCount = 1;
+    config.Line.ShowTimestamp = false;
+    config.Line.ShowLevel = false;
+    config.Line.ShowProcessId = false;
+    config.Line.ShowThreadId = false;
+    config.Line.ShowFunctionName = false;
+    config.Line.ShowSourceLine = false;
+    config.File.OpenRetryCount = 1;
 
     ASWLog::TASWFileLog logger;
 
@@ -1059,16 +1059,16 @@ void TTest_ASWLog_FileLog::Test_MultiThreadedStress_WritesAllMessagesToDisk()
     constexpr int messagesPerThread = 100;
 
     ASWLog::TASWLogConfig config;
-    config.LogsFolderPath = TestTempDir;
-    config.LogFilePath = logFile;
+    config.File.FolderPath = TestTempDir;
+    config.File.FilePath = logFile;
     config.InitialMinimumLevel = ASWLog::Level::Trace;
-    config.LogUTCDateTime = false;
-    config.LogLevelStr = false;
-    config.LogProcessId = false;
-    config.LogThreadId = false;
-    config.LogMethodName = false;
-    config.LogSourceLine = false;
-    config.OpenRetryCount = 1;
+    config.Line.ShowTimestamp = false;
+    config.Line.ShowLevel = false;
+    config.Line.ShowProcessId = false;
+    config.Line.ShowThreadId = false;
+    config.Line.ShowFunctionName = false;
+    config.Line.ShowSourceLine = false;
+    config.File.OpenRetryCount = 1;
 
     std::vector<std::string> expectedMessages;
     expectedMessages.reserve(threadCount * messagesPerThread);
@@ -1125,17 +1125,17 @@ void TTest_ASWLog_FileLog::Test_MultiThreadedStress_WritesAllMessagesToDisk_Open
     constexpr int messagesPerThread = 200;
 
     ASWLog::TASWLogConfig config;
-    config.LogsFolderPath = TestTempDir;
-    config.LogFilePath = logFile;
+    config.File.FolderPath = TestTempDir;
+    config.File.FilePath = logFile;
     config.InitialMinimumLevel = ASWLog::Level::Trace;
-    config.LogUTCDateTime = false;
-    config.LogLevelStr = false;
-    config.LogProcessId = false;
-    config.LogThreadId = false;
-    config.LogMethodName = false;
-    config.LogSourceLine = false;
-    config.OpenRetryCount = 1;
-    config.AutoOpenClosePerWrite = true;
+    config.Line.ShowTimestamp = false;
+    config.Line.ShowLevel = false;
+    config.Line.ShowProcessId = false;
+    config.Line.ShowThreadId = false;
+    config.Line.ShowFunctionName = false;
+    config.Line.ShowSourceLine = false;
+    config.File.OpenRetryCount = 1;
+    config.File.AutoOpenClosePerWrite = true;
 
     std::vector<std::string> expectedMessages;
     expectedMessages.reserve(threadCount * messagesPerThread);
@@ -1191,17 +1191,17 @@ void TTest_ASWLog_FileLog::Test_OnLogEntry_FiresForQualifyingLevelsOnly()
     const auto logFile = TestTempDir / "callback.log";
 
     ASWLog::TASWLogConfig config;
-    config.LogsFolderPath = TestTempDir;
-    config.LogFilePath = logFile;
+    config.File.FolderPath = TestTempDir;
+    config.File.FilePath = logFile;
     config.InitialMinimumLevel = ASWLog::Level::Trace;
-    config.LogUTCDateTime = false;
-    config.LogLevelStr = false;
-    config.LogProcessId = false;
-    config.LogThreadId = false;
-    config.LogMethodName = false;
-    config.LogSourceLine = false;
-    config.OpenRetryCount = 1;
-    config.CallbackMinimumLevel = ASWLog::Level::Error;
+    config.Line.ShowTimestamp = false;
+    config.Line.ShowLevel = false;
+    config.Line.ShowProcessId = false;
+    config.Line.ShowThreadId = false;
+    config.Line.ShowFunctionName = false;
+    config.Line.ShowSourceLine = false;
+    config.File.OpenRetryCount = 1;
+    config.OnLogEntryMinimumLevel = ASWLog::Level::Error;
 
     std::vector<ASWLog::Level> callbackLevels;
     std::vector<std::string> callbackMessages;
@@ -1229,8 +1229,8 @@ void TTest_ASWLog_FileLog::Test_OnLogEntry_FiresForQualifyingLevelsOnly()
 
     // Assert
     CheckTrue(initialized, __func__, __LINE__, "Initialize should succeed");
-    CheckTrue(contents.find("below_threshold") != std::string::npos, __func__, __LINE__, "Entries below CallbackMinimumLevel should still be written to the file");
-    CheckEquals(static_cast<size_t>(2), callbackMessages.size(), __func__, __LINE__, "OnLogEntry should only fire for entries at or above CallbackMinimumLevel");
+    CheckTrue(contents.find("below_threshold") != std::string::npos, __func__, __LINE__, "Entries below OnLogEntryMinimumLevel should still be written to the file");
+    CheckEquals(static_cast<size_t>(2), callbackMessages.size(), __func__, __LINE__, "OnLogEntry should only fire for entries at or above OnLogEntryMinimumLevel");
     if (callbackMessages.size() == 2)
     {
         CheckEquals(static_cast<int32_t>(ASWLog::Level::Error), static_cast<int32_t>(callbackLevels[0]), __func__, __LINE__, "First callback should report the Error entry's level");
@@ -1249,17 +1249,17 @@ void TTest_ASWLog_FileLog::Test_OnLogEntry_ReentrantCallbackDoesNotDeadlock()
     const auto logFile = TestTempDir / "reentrant.log";
 
     ASWLog::TASWLogConfig config;
-    config.LogsFolderPath = TestTempDir;
-    config.LogFilePath = logFile;
+    config.File.FolderPath = TestTempDir;
+    config.File.FilePath = logFile;
     config.InitialMinimumLevel = ASWLog::Level::Trace;
-    config.LogUTCDateTime = false;
-    config.LogLevelStr = false;
-    config.LogProcessId = false;
-    config.LogThreadId = false;
-    config.LogMethodName = false;
-    config.LogSourceLine = false;
-    config.OpenRetryCount = 1;
-    config.CallbackMinimumLevel = ASWLog::Level::Error;
+    config.Line.ShowTimestamp = false;
+    config.Line.ShowLevel = false;
+    config.Line.ShowProcessId = false;
+    config.Line.ShowThreadId = false;
+    config.Line.ShowFunctionName = false;
+    config.Line.ShowSourceLine = false;
+    config.File.OpenRetryCount = 1;
+    config.OnLogEntryMinimumLevel = ASWLog::Level::Error;
 
     ASWLog::TASWFileLog logger;
     bool reentered = false;
@@ -1293,17 +1293,17 @@ void TTest_ASWLog_FileLog::Test_RetentionMaxAge_DefaultDisabledPreservesOldBacku
     const auto logFile = TestTempDir / "retention_disabled.log";
 
     ASWLog::TASWLogConfig config;
-    config.LogsFolderPath = TestTempDir;
-    config.LogFilePath = logFile;
+    config.File.FolderPath = TestTempDir;
+    config.File.FilePath = logFile;
     config.InitialMinimumLevel = ASWLog::Level::Trace;
-    config.LogUTCDateTime = false;
-    config.LogLevelStr = false;
-    config.LogProcessId = false;
-    config.LogThreadId = false;
-    config.LogMethodName = false;
-    config.LogSourceLine = false;
-    config.OpenRetryCount = 1;
-    // config.RetentionMaxAge left at its default (0 = disabled)
+    config.Line.ShowTimestamp = false;
+    config.Line.ShowLevel = false;
+    config.Line.ShowProcessId = false;
+    config.Line.ShowThreadId = false;
+    config.Line.ShowFunctionName = false;
+    config.Line.ShowSourceLine = false;
+    config.File.OpenRetryCount = 1;
+    // config.File.RetentionMaxAge left at its default (0 = disabled)
 
     ASWLog::TASWFileLog logger;
 
@@ -1325,7 +1325,7 @@ void TTest_ASWLog_FileLog::Test_RetentionMaxAge_DefaultDisabledPreservesOldBacku
     // Assert
     CheckTrue(initialized, __func__, __LINE__, "Initialize should succeed");
     CheckTrue(rotated, __func__, __LINE__, "RotateLogFiles should succeed");
-    CheckTrue(std::filesystem::exists(staleBackup), __func__, __LINE__, "RetentionMaxAge left at its default (disabled) should not delete old backups after rotation");
+    CheckTrue(std::filesystem::exists(staleBackup), __func__, __LINE__, "File.RetentionMaxAge left at its default (disabled) should not delete old backups after rotation");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_FileLog::Test_RetentionMaxAge_DeletesExpiredBackupsAfterRotation()
@@ -1334,17 +1334,17 @@ void TTest_ASWLog_FileLog::Test_RetentionMaxAge_DeletesExpiredBackupsAfterRotati
     const auto logFile = TestTempDir / "retention.log";
 
     ASWLog::TASWLogConfig config;
-    config.LogsFolderPath = TestTempDir;
-    config.LogFilePath = logFile;
+    config.File.FolderPath = TestTempDir;
+    config.File.FilePath = logFile;
     config.InitialMinimumLevel = ASWLog::Level::Trace;
-    config.LogUTCDateTime = false;
-    config.LogLevelStr = false;
-    config.LogProcessId = false;
-    config.LogThreadId = false;
-    config.LogMethodName = false;
-    config.LogSourceLine = false;
-    config.OpenRetryCount = 1;
-    config.RetentionMaxAge = std::chrono::hours(1);
+    config.Line.ShowTimestamp = false;
+    config.Line.ShowLevel = false;
+    config.Line.ShowProcessId = false;
+    config.Line.ShowThreadId = false;
+    config.Line.ShowFunctionName = false;
+    config.Line.ShowSourceLine = false;
+    config.File.OpenRetryCount = 1;
+    config.File.RetentionMaxAge = std::chrono::hours(1);
 
     ASWLog::TASWFileLog logger;
 
@@ -1366,7 +1366,7 @@ void TTest_ASWLog_FileLog::Test_RetentionMaxAge_DeletesExpiredBackupsAfterRotati
     // Assert
     CheckTrue(initialized, __func__, __LINE__, "Initialize should succeed");
     CheckTrue(rotated, __func__, __LINE__, "RotateLogFiles should succeed");
-    CheckFalse(std::filesystem::exists(staleBackup), __func__, __LINE__, "Stale backup older than RetentionMaxAge should be deleted automatically after rotation");
+    CheckFalse(std::filesystem::exists(staleBackup), __func__, __LINE__, "Stale backup older than File.RetentionMaxAge should be deleted automatically after rotation");
     CheckTrue(std::filesystem::exists(logFile), __func__, __LINE__, "Log file should be recreated after rotation");
 }
 //---------------------------------------------------------------------------
@@ -1403,10 +1403,10 @@ void TTest_ASWLog_FileLog::Test_RotateLogFiles_KeepsEveryBackup()
 //---------------------------------------------------------------------------
 void TTest_ASWLog_FileLog::Test_SetEnabled_FalseStopsAutoOpenCloseLogging()
 {
-    // Arrange: with AutoOpenClosePerWrite the file is only open while an entry is written
+    // Arrange: with File.AutoOpenClosePerWrite the file is only open while an entry is written
     const auto logFile = TestTempDir / "disabled.log";
     auto config = MakeRotationTestConfig(logFile);
-    config.AutoOpenClosePerWrite = true;
+    config.File.AutoOpenClosePerWrite = true;
     ASWLog::TASWFileLog logger;
     CheckTrue(logger.Initialize(config), __func__, __LINE__, "Initialize should succeed");
 
@@ -1426,19 +1426,19 @@ void TTest_ASWLog_FileLog::Test_SetEnabled_FalseStopsAutoOpenCloseLogging()
 
     // Assert
     CheckEquals(std::string(": after_close\n"), contentsAfterClose, __func__, __LINE__,
-        "With AutoOpenClosePerWrite, an entry after Close() reopens the file (documented on IASWLog::Close())");
+        "With File.AutoOpenClosePerWrite, an entry after Close() reopens the file (documented on IASWLog::Close())");
     CheckFalse(fileExistsWhileDisabled, __func__, __LINE__, "A disabled logger should not reopen (or recreate) its file, even for a forced entry");
     CheckEquals(std::string(": enabled_again\n"), ReadFileText(logFile), __func__, __LINE__, "Logging should resume once enabled again");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_FileLog::Test_SizeRotation_AutoOpenCloseCountsOtherWriters()
 {
-    // Arrange: in AutoOpenClosePerWrite mode the log is closed between writes, so other processes can append to it
+    // Arrange: in File.AutoOpenClosePerWrite mode the log is closed between writes, so other processes can append to it
     const auto logFile = TestTempDir / "sized_shared.log";
     auto config = MakeRotationTestConfig(logFile);
-    config.AutoOpenClosePerWrite = true;
-    config.EnableRotation = true;
-    config.MaxFileSizeBytes = 100;
+    config.File.AutoOpenClosePerWrite = true;
+    config.File.EnableRotation = true;
+    config.File.MaxFileSizeBytes = 100;
 
     const std::string otherWriterContents(150, 'x');
     ASWLog::TASWFileLog logger;
@@ -1469,7 +1469,7 @@ void TTest_ASWLog_FileLog::Test_SizeRotation_AutoOpenCloseCountsOtherWriters()
 
     const auto currentContents = ReadFileText(logFile);
     CheckTrue(initialized, __func__, __LINE__, "Initialize should succeed");
-    CheckEquals(static_cast<size_t>(1), backupCount, __func__, __LINE__, "Another writer's bytes should count toward MaxFileSizeBytes, since the size is read again at each open");
+    CheckEquals(static_cast<size_t>(1), backupCount, __func__, __LINE__, "Another writer's bytes should count toward File.MaxFileSizeBytes, since the size is read again at each open");
     CheckTrue(backupContents.find("own_first") != std::string::npos, __func__, __LINE__, "The backup should hold this logger's earlier entry");
     CheckTrue(backupContents.find(otherWriterContents) != std::string::npos, __func__, __LINE__, "The backup should hold the other writer's entry");
     CheckTrue(currentContents.find("own_second") != std::string::npos, __func__, __LINE__, "The entry that triggered the rotation should go to the new log file");
@@ -1487,8 +1487,8 @@ void TTest_ASWLog_FileLog::Test_SizeRotation_CountsExistingFileSize()
     }
 
     auto config = MakeRotationTestConfig(logFile);
-    config.EnableRotation = true;
-    config.MaxFileSizeBytes = 100;
+    config.File.EnableRotation = true;
+    config.File.MaxFileSizeBytes = 100;
 
     ASWLog::TASWFileLog logger;
 
@@ -1512,7 +1512,7 @@ void TTest_ASWLog_FileLog::Test_SizeRotation_CountsExistingFileSize()
 
     const auto currentContents = ReadFileText(logFile);
     CheckTrue(initialized, __func__, __LINE__, "Initialize should succeed");
-    CheckEquals(static_cast<size_t>(1), backupCount, __func__, __LINE__, "The first write should rotate a log that was already over MaxFileSizeBytes when opened");
+    CheckEquals(static_cast<size_t>(1), backupCount, __func__, __LINE__, "The first write should rotate a log that was already over File.MaxFileSizeBytes when opened");
     CheckEquals(earlierContents, backupContents, __func__, __LINE__, "The backup should hold the earlier run's contents");
     CheckTrue(currentContents.find("after_restart") != std::string::npos, __func__, __LINE__, "The new entry should go to the reopened log file");
     CheckTrue(currentContents.find('x') == std::string::npos, __func__, __LINE__, "The reopened log file should not contain the earlier run's contents");
@@ -1523,8 +1523,8 @@ void TTest_ASWLog_FileLog::Test_SizeRotation_RotatesWhenLimitReached()
     // Arrange: ten lines of about 18 bytes each against a 50-byte limit need several rotations
     const auto logFile = TestTempDir / "sized.log";
     auto config = MakeRotationTestConfig(logFile);
-    config.EnableRotation = true;
-    config.MaxFileSizeBytes = 50;
+    config.File.EnableRotation = true;
+    config.File.MaxFileSizeBytes = 50;
 
     constexpr int LineCount = 10;
     ASWLog::TASWFileLog logger;
@@ -1552,7 +1552,7 @@ void TTest_ASWLog_FileLog::Test_SizeRotation_RotatesWhenLimitReached()
     allContents += currentContents;
 
     CheckTrue(initialized, __func__, __LINE__, "Initialize should succeed");
-    CheckTrue(backupCount >= 2, __func__, __LINE__, "Reaching MaxFileSizeBytes should rotate the open log to a .size. backup each time");
+    CheckTrue(backupCount >= 2, __func__, __LINE__, "Reaching File.MaxFileSizeBytes should rotate the open log to a .size. backup each time");
     CheckTrue(currentContents.find("size_line_0_end") == std::string::npos, __func__, __LINE__, "The first lines should have been rotated out of the current log");
 
     for (int index = 0; index < LineCount; ++index)
@@ -1571,8 +1571,8 @@ void TTest_ASWLog_FileLog::Test_Write_EarlierRecordDoesNotRollLogBack()
     using namespace std::chrono_literals;
     const auto logFile = TestTempDir / "late_entry.log";
     auto config = MakeRotationTestConfig(logFile);
-    config.EnableDailyRolling = true;
-    config.LogUTCDateTime = true; // Shows which time each line got
+    config.File.EnableDailyRolling = true;
+    config.Line.ShowTimestamp = true; // Shows which time each line got
 
     const auto dayTwo = std::chrono::sys_days{ 2026y / 1 / 16 };
     TFixedClockFileLog logger;

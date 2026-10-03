@@ -204,19 +204,19 @@ ASWLog::TASWLogConfig MakeQuietConfig()
 {
     ASWLog::TASWLogConfig config;
     config.InitialMinimumLevel = ASWLog::Level::Trace;
-    config.LogUTCDateTime = false;
-    config.LogLevelStr = false;
-    config.LogProcessId = false;
-    config.LogThreadId = false;
-    config.LogMethodName = false;
-    config.LogSourceLine = false;
-    config.WriteShutdownLog = false;
-    config.Init_LogTimeInfo = false;
-    config.Init_LogOSInfo = false;
-    config.Init_LogDriveInfo = false;
-    config.Init_LogSysMemInfo = false;
-    config.Init_LogApplicationInfo = false;
-    config.Init_LogMemoryUsage = false;
+    config.Line.ShowTimestamp = false;
+    config.Line.ShowLevel = false;
+    config.Line.ShowProcessId = false;
+    config.Line.ShowThreadId = false;
+    config.Line.ShowFunctionName = false;
+    config.Line.ShowSourceLine = false;
+    config.Shutdown.WriteLine = false;
+    config.Startup.WriteTimeInfo = false;
+    config.Startup.WriteOSInfo = false;
+    config.Startup.WriteDriveInfo = false;
+    config.Startup.WriteSystemMemoryInfo = false;
+    config.Startup.WriteApplicationInfo = false;
+    config.Startup.WriteMemoryUsage = false;
     return config;
 }
 
@@ -480,9 +480,9 @@ void TTest_ASWLog_ConsoleLog::Test_Initialize_SuppressesInfoBannersBelowMinimumL
     // Arrange
     ASWLog::TASWLogConfig config;
     config.InitialMinimumLevel = ASWLog::Level::Warn;
-    config.BannerMessage_Init = "should_not_appear_banner";
-    config.WriteShutdownLog = false;
-    // Init_Log* toggles are left at their defaults (all true) so this test exercises
+    config.Startup.Banner = "should_not_appear_banner";
+    config.Shutdown.WriteLine = false;
+    // Startup.Write* toggles are left at their defaults (all true) so this test exercises
     // every internal Info-level banner writer, not just a subset.
 
     ASWLog::TASWConsoleLog logger;
@@ -500,7 +500,7 @@ void TTest_ASWLog_ConsoleLog::Test_Initialize_SuppressesInfoBannersBelowMinimumL
 
     // Assert
     CheckTrue(initialized, __func__, __LINE__, "Initialize should succeed");
-    CheckTrue(outContents.find("should_not_appear_banner") == std::string::npos, __func__, __LINE__, "BannerMessage_Init (Info level) should be suppressed when InitialMinimumLevel is Error");
+    CheckTrue(outContents.find("should_not_appear_banner") == std::string::npos, __func__, __LINE__, "Startup.Banner (Info level) should be suppressed when InitialMinimumLevel is Error");
     CheckTrue(outContents.find("Time:") == std::string::npos, __func__, __LINE__, "Init time info (Info level) should be suppressed when InitialMinimumLevel is Error");
     CheckTrue(outContents.find("OS:") == std::string::npos, __func__, __LINE__, "Init OS info (Info level) should be suppressed when InitialMinimumLevel is Error");
     CheckTrue(outContents.find("Drive:") == std::string::npos, __func__, __LINE__, "Init drive info (Info level) should be suppressed when InitialMinimumLevel is Error");
@@ -514,7 +514,7 @@ void TTest_ASWLog_ConsoleLog::Test_Initialize_WritesDriveInfoWhenEnabled()
 {
     // Arrange
     auto config = MakeQuietConfig();
-    config.Init_LogDriveInfo = true;
+    config.Startup.WriteDriveInfo = true;
 
     ASWLog::TASWConsoleLog logger;
     logger.SetColorMode(ASWLog::ColorMode::Never);
@@ -526,7 +526,7 @@ void TTest_ASWLog_ConsoleLog::Test_Initialize_WritesDriveInfoWhenEnabled()
 
     // Assert
     CheckTrue(initialized, __func__, __LINE__, "Initialize should succeed");
-    CheckTrue(outCapture.Str().find("Drive:") != std::string::npos, __func__, __LINE__, "Init_LogDriveInfo should write disk space diagnostics to the console when enabled");
+    CheckTrue(outCapture.Str().find("Drive:") != std::string::npos, __func__, __LINE__, "Startup.WriteDriveInfo should write disk space diagnostics to the console when enabled");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_ConsoleLog::Test_IsColorSupported_ReflectsDetectedStreams()
@@ -558,12 +558,12 @@ void TTest_ASWLog_ConsoleLog::Test_LogLineMetadata_Options()
 {
     // Arrange
     auto config = MakeQuietConfig();
-    config.LogUTCDateTime = true;
-    config.LogLevelStr = true;
-    config.LogProcessId = true;
-    config.LogThreadId = true;
-    config.LogMethodName = true;
-    config.LogSourceLine = true;
+    config.Line.ShowTimestamp = true;
+    config.Line.ShowLevel = true;
+    config.Line.ShowProcessId = true;
+    config.Line.ShowThreadId = true;
+    config.Line.ShowFunctionName = true;
+    config.Line.ShowSourceLine = true;
 
     ASWLog::TASWConsoleLog logger;
     logger.SetColorMode(ASWLog::ColorMode::Never);
@@ -578,11 +578,11 @@ void TTest_ASWLog_ConsoleLog::Test_LogLineMetadata_Options()
 
     // Assert
     CheckTrue(initialized, __func__, __LINE__, "Initialize should succeed");
-    CheckTrue(contents.find("Z") != std::string::npos, __func__, __LINE__, "LogUTCDateTime should add a UTC timestamp");
-    CheckTrue(contents.find("INFO") != std::string::npos, __func__, __LINE__, "LogLevelStr should include the log level");
-    CheckTrue(contents.find("[P:") != std::string::npos, __func__, __LINE__, "LogProcessId should include the process id");
-    CheckTrue(contents.find("[T:") != std::string::npos, __func__, __LINE__, "LogThreadId should include the thread id");
-    CheckTrue(contents.find("Test_LogLineMetadata_Options") != std::string::npos, __func__, __LINE__, "LogMethodName should include the calling method name");
+    CheckTrue(contents.find("Z") != std::string::npos, __func__, __LINE__, "Line.ShowTimestamp should add a UTC timestamp");
+    CheckTrue(contents.find("INFO") != std::string::npos, __func__, __LINE__, "Line.ShowLevel should include the log level");
+    CheckTrue(contents.find("[P:") != std::string::npos, __func__, __LINE__, "Line.ShowProcessId should include the process id");
+    CheckTrue(contents.find("[T:") != std::string::npos, __func__, __LINE__, "Line.ShowThreadId should include the thread id");
+    CheckTrue(contents.find("Test_LogLineMetadata_Options") != std::string::npos, __func__, __LINE__, "Line.ShowFunctionName should include the calling method name");
     CheckTrue(contents.find("metadata_message") != std::string::npos, __func__, __LINE__, "Metadata log line should still contain the message");
 }
 //---------------------------------------------------------------------------
@@ -590,8 +590,8 @@ void TTest_ASWLog_ConsoleLog::Test_LogProcessAndThreadIds_AreOSIds()
 {
     // Arrange
     auto config = MakeQuietConfig();
-    config.LogProcessId = true;
-    config.LogThreadId = true;
+    config.Line.ShowProcessId = true;
+    config.Line.ShowThreadId = true;
 
     ASWLog::TASWConsoleLog logger;
     logger.SetColorMode(ASWLog::ColorMode::Never);
@@ -679,7 +679,7 @@ void TTest_ASWLog_ConsoleLog::Test_OnLogEntry_FiresForQualifyingLevelsOnly()
 {
     // Arrange
     auto config = MakeQuietConfig();
-    config.CallbackMinimumLevel = ASWLog::Level::Error;
+    config.OnLogEntryMinimumLevel = ASWLog::Level::Error;
 
     std::vector<std::string> callbackMessages;
     config.OnLogEntry = [&callbackMessages](const ASWLog::TASWLogRecord&, std::string_view line)
@@ -700,7 +700,7 @@ void TTest_ASWLog_ConsoleLog::Test_OnLogEntry_FiresForQualifyingLevelsOnly()
 
     // Assert
     CheckTrue(initialized, __func__, __LINE__, "Initialize should succeed");
-    CheckEquals(static_cast<size_t>(1), callbackMessages.size(), __func__, __LINE__, "OnLogEntry should only fire for entries at or above CallbackMinimumLevel");
+    CheckEquals(static_cast<size_t>(1), callbackMessages.size(), __func__, __LINE__, "OnLogEntry should only fire for entries at or above OnLogEntryMinimumLevel");
     if (!callbackMessages.empty())
         CheckTrue(callbackMessages[0].find("above_threshold") != std::string::npos, __func__, __LINE__, "Callback should receive the same formatted line written to the console");
 }

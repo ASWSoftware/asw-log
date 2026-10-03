@@ -47,7 +47,7 @@ void TASWTextLogBase::AfterEntryUnlocked()
 //---------------------------------------------------------------------------
 void TASWTextLogBase::AppendLineEnding(std::string& line) const
 {
-    if (m_Config.LogLineEnding == LineEnding::CRLF)
+    if (m_Config.Line.Ending == LineEnding::CRLF)
         line += "\r\n";
     else
         line += '\n';
@@ -72,12 +72,12 @@ bool TASWTextLogBase::Close() noexcept
     TASWTextLogBase::DispatchLogCallback
 
     Called after m_Mutex has been released, so a callback that logs again doesn't deadlock. Calls the config's
-    OnLogEntry if it's set and the record's level meets CallbackMinimumLevel.
+    OnLogEntry if it's set and the record's level meets OnLogEntryMinimumLevel.
 */
 void TASWTextLogBase::DispatchLogCallback(const TASWLogRecord& record, std::string_view formattedLine) const noexcept
 {
     const auto& callback = m_Config.OnLogEntry;
-    if (callback == nullptr || record.LogLevel < m_Config.CallbackMinimumLevel)
+    if (callback == nullptr || record.LogLevel < m_Config.OnLogEntryMinimumLevel)
         return;
 
     try
@@ -105,12 +105,12 @@ void TASWTextLogBase::Finalize() noexcept
         if (!m_IsInitialized.load(std::memory_order_acquire))
             return;
 
-        if (m_Config.WriteShutdownLog)
+        if (m_Config.Shutdown.WriteLine)
         {
             std::string msg = "Logger shutdown: " + Time::ToISO8601String(NowUTC());
 
-            if (!m_Config.BannerMessage_Shutdown.empty())
-                msg += ", " + m_Config.BannerMessage_Shutdown;
+            if (!m_Config.Shutdown.Banner.empty())
+                msg += ", " + m_Config.Shutdown.Banner;
 
             WriteInfoLine(msg);
         }
@@ -159,9 +159,9 @@ bool TASWTextLogBase::Initialize(const TASWLogConfig& config) noexcept
         // out of memory while gathering the system info), the rest are skipped but the logger is still initialized
         try
         {
-            if (!m_Config.BannerMessage_Init.empty())
+            if (!m_Config.Startup.Banner.empty())
             {
-                WriteInfoLine(m_Config.BannerMessage_Init);
+                WriteInfoLine(m_Config.Startup.Banner);
             }
 
             WriteInitializationInfo();
@@ -225,7 +225,7 @@ void TASWTextLogBase::WriteApplicationInfo()
 #error "ASWLog: Unrecognized target platform in WriteApplicationInfo()"
 #endif
 
-    if (m_Config.Init_LogCommandLine)
+    if (m_Config.Startup.WriteCommandLine)
         applicationInfo += std::format(", command_line='{}'", GetCommandLineString());
 
     WriteInfoLine(std::format("App: {}", applicationInfo));
@@ -256,22 +256,22 @@ void TASWTextLogBase::WriteInfoLine(std::string_view message, std::source_locati
 //---------------------------------------------------------------------------
 void TASWTextLogBase::WriteInitializationInfo()
 {
-    if (m_Config.Init_LogTimeInfo)
+    if (m_Config.Startup.WriteTimeInfo)
         WriteTimeInfo();
 
-    if (m_Config.Init_LogOSInfo)
+    if (m_Config.Startup.WriteOSInfo)
         WriteOSInfo();
 
-    if (m_Config.Init_LogDriveInfo)
+    if (m_Config.Startup.WriteDriveInfo)
         WriteDriveInfo();
 
-    if (m_Config.Init_LogSysMemInfo)
+    if (m_Config.Startup.WriteSystemMemoryInfo)
         WriteSystemMemoryInfo();
 
-    if (m_Config.Init_LogApplicationInfo)
+    if (m_Config.Startup.WriteApplicationInfo)
         WriteApplicationInfo();
 
-    if (m_Config.Init_LogMemoryUsage)
+    if (m_Config.Startup.WriteMemoryUsage)
         WriteMemoryUsageInfo();
 }
 
@@ -301,7 +301,7 @@ std::string TASWTextLogBase::WriteLogEntry(const TASWLogRecord& record)
     {
         // Without a formatter, calls the built-in layout directly (no default formatter object, which could be
         // destroyed at exit before a never-destroyed singleton logger writes its shutdown line)
-        const auto* formatter = m_Config.Formatter.get();
+        const auto* formatter = m_Config.Line.Formatter.get();
         line = formatter != nullptr ? formatter->Format(record, m_Config) : TASWTextFormatter::FormatLine(record, m_Config);
         AppendLineEnding(line);
     }

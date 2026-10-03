@@ -92,6 +92,44 @@ see [0.26.1](#0261---2026-09-17) for the initial versioned baseline.
   `Initialize`, `Open`, `Close` and (when implementing `IASWLog` directly)
   `Write` overrides `noexcept`; a `WriteRecord()` override may still
   throw, since `TASWLogBase::Write()` drops the entry instead.
+- `TASWLogConfig` is regrouped by concern, so it's clear which settings a
+  logger uses: `Line` (`TASWLineConfig`, the line layout), `Startup`
+  (`TASWStartupConfig`), `Shutdown` (`TASWShutdownConfig`) and `File`
+  (`TASWFileConfig`, which the console logger and the multi-log ignore).
+  `InitialMinimumLevel` and `OnLogEntry` stay at the top. Defaults and
+  behavior are unchanged. Code that sets the config must rename its
+  fields (old -> new):
+  - `LogUTCDateTime` -> `Line.ShowTimestamp` (it turns the timestamp on
+    or off; it is always UTC)
+  - `LogLevelStr` -> `Line.ShowLevel`, `LogProcessId` ->
+    `Line.ShowProcessId`, `LogThreadId` -> `Line.ShowThreadId`
+  - `LogAppMem_WorkingSet` -> `Line.ShowWorkingSet`,
+    `LogAppMem_PeakWorkingSet` -> `Line.ShowPeakWorkingSet`
+  - `LogMethodName` -> `Line.ShowFunctionName`, `LogSourceLine` ->
+    `Line.ShowSourceLine`
+  - `LogLineEnding` -> `Line.Ending`, `Formatter` -> `Line.Formatter`
+  - `BannerMessage_Init` -> `Startup.Banner`
+  - `Init_LogApplicationInfo` -> `Startup.WriteApplicationInfo`,
+    `Init_LogCommandLine` -> `Startup.WriteCommandLine`,
+    `Init_LogDriveInfo` -> `Startup.WriteDriveInfo`,
+    `Init_LogMemoryUsage` -> `Startup.WriteMemoryUsage`,
+    `Init_LogOSInfo` -> `Startup.WriteOSInfo`, `Init_LogSysMemInfo` ->
+    `Startup.WriteSystemMemoryInfo`, `Init_LogTimeInfo` ->
+    `Startup.WriteTimeInfo`
+  - `WriteShutdownLog` -> `Shutdown.WriteLine`, `BannerMessage_Shutdown`
+    -> `Shutdown.Banner`
+  - `LogsFolderPath` -> `File.FolderPath`, `LogFilePath` ->
+    `File.FilePath`, `LogFlushMode` -> `File.Flush`
+  - `AutoOpenClosePerWrite`, `FlushInterval`, `OpenRetryCount`,
+    `OpenRetryDelay`, `CircuitBreakerResetDelay`, `EnableRotation`,
+    `MaxFileSizeBytes`, `RotationRetryDelay`, `EnableDailyRolling` and
+    `RetentionMaxAge` move into `File` under the same names (e.g.
+    `File.EnableRotation`)
+  - `ResolveLogFilePath()` -> `File.ResolvePath()`, `ResolveLogFileDir()`
+    -> `File.ResolveFolder()`
+  - `CallbackMinimumLevel` -> `OnLogEntryMinimumLevel`
+
+  A custom formatter reads the line options from `config.Line`.
 
 ## [0.45.0] - 2026-10-01
 

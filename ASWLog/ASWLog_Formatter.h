@@ -42,8 +42,8 @@ namespace ASWLog
 // IASWLogFormatter
 //
 // Turns a log entry into the line a text logger writes. Assign one to
-// TASWLogConfig::Formatter; without one, a logger uses TASWTextFormatter's
-// layout.
+// TASWLogConfig::Line.Formatter; without one, a logger uses
+// TASWTextFormatter's layout.
 //
 // A formatter can be shared by several loggers, which may call it at the
 // same time from different threads, so Format() must not change the
@@ -54,7 +54,7 @@ class IASWLogFormatter
 public:
     virtual ~IASWLogFormatter() = default;
 
-    // Returns the line for 'record', without its line ending (the logger adds TASWLogConfig::LogLineEnding).
+    // Returns the line for 'record', without its line ending (the logger adds TASWLogConfig::Line.Ending).
     // 'config' is the calling logger's config. Not called for a Raw record (LogRaw()/LogForceRaw()), whose message is written as is.
     // May throw, e.g. std::bad_alloc: the entry is then dropped.
     [[nodiscard]] virtual std::string Format(const TASWLogRecord& record, const TASWLogConfig& config) const = 0;
@@ -64,10 +64,10 @@ public:
 /////////////////////////////////////////////////////////////////////////////
 // TASWTextFormatter
 //
-// The built-in text layout, used when TASWLogConfig::Formatter is empty:
+// The built-in text layout, used when TASWLogConfig::Line.Formatter is empty:
 // "[time][LEVEL][P:pid][T:tid][WS:bytes][PWS:bytes][function][file:line]: message", where each bracketed field is
-// written only if its TASWLogConfig option is on (LogUTCDateTime, LogLevelStr, LogProcessId, LogThreadId,
-// LogAppMem_WorkingSet, LogAppMem_PeakWorkingSet, LogMethodName, LogSourceLine).
+// written only if its TASWLineConfig option is on (ShowTimestamp, ShowLevel, ShowProcessId, ShowThreadId,
+// ShowWorkingSet, ShowPeakWorkingSet, ShowFunctionName, ShowSourceLine).
 /////////////////////////////////////////////////////////////////////////////
 class TASWTextFormatter : public IASWLogFormatter
 {

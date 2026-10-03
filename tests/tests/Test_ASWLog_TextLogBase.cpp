@@ -167,23 +167,23 @@ public:
 ASWLog::TASWLogConfig MakeQuietConfig()
 {
     ASWLog::TASWLogConfig config;
-    config.LogsFolderPath = TestTempDir;
-    config.LogFilePath = "textlogbase.log";
+    config.File.FolderPath = TestTempDir;
+    config.File.FilePath = "textlogbase.log";
     config.InitialMinimumLevel = ASWLog::Level::Info;
-    config.LogUTCDateTime = false;
-    config.LogLevelStr = true;
-    config.LogProcessId = false;
-    config.LogThreadId = false;
-    config.LogMethodName = false;
-    config.LogSourceLine = false;
-    config.OpenRetryCount = 1;
-    config.WriteShutdownLog = false;
-    config.Init_LogTimeInfo = false;
-    config.Init_LogOSInfo = false;
-    config.Init_LogDriveInfo = false;
-    config.Init_LogSysMemInfo = false;
-    config.Init_LogApplicationInfo = false;
-    config.Init_LogMemoryUsage = false;
+    config.Line.ShowTimestamp = false;
+    config.Line.ShowLevel = true;
+    config.Line.ShowProcessId = false;
+    config.Line.ShowThreadId = false;
+    config.Line.ShowFunctionName = false;
+    config.Line.ShowSourceLine = false;
+    config.File.OpenRetryCount = 1;
+    config.Shutdown.WriteLine = false;
+    config.Startup.WriteTimeInfo = false;
+    config.Startup.WriteOSInfo = false;
+    config.Startup.WriteDriveInfo = false;
+    config.Startup.WriteSystemMemoryInfo = false;
+    config.Startup.WriteApplicationInfo = false;
+    config.Startup.WriteMemoryUsage = false;
     return config;
 }
 
@@ -260,8 +260,8 @@ void TTest_ASWLog_TextLogBase::Test_Finalize_WritesShutdownLineFromDestructor()
     // Arrange
     TMemoryOutput output;
     auto config = MakeQuietConfig();
-    config.WriteShutdownLog = true;
-    config.BannerMessage_Shutdown = "goodbye";
+    config.Shutdown.WriteLine = true;
+    config.Shutdown.Banner = "goodbye";
 
     // Act
     {
@@ -329,11 +329,11 @@ void TTest_ASWLog_TextLogBase::Test_Formatter_FormatsEveryFileLine()
     const auto logPath = TestTempDir / "textlogbase.log";
     std::vector<std::string> callbackLines;
     auto config = MakeQuietConfig();
-    config.Formatter = std::make_shared<TPipeFormatter>();
-    config.BannerMessage_Init = "start";
-    config.WriteShutdownLog = true;
-    config.BannerMessage_Shutdown = "bye";
-    config.CallbackMinimumLevel = ASWLog::Level::Info;
+    config.Line.Formatter = std::make_shared<TPipeFormatter>();
+    config.Startup.Banner = "start";
+    config.Shutdown.WriteLine = true;
+    config.Shutdown.Banner = "bye";
+    config.OnLogEntryMinimumLevel = ASWLog::Level::Info;
     config.OnLogEntry = [&callbackLines](const ASWLog::TASWLogRecord& /*record*/, std::string_view line) {
             callbackLines.emplace_back(line);
         };
@@ -364,8 +364,8 @@ void TTest_ASWLog_TextLogBase::Test_Initialize_ThrowingFormatterStillInitializes
     // Arrange: a startup line goes through a formatter that throws
     TMemoryOutput output;
     auto config = MakeQuietConfig();
-    config.BannerMessage_Init = "banner";
-    config.Formatter = std::make_shared<TThrowingFormatter>();
+    config.Startup.Banner = "banner";
+    config.Line.Formatter = std::make_shared<TThrowingFormatter>();
 
     TMemoryTextLog log(output);
     bool initialized = false;
@@ -397,8 +397,8 @@ void TTest_ASWLog_TextLogBase::Test_Initialize_WritesStartupLinesThenCallsAfterE
     TMemoryOutput output;
     TMemoryTextLog log(output);
     auto config = MakeQuietConfig();
-    config.BannerMessage_Init = "starting";
-    config.Init_LogTimeInfo = true;
+    config.Startup.Banner = "starting";
+    config.Startup.WriteTimeInfo = true;
 
     // Act
     const bool initialized = log.Initialize(config);
@@ -424,7 +424,7 @@ void TTest_ASWLog_TextLogBase::Test_Log_AtLevelOffIsNeverWritten()
     int callbackCount = 0;
     auto config = MakeQuietConfig();
     config.InitialMinimumLevel = ASWLog::Level::Trace;
-    config.CallbackMinimumLevel = ASWLog::Level::Trace;
+    config.OnLogEntryMinimumLevel = ASWLog::Level::Trace;
     config.OnLogEntry = [&callbackCount](const ASWLog::TASWLogRecord&, std::string_view) {
             ++callbackCount;
         };
@@ -454,7 +454,7 @@ void TTest_ASWLog_TextLogBase::Test_Log_DroppedWhenNotReadyOrNotPrepared()
     TMemoryOutput output;
     int callbackCount = 0;
     auto config = MakeQuietConfig();
-    config.CallbackMinimumLevel = ASWLog::Level::Info;
+    config.OnLogEntryMinimumLevel = ASWLog::Level::Info;
     config.OnLogEntry = [&callbackCount](const ASWLog::TASWLogRecord&, std::string_view) {
             ++callbackCount;
         };
@@ -490,8 +490,8 @@ void TTest_ASWLog_TextLogBase::Test_Log_FormatsFiltersAndCallsAfterEntry()
     TMemoryOutput output;
     std::vector<std::string> callbackLines;
     auto config = MakeQuietConfig();
-    config.LogLineEnding = ASWLog::LineEnding::CRLF;
-    config.CallbackMinimumLevel = ASWLog::Level::Trace;
+    config.Line.Ending = ASWLog::LineEnding::CRLF;
+    config.OnLogEntryMinimumLevel = ASWLog::Level::Trace;
     config.OnLogEntry = [&callbackLines](const ASWLog::TASWLogRecord&, std::string_view line) {
             callbackLines.emplace_back(line);
         };
@@ -520,9 +520,9 @@ void TTest_ASWLog_TextLogBase::Test_Log_MinimumLevelOffAllowsOnlyForcedEntries()
     int callbackCount = 0;
     auto config = MakeQuietConfig();
     config.InitialMinimumLevel = ASWLog::Level::Off;
-    config.BannerMessage_Init = "startup banner";
-    config.Init_LogTimeInfo = true;
-    config.CallbackMinimumLevel = ASWLog::Level::Off;
+    config.Startup.Banner = "startup banner";
+    config.Startup.WriteTimeInfo = true;
+    config.OnLogEntryMinimumLevel = ASWLog::Level::Off;
     config.OnLogEntry = [&callbackCount](const ASWLog::TASWLogRecord&, std::string_view) {
             ++callbackCount;
         };
@@ -545,7 +545,7 @@ void TTest_ASWLog_TextLogBase::Test_Log_MinimumLevelOffAllowsOnlyForcedEntries()
         "With the minimum level at Off, Initialize should write no startup lines");
     CheckTrue(output.Lines == std::vector<std::string>{ "[INFO]: forced\n", "forced_raw\n" }, __func__, __LINE__,
         "With the minimum level at Off, only forced entries should be written");
-    CheckEquals(0, callbackCount, __func__, __LINE__, "With CallbackMinimumLevel at Off, OnLogEntry should never fire");
+    CheckEquals(0, callbackCount, __func__, __LINE__, "With OnLogEntryMinimumLevel at Off, OnLogEntry should never fire");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_TextLogBase::Test_Log_ThrowingWriteDoesNotEscape()
@@ -598,10 +598,10 @@ void TTest_ASWLog_TextLogBase::Test_SetEnabled_FalseWritesNothing()
     TMemoryOutput output;
     int callbackCount = 0;
     auto config = MakeQuietConfig();
-    config.BannerMessage_Init = "startup banner";
-    config.Init_LogTimeInfo = true;
-    config.WriteShutdownLog = true;
-    config.CallbackMinimumLevel = ASWLog::Level::Trace;
+    config.Startup.Banner = "startup banner";
+    config.Startup.WriteTimeInfo = true;
+    config.Shutdown.WriteLine = true;
+    config.OnLogEntryMinimumLevel = ASWLog::Level::Trace;
     config.OnLogEntry = [&callbackCount](const ASWLog::TASWLogRecord&, std::string_view) {
             ++callbackCount;
         };

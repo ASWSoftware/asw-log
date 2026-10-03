@@ -149,7 +149,7 @@ enum class Level : std::uint8_t
     // Examples include out-of-memory states, hardware faults, or failed sanity checks.
     Critical = 5,
 
-    // Not a severity. As a minimum level (SetMinimumLevel(), InitialMinimumLevel, CallbackMinimumLevel), turns off
+    // Not a severity. As a minimum level (SetMinimumLevel(), InitialMinimumLevel, OnLogEntryMinimumLevel), turns off
     // everything except LogForce()/LogForceRaw(), which ignore the minimum level. A message logged at Off is never
     // written, even when forced.
     Off = 6,

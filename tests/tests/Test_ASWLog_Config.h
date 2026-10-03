@@ -36,9 +36,10 @@ private:
     typedef TTestGroupBase inherited;
 
 private: // Test methods
-    void Test_ResolveLogFileDir_CustomFolder();
-    void Test_ResolveLogFilePath_AbsolutePath();
-    void Test_ResolveLogFilePath_Defaults();
+    void Test_Defaults_MatchDocumentedValues();
+    void Test_ResolveFolder_CustomFolder();
+    void Test_ResolvePath_AbsolutePath();
+    void Test_ResolvePath_Defaults();
 
 public:
     TTest_ASWLog_Config();

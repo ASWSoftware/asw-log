@@ -35,7 +35,7 @@ limitations under the License.
 #include <string_view>
 //---------------------------------------------------------------------------
 #include "ASWLog_Base.h"
-#include "ASWLog_Formatter.h" // For TASWLogConfig::Formatter
+#include "ASWLog_Formatter.h" // For TASWLineConfig::Formatter
 //---------------------------------------------------------------------------
 
 namespace ASWLog
@@ -53,7 +53,7 @@ namespace ASWLog
 // called with m_Mutex held, so it must not call a public method of this logger (which would lock it again). The
 // derived logger's destructor must call Finalize(), which writes the shutdown line and closes the output.
 //
-// To change the line layout, assign a formatter to TASWLogConfig::Formatter (see IASWLogFormatter).
+// To change the line layout, assign a formatter to TASWLogConfig::Line.Formatter (see IASWLogFormatter).
 /////////////////////////////////////////////////////////////////////////////
 class TASWTextLogBase : public TASWLogBase
 {
@@ -89,7 +89,7 @@ protected:
     // initialized and open.
     virtual bool EnsureReadyUnlocked();
 
-    // Writes the shutdown line (if TASWLogConfig::WriteShutdownLog) and closes the output, if the logger is
+    // Writes the shutdown line (if TASWLogConfig::Shutdown.WriteLine) and closes the output, if the logger is
     // initialized. Never throws. Each logger calls it from its destructor, since the hooks can't be called from this
     // class's destructor.
     void Finalize() noexcept;

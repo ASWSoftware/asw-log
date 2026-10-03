@@ -55,8 +55,8 @@ namespace ASWLog
 // LogForceRaw() bypass it, matching force semantics elsewhere. Each sink
 // still applies its own level independently. SetEnabled(false) on the
 // composite stops all fan-out, forced entries included. All other
-// fields on this class's config (rotation, retention, banners, OnLogEntry,
-// etc.) are inert, since the composite performs no I/O of its own.
+// settings in this class's config (Line, Startup, Shutdown, File,
+// OnLogEntry) are inert, since the composite performs no I/O of its own.
 /////////////////////////////////////////////////////////////////////////////
 class TASWMultiLog : public TASWLogBase
 {

@@ -170,7 +170,7 @@ public:
 
     virtual bool Open() noexcept = 0;
     // Closes the output (e.g. the log file). This doesn't always stop logging: a file logger with
-    // TASWLogConfig::AutoOpenClosePerWrite reopens its file for the next entry. Use SetEnabled(false) to stop logging.
+    // TASWFileConfig::AutoOpenClosePerWrite reopens its file for the next entry. Use SetEnabled(false) to stop logging.
     virtual bool Close() noexcept = 0;
     // Pushes the entries written so far out of the logger's buffers (e.g. a file's buffer to the operating system), for
     // use before a risky operation or with FlushMode::Manual. Works while disabled, since it writes no new entries.

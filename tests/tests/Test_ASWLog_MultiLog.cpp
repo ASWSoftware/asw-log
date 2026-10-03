@@ -199,23 +199,23 @@ std::string ReadFileText(const std::filesystem::path& path)
 ASWLog::TASWLogConfig MakeFileConfig(const std::filesystem::path& dir, const std::filesystem::path& file, ASWLog::Level minLevel)
 {
     ASWLog::TASWLogConfig config;
-    config.LogsFolderPath = dir;
-    config.LogFilePath = file;
+    config.File.FolderPath = dir;
+    config.File.FilePath = file;
     config.InitialMinimumLevel = minLevel;
-    config.LogUTCDateTime = false;
-    config.LogLevelStr = false;
-    config.LogProcessId = false;
-    config.LogThreadId = false;
-    config.LogMethodName = false;
-    config.LogSourceLine = false;
-    config.OpenRetryCount = 1;
-    config.WriteShutdownLog = false;
-    config.Init_LogTimeInfo = false;
-    config.Init_LogOSInfo = false;
-    config.Init_LogDriveInfo = false;
-    config.Init_LogSysMemInfo = false;
-    config.Init_LogApplicationInfo = false;
-    config.Init_LogMemoryUsage = false;
+    config.Line.ShowTimestamp = false;
+    config.Line.ShowLevel = false;
+    config.Line.ShowProcessId = false;
+    config.Line.ShowThreadId = false;
+    config.Line.ShowFunctionName = false;
+    config.Line.ShowSourceLine = false;
+    config.File.OpenRetryCount = 1;
+    config.Shutdown.WriteLine = false;
+    config.Startup.WriteTimeInfo = false;
+    config.Startup.WriteOSInfo = false;
+    config.Startup.WriteDriveInfo = false;
+    config.Startup.WriteSystemMemoryInfo = false;
+    config.Startup.WriteApplicationInfo = false;
+    config.Startup.WriteMemoryUsage = false;
     return config;
 }
 
@@ -430,8 +430,8 @@ void TTest_ASWLog_MultiLog::Test_Flush_WritesBufferedEntriesOfEveryFileSink()
     const auto fileB = TestTempDir / "flush_sink_b.log";
     auto configA = MakeFileConfig(TestTempDir, fileA, ASWLog::Level::Trace);
     auto configB = MakeFileConfig(TestTempDir, fileB, ASWLog::Level::Trace);
-    configA.LogFlushMode = ASWLog::FlushMode::Manual;
-    configB.LogFlushMode = ASWLog::FlushMode::Manual;
+    configA.File.Flush = ASWLog::FlushMode::Manual;
+    configB.File.Flush = ASWLog::FlushMode::Manual;
 
     ASWLog::TASWFileLog sinkA;
     ASWLog::TASWFileLog sinkB;
@@ -530,7 +530,7 @@ void TTest_ASWLog_MultiLog::Test_Initialize_ConcurrentCallsSucceedOnce()
 
     // A large config takes longer to copy, which widens the gap an unsynchronized check-then-set would leave
     ASWLog::TASWLogConfig config;
-    config.BannerMessage_Init.assign(64 * 1024, 'x');
+    config.Startup.Banner.assign(64 * 1024, 'x');
 
     // Act: in each round, several threads call Initialize on a new composite at the same moment
     for (int round = 0; round < roundCount; ++round)

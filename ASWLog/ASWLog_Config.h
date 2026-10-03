@@ -45,48 +45,24 @@ namespace ASWLog
 
 class IASWLogFormatter; // See ASWLog_Formatter.h
 
-struct TASWLogConfig
+/////////////////////////////////////////////////////////////////////////////
+// TASWFileConfig
+//
+// The log file's location, flushing, reopening, rotation and retention (TASWLogConfig::File). Only a file logger
+// uses these.
+/////////////////////////////////////////////////////////////////////////////
+struct TASWFileConfig
 {
-    // Seeds a logger's lock-free runtime level gate at Initialize() time only.
-    // Use the logger's SetMinimumLevel()/GetMinimumLevel() to read or change the
-    // effective level afterward; this field does not track later changes.
-    Level InitialMinimumLevel = Level::Info;
-    LineEnding LogLineEnding = LineEnding::LF;
-    std::filesystem::path LogsFolderPath = "logs";
-    std::filesystem::path LogFilePath = "aswlog.txt";
-    std::string BannerMessage_Init;
-    std::string BannerMessage_Shutdown;
+    // The log file is FilePath inside FolderPath, or FilePath alone if it is absolute (see ResolvePath())
+    std::filesystem::path FolderPath = "logs";
+    std::filesystem::path FilePath = "aswlog.txt";
     // Opens and closes the log file for every entry. Required when several processes write to one log file: with the
     // file kept open, other processes can't open it on Windows, and on POSIX they keep appending to the renamed backup
     // after a rotation.
     bool AutoOpenClosePerWrite = false;
-    bool WriteShutdownLog = true;
 
-    FlushMode LogFlushMode = FlushMode::EveryWrite;
-    std::chrono::milliseconds FlushInterval{ 1000 };
-
-    // Meta-data configuration for each log entry
-    bool LogAppMem_WorkingSet = false;
-    bool LogAppMem_PeakWorkingSet = false;
-    bool LogLevelStr      = true;
-    bool LogMethodName    = false;
-    bool LogProcessId     = true;
-    bool LogSourceLine    = false;
-    bool LogThreadId      = true;
-    bool LogUTCDateTime   = true;
-
-    // Formats each entry's line (not LogRaw entries). Empty: TASWTextFormatter's layout, from the options above. One
-    // formatter can be shared by several loggers.
-    std::shared_ptr<const IASWLogFormatter> Formatter;
-
-    // Initialize output configuration
-    bool Init_LogApplicationInfo = true;
-    bool Init_LogCommandLine = false;
-    bool Init_LogDriveInfo = true;
-    bool Init_LogMemoryUsage = true;
-    bool Init_LogOSInfo = true;
-    bool Init_LogSysMemInfo = true;
-    bool Init_LogTimeInfo = true;
+    FlushMode Flush = FlushMode::EveryWrite;
+    std::chrono::milliseconds FlushInterval{ 1000 }; // Used by FlushMode::Periodic
 
     // Retry log entry options
     int OpenRetryCount = 5;
@@ -111,21 +87,18 @@ struct TASWLogConfig
     // --- Log Retention Options (applied automatically after a successful rotation) ---
     std::chrono::hours RetentionMaxAge{ 0 }; // 0 = disabled. When > 0, backups for this log older than this age are deleted after each rotation.
 
-    // --- Log Entry Callback Options ---
-    // Receives the entry's record (with its time and ids) and the line as written. Both are only valid during the call.
-    using LogCallback = std::function<void (const TASWLogRecord& record, std::string_view formattedLine)>;
-    LogCallback OnLogEntry; // Optional hook invoked after a successful write (e.g. alerting/crash-reporting). Invoked outside the sink's internal lock; exceptions are swallowed.
-    Level CallbackMinimumLevel = Level::Error; // Independent threshold gating OnLogEntry (Off = never); unrelated to InitialMinimumLevel or the Force* APIs.
-
-    [[nodiscard]] std::filesystem::path ResolveLogFileDir() const
+    // The folder that holds the log file
+    [[nodiscard]] std::filesystem::path ResolveFolder() const
     {
-        return ResolveLogFilePath().parent_path();
+        return ResolvePath().parent_path();
     }
 
-    [[nodiscard]] std::filesystem::path ResolveLogFilePath() const
+    // The log file's path: FilePath inside FolderPath, or FilePath if it is absolute. An empty FolderPath or FilePath
+    // means its default ("logs", "aswlog.txt").
+    [[nodiscard]] std::filesystem::path ResolvePath() const
     {
-        auto candidate = LogFilePath.empty() ? std::filesystem::path("aswlog.txt") : LogFilePath;
-        auto baseFolder = LogsFolderPath.empty() ? std::filesystem::path("logs") : LogsFolderPath;
+        auto candidate = FilePath.empty() ? std::filesystem::path("aswlog.txt") : FilePath;
+        auto baseFolder = FolderPath.empty() ? std::filesystem::path("logs") : FolderPath;
 
         if (candidate.is_absolute())
         {
@@ -135,6 +108,87 @@ struct TASWLogConfig
         auto resolvedBase = baseFolder.lexically_normal();
         return (resolvedBase / candidate).lexically_normal();
     }
+};
+
+
+/////////////////////////////////////////////////////////////////////////////
+// TASWLineConfig
+//
+// How a text logger writes each entry's line (TASWLogConfig::Line).
+/////////////////////////////////////////////////////////////////////////////
+struct TASWLineConfig
+{
+    // Formats each entry's line (not LogRaw entries). Empty: TASWTextFormatter's layout, from the Show* options below.
+    // One formatter can be shared by several loggers.
+    std::shared_ptr<const IASWLogFormatter> Formatter;
+    LineEnding Ending = LineEnding::LF; // Added after each line (not after LogRaw entries)
+
+    // The fields TASWTextFormatter writes before the message
+    bool ShowTimestamp      = true; // The entry's time, in UTC
+    bool ShowLevel          = true;
+    bool ShowProcessId      = true;
+    bool ShowThreadId       = true;
+    bool ShowWorkingSet     = false; // The process's memory use
+    bool ShowPeakWorkingSet = false;
+    bool ShowFunctionName   = false; // The function that logged the entry
+    bool ShowSourceLine     = false; // The source file and line that logged the entry
+};
+
+
+/////////////////////////////////////////////////////////////////////////////
+// TASWShutdownConfig
+//
+// The line a text logger writes when it shuts down (TASWLogConfig::Shutdown).
+/////////////////////////////////////////////////////////////////////////////
+struct TASWShutdownConfig
+{
+    bool WriteLine = true; // "Logger shutdown: <time>", followed by the banner if set
+    std::string Banner;
+};
+
+
+/////////////////////////////////////////////////////////////////////////////
+// TASWStartupConfig
+//
+// The lines a text logger writes when Initialize() succeeds (TASWLogConfig::Startup).
+/////////////////////////////////////////////////////////////////////////////
+struct TASWStartupConfig
+{
+    std::string Banner; // Written first, if set
+    bool WriteApplicationInfo  = true;
+    bool WriteCommandLine      = false; // Added to the application info line
+    bool WriteDriveInfo        = true;
+    bool WriteMemoryUsage      = true;
+    bool WriteOSInfo           = true;
+    bool WriteSystemMemoryInfo = true;
+    bool WriteTimeInfo         = true;
+};
+
+
+/////////////////////////////////////////////////////////////////////////////
+// TASWLogConfig
+//
+// A logger's settings, passed to IASWLog::Initialize(). The groups hold the settings for one concern each; a logger
+// ignores the groups it doesn't use (e.g. a console logger ignores File, and a multi-log uses only
+// InitialMinimumLevel, passing the whole config on to its loggers).
+/////////////////////////////////////////////////////////////////////////////
+struct TASWLogConfig
+{
+    // Seeds a logger's lock-free runtime level gate at Initialize() time only.
+    // Use the logger's SetMinimumLevel()/GetMinimumLevel() to read or change the
+    // effective level afterward; this field does not track later changes.
+    Level InitialMinimumLevel = Level::Info;
+
+    TASWLineConfig Line;
+    TASWStartupConfig Startup;
+    TASWShutdownConfig Shutdown;
+    TASWFileConfig File;
+
+    // --- Log Entry Callback Options ---
+    // Receives the entry's record (with its time and ids) and the line as written. Both are only valid during the call.
+    using LogCallback = std::function<void (const TASWLogRecord& record, std::string_view formattedLine)>;
+    LogCallback OnLogEntry; // Optional hook invoked after a successful write (e.g. alerting/crash-reporting). Invoked outside the sink's internal lock; exceptions are swallowed.
+    Level OnLogEntryMinimumLevel = Level::Error; // Independent threshold gating OnLogEntry (Off = never); unrelated to InitialMinimumLevel or the Force* APIs.
 };
 
 } // namespace ASWLog

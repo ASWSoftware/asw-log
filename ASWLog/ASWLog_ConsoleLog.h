@@ -44,8 +44,8 @@ namespace ASWLog
 //
 // Used for logging to the console (stdout/stderr).
 //
-// Reuses TASWLogConfig for consistency with TASWFileLog, but only honors the
-// subset of fields that make sense for a console destination.
+// Takes the same TASWLogConfig as TASWFileLog, but ignores its File settings.
+// Colors are set on the logger itself (see SetColorMode()).
 /////////////////////////////////////////////////////////////////////////////
 class TASWConsoleLog : public TASWTextLogBase
 {
