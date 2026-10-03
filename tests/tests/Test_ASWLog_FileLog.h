@@ -36,6 +36,7 @@ private:
     typedef TTestGroupBase inherited;
 
 private: // Test methods
+    void Test_AutoOpenClose_StaysInitializedBetweenWrites();
     void Test_ChildProcess_DoesNotInheritLogFile();
     void Test_DailyRolling_KeepsExistingBackupForSameDate();
     void Test_DailyRolling_KeepsLeftoverLogFromSameDay();
@@ -49,6 +50,7 @@ private: // Test methods
     void Test_FailedReopen_RetriesAndResumesLogging();
     void Test_FailedReopen_ZeroResetDelayRetriesOnNextWrite();
     void Test_FailedSizeRotation_WaitsBeforeRetrying();
+    void Test_Flush_WritesBufferedManualModeEntries();
     void Test_GetInstance_ReturnsSameInstance();
     void Test_InitializeAndLogInfo_WritesText();
     void Test_Initialize_SuppressesInfoBannersBelowMinimumLevel();
@@ -62,12 +64,17 @@ private: // Test methods
     void Test_MultiThreadedStress_WritesAllMessagesToDisk_OpenClose();
     void Test_OnLogEntry_FiresForQualifyingLevelsOnly();
     void Test_OnLogEntry_ReentrantCallbackDoesNotDeadlock();
+    void Test_Reconfigure_FlushesEntriesBufferedByPreviousMode();
+    void Test_Reconfigure_MovesOutputToNewFile();
+    void Test_Reconfigure_UnopenableFileFailsButLoggerStaysInitialized();
     void Test_RetentionMaxAge_DefaultDisabledPreservesOldBackups();
     void Test_RetentionMaxAge_DeletesExpiredBackupsAfterRotation();
     void Test_RotateLogFiles_KeepsEveryBackup();
+    void Test_SetEnabled_FalseStopsAutoOpenCloseLogging();
     void Test_SizeRotation_AutoOpenCloseCountsOtherWriters();
     void Test_SizeRotation_CountsExistingFileSize();
     void Test_SizeRotation_RotatesWhenLimitReached();
+    void Test_Write_EarlierRecordDoesNotRollLogBack();
 
 public:
     TTest_ASWLog_FileLog();

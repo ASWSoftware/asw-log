@@ -114,22 +114,22 @@ protected:
 ASWLog::TASWLogConfig MakeConfigWithoutFields(const std::filesystem::path& file)
 {
     ASWLog::TASWLogConfig config;
-    config.LogsFolderPath = TestTempDir;
-    config.LogFilePath = file;
-    config.LogUTCDateTime = false;
-    config.LogLevelStr = false;
-    config.LogProcessId = false;
-    config.LogThreadId = false;
-    config.LogMethodName = false;
-    config.LogSourceLine = false;
-    config.OpenRetryCount = 1;
-    config.WriteShutdownLog = false;
-    config.Init_LogTimeInfo = false;
-    config.Init_LogOSInfo = false;
-    config.Init_LogDriveInfo = false;
-    config.Init_LogSysMemInfo = false;
-    config.Init_LogApplicationInfo = false;
-    config.Init_LogMemoryUsage = false;
+    config.File.FolderPath = TestTempDir;
+    config.File.FilePath = file;
+    config.Line.ShowTimestamp = false;
+    config.Line.ShowLevel = false;
+    config.Line.ShowProcessId = false;
+    config.Line.ShowThreadId = false;
+    config.Line.ShowFunctionName = false;
+    config.Line.ShowSourceLine = false;
+    config.File.OpenRetryCount = 1;
+    config.Shutdown.WriteLine = false;
+    config.Startup.WriteTimeInfo = false;
+    config.Startup.WriteOSInfo = false;
+    config.Startup.WriteDriveInfo = false;
+    config.Startup.WriteSystemMemoryInfo = false;
+    config.Startup.WriteApplicationInfo = false;
+    config.Startup.WriteMemoryUsage = false;
     return config;
 }
 
@@ -226,12 +226,12 @@ void TTest_ASWLog_Formatter::Test_FormatLine_AllFieldsInOrder()
 {
     // Arrange
     ASWLog::TASWLogConfig config;
-    config.LogUTCDateTime = true;
-    config.LogLevelStr = true;
-    config.LogProcessId = true;
-    config.LogThreadId = true;
-    config.LogMethodName = true;
-    config.LogSourceLine = true;
+    config.Line.ShowTimestamp = true;
+    config.Line.ShowLevel = true;
+    config.Line.ShowProcessId = true;
+    config.Line.ShowThreadId = true;
+    config.Line.ShowFunctionName = true;
+    config.Line.ShowSourceLine = true;
     const auto location = std::source_location::current();
     const auto record = MakeRecord("all fields", location);
 
@@ -248,8 +248,8 @@ void TTest_ASWLog_Formatter::Test_FormatLine_MemoryFields()
 {
     // Arrange
     auto config = MakeConfigWithoutFields("unused.log");
-    config.LogAppMem_WorkingSet = true;
-    config.LogAppMem_PeakWorkingSet = true;
+    config.Line.ShowWorkingSet = true;
+    config.Line.ShowPeakWorkingSet = true;
 
     // Act
     const auto line = ASWLog::TASWTextFormatter::FormatLine(MakeRecord("memory"), config);
@@ -279,7 +279,7 @@ void TTest_ASWLog_Formatter::Test_Formatter_ReceivesRecordFromLoggingThread()
     std::vector<TCapturedRecord> records;
     auto config = MakeConfigWithoutFields("record.log");
     config.InitialMinimumLevel = ASWLog::Level::Debug;
-    config.Formatter = std::make_shared<TCapturingFormatter>(records);
+    config.Line.Formatter = std::make_shared<TCapturingFormatter>(records);
     TFixedClockFileLog log;
     CheckTrue(log.Initialize(config), __func__, __LINE__, "Initialize should succeed");
 
@@ -316,8 +316,8 @@ void TTest_ASWLog_Formatter::Test_Formatter_SharedByTwoLoggers()
     const auto formatter = std::make_shared<TCountingFormatter>();
     auto configA = MakeConfigWithoutFields("shared_a.log");
     auto configB = MakeConfigWithoutFields("shared_b.log");
-    configA.Formatter = formatter;
-    configB.Formatter = formatter;
+    configA.Line.Formatter = formatter;
+    configB.Line.Formatter = formatter;
     ASWLog::TASWFileLog logA;
     ASWLog::TASWFileLog logB;
     CheckTrue(logA.Initialize(configA), __func__, __LINE__, "Logger A should initialize");

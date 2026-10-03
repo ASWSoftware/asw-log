@@ -1,5 +1,5 @@
 /* **************************************************************************
-Test_ASWLog_Base.h
+Test_ASWLog_Version.h
 Author: Anthony S. West - ASW Software
 
 Copyright 2026 Anthony S. West
@@ -18,8 +18,8 @@ limitations under the License.
 
 ************************************************************************** */
 
-#ifndef Test_ASWLog_BaseH
-#define Test_ASWLog_BaseH
+#ifndef Test_ASWLog_VersionH
+#define Test_ASWLog_VersionH
 //---------------------------------------------------------------------------
 #include "ASWUnitTests_TestBase.h"
 //---------------------------------------------------------------------------
@@ -28,33 +28,21 @@ namespace ASWUnitTests
 {
 
 ///////////////////////////////////////////////////////////////////////////
-// TTest_ASWLog_Base
+// TTest_ASWLog_Version
 ///////////////////////////////////////////////////////////////////////////
-class TTest_ASWLog_Base : public TTestGroupBase
+class TTest_ASWLog_Version : public TTestGroupBase
 {
 private:
     typedef TTestGroupBase inherited;
 
 private: // Test methods
-    void Test_GetConfig_ReturnsUnchangingSnapshot();
-    void Test_GetFullVersionStr_ContainsVersion();
-    void Test_Interface_MethodsAreNoexcept();
-    void Test_LogFormatMethods_AcceptEveryArgumentKind();
-    void Test_LogFormatMethods_LogErrorInsteadOfThrowing();
-    void Test_LogFormatMethods_PassCallerLocation();
-    void Test_LogFormatMethods_SkipFormattingWhenNotWritten();
-    void Test_LogLevelConvenienceMethods();
-    void Test_LogMethods_PassRecordsToWrite();
-    void Test_SetGetMinimumLevel_RoundTrips();
-    void Test_ShouldLog_ReflectsEnabledAndLevel();
-    void Test_Write_AppliesEnabledOffAndLevelChecks();
-    void Test_Write_KeepsFieldsAlreadyStamped();
-    void Test_Write_StampsOnlyWrittenEntries();
-    void Test_Write_ThrowingWriteRecordDropsEntry();
+    void Test_GetVersionStr_ReturnsVersion();
+    void Test_PreRelease_IsValidSemVer();
+    void Test_VersionString_MatchesParts();
 
 public:
-    TTest_ASWLog_Base();
-    ~TTest_ASWLog_Base() override;
+    TTest_ASWLog_Version();
+    ~TTest_ASWLog_Version() override;
 
     void SetUp_Group() override;
     void SetUp_Test(ITestCase& testCase) override;
@@ -65,4 +53,4 @@ public:
 } // ASWUnitTests
 
 //---------------------------------------------------------------------------
-#endif // #ifndef Test_ASWLog_BaseH
+#endif // #ifndef Test_ASWLog_VersionH

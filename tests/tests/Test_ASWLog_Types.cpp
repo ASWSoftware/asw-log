@@ -159,6 +159,8 @@ void TTest_ASWLog_Types::Test_Level_FromString()
     const auto error = ASWLog::Level_FromString("ERROR");
     const auto critical = ASWLog::Level_FromString("CRITICAL");
     const auto criticalAlias = ASWLog::Level_FromString("FATAL");
+    const auto off = ASWLog::Level_FromString("OFF");
+    const auto offAlias = ASWLog::Level_FromString("none");
 
     // Act & Assert
     CheckTrue(trace.has_value(), __func__, __LINE__, "TRACE should parse");
@@ -179,6 +181,8 @@ void TTest_ASWLog_Types::Test_Level_FromString()
     CheckEquals(static_cast<int32_t>(ASWLog::Level::Error), static_cast<int32_t>(*error), __func__, __LINE__, "ERROR should map to Error");
     CheckEquals(static_cast<int32_t>(ASWLog::Level::Critical), static_cast<int32_t>(*critical), __func__, __LINE__, "CRITICAL should map to Critical");
     CheckEquals(static_cast<int32_t>(ASWLog::Level::Critical), static_cast<int32_t>(*criticalAlias), __func__, __LINE__, "FATAL should map to Critical");
+    CheckTrue(off.has_value() && *off == ASWLog::Level::Off, __func__, __LINE__, "OFF should map to Off");
+    CheckTrue(offAlias.has_value() && *offAlias == ASWLog::Level::Off, __func__, __LINE__, "none (NONE alias, any case) should map to Off");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_Types::Test_Level_ToString()
@@ -190,6 +194,7 @@ void TTest_ASWLog_Types::Test_Level_ToString()
     const std::string warn = std::string(ASWLog::Level_ToString(ASWLog::Level::Warn));
     const std::string error = std::string(ASWLog::Level_ToString(ASWLog::Level::Error));
     const std::string critical = std::string(ASWLog::Level_ToString(ASWLog::Level::Critical));
+    const std::string off = std::string(ASWLog::Level_ToString(ASWLog::Level::Off));
 
     // Act & Assert
     CheckEquals(std::string("TRACE"), trace, __func__, __LINE__, "Trace should stringify as TRACE");
@@ -198,6 +203,9 @@ void TTest_ASWLog_Types::Test_Level_ToString()
     CheckEquals(std::string("WARN"), warn, __func__, __LINE__, "Warn should stringify as WARN");
     CheckEquals(std::string("ERROR"), error, __func__, __LINE__, "Error should stringify as ERROR");
     CheckEquals(std::string("CRITICAL"), critical, __func__, __LINE__, "Critical should stringify as CRITICAL");
+    CheckEquals(std::string("OFF"), off, __func__, __LINE__, "Off should stringify as OFF");
+    CheckEquals(static_cast<std::size_t>(ASWLog::Level::Off), ASWLog::LevelCount, __func__, __LINE__,
+        "LevelCount should count the severity levels, which come before Off");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_Types::Test_LineEnding_FromString()

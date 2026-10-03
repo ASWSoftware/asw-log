@@ -41,6 +41,7 @@ add_executable(ASWLogTests
     "${ASWLOG_TESTS_DIR}/Test_ASWLog_TextLogBase.cpp"
     "${ASWLOG_TESTS_DIR}/Test_ASWLog_Types.cpp"
     "${ASWLOG_TESTS_DIR}/Test_ASWLog_Utils.cpp"
+    "${ASWLOG_TESTS_DIR}/Test_ASWLog_Version.cpp"
 )
 
 target_include_directories(ASWLogTests PRIVATE
@@ -70,3 +71,33 @@ endif()
 set_target_properties(ASWLogTests PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
 )
+
+# The *Fmt methods check a format string against its arguments at compile time, which a unit test can't show, so
+# configuring checks it: tests/compile_checks/Check_FormatString.cpp must compile as case 0 (the control) and fail as
+# every other case (a mismatched format string). Compiled only, not linked.
+function(aswlog_check_format_string checkCase expectCompiles)
+    set(CMAKE_TRY_COMPILE_TARGET_TYPE STATIC_LIBRARY)
+    try_compile(ASWLOG_FORMAT_CHECK_${checkCase}
+        "${CMAKE_CURRENT_BINARY_DIR}/compile_checks/format_string_${checkCase}"
+        "${ASWLOG_ROOT}/tests/compile_checks/Check_FormatString.cpp"
+        CMAKE_FLAGS "-DINCLUDE_DIRECTORIES=${ASWLOG_ROOT}/ASWLog"
+        COMPILE_DEFINITIONS "-DASWLOG_CHECK_CASE=${checkCase}"
+        CXX_STANDARD 20
+        CXX_STANDARD_REQUIRED ON
+        CXX_EXTENSIONS OFF
+        OUTPUT_VARIABLE output
+    )
+
+    if(expectCompiles AND NOT ASWLOG_FORMAT_CHECK_${checkCase})
+        message(FATAL_ERROR "Check_FormatString.cpp case ${checkCase} should compile but didn't:\n${output}")
+    elseif(NOT expectCompiles AND ASWLOG_FORMAT_CHECK_${checkCase})
+        message(FATAL_ERROR "Check_FormatString.cpp case ${checkCase} has a mismatched format string, which should "
+            "fail to compile, but it compiled")
+    endif()
+endfunction()
+
+aswlog_check_format_string(0 TRUE)
+foreach(checkCase 1 2 3)
+    aswlog_check_format_string(${checkCase} FALSE)
+endforeach()
+message(STATUS "Format string compile-time checks: passed")

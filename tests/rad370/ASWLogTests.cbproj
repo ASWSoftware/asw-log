@@ -190,6 +190,10 @@
             <DependentOn>..\..\ASWLog\ASWLog_Utils.h</DependentOn>
             <BuildOrder>7</BuildOrder>
         </CppCompile>
+        <CppCompile Include="..\..\ASWLog\ASWLog_Version.cpp">
+            <DependentOn>..\..\ASWLog\ASWLog_Version.h</DependentOn>
+            <BuildOrder>30</BuildOrder>
+        </CppCompile>
         <PCHCompile Include="ASWLogTestsPCH1.h">
             <BuildOrder>0</BuildOrder>
             <PCH>true</PCH>
@@ -229,6 +233,10 @@
         <CppCompile Include="..\tests\Test_ASWLog_Utils.cpp">
             <DependentOn>..\tests\Test_ASWLog_Utils.h</DependentOn>
             <BuildOrder>25</BuildOrder>
+        </CppCompile>
+        <CppCompile Include="..\tests\Test_ASWLog_Version.cpp">
+            <DependentOn>..\tests\Test_ASWLog_Version.h</DependentOn>
+            <BuildOrder>31</BuildOrder>
         </CppCompile>
         <CppCompile Include="..\..\third_party\asw-unit-tests\src\ASWUnitTests_CLI.cpp">
             <DependentOn>..\..\third_party\asw-unit-tests\src\ASWUnitTests_CLI.h</DependentOn>

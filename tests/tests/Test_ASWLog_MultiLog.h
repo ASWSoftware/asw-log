@@ -40,16 +40,26 @@ private: // Test methods
     void Test_AddLogger_RejectsSelfRegistration();
     void Test_Close_AllowsInitializeAgain();
     void Test_Contains_ReflectsRegistrationState();
+    void Test_Flush_ReachesEverySinkEvenAfterAFailure();
+    void Test_Flush_SucceedsWithNoSinks();
+    void Test_Flush_WorksWhileDisabled();
+    void Test_Flush_WritesBufferedEntriesOfEveryFileSink();
     void Test_GetLoggerCount_ReflectsAddAndRemove();
     void Test_GetLoggers_ReturnsSnapshotOfRegisteredSinks();
     void Test_Initialize_ConcurrentCallsSucceedOnce();
     void Test_IsOpen_RequiresAllSinksOpen();
+    void Test_Log_AtLevelOffIsNotFannedOut();
     void Test_Log_FansOutToAllRegisteredSinks();
     void Test_Log_ThrowingSinkDoesNotStopOtherSinks();
+    void Test_LogFmt_FormatsOnceForAllSinks();
     void Test_LogForce_BypassesCompositeGate();
+    void Test_Reconfigure_PassesConfigToEverySink();
     void Test_RemoveAllLoggers_ClearsRegistrationAndReturnsCount();
     void Test_RemoveLogger_StopsReceivingEntries();
+    void Test_SetEnabled_FalseStopsFanOut();
     void Test_SetMinimumLevel_GatesFanOutBeforeSinks();
+    void Test_ShouldLog_RequiresCompositeGateAndAnySink();
+    void Test_Write_PassesOneStampedRecordToEverySink();
 
 public:
     TTest_ASWLog_MultiLog();

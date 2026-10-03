@@ -148,9 +148,15 @@ enum class Level : std::uint8_t
     // The application is unable to continue safely and will usually abort immediately.
     // Examples include out-of-memory states, hardware faults, or failed sanity checks.
     Critical = 5,
+
+    // Not a severity. As a minimum level (SetMinimumLevel(), InitialMinimumLevel, OnLogEntryMinimumLevel), turns off
+    // everything except LogForce()/LogForceRaw(), which ignore the minimum level. A message logged at Off is never
+    // written, even when forced.
+    Off = 6,
 };
 
-// Number of Level enumerators (Trace..Critical). Update this when a Level is added or removed.
+// Number of severity levels (Trace..Critical), e.g. for a table indexed by level. Doesn't count Off. Update this when
+// a severity level is added or removed.
 constexpr std::size_t LevelCount = 6;
 
 [[nodiscard]] std::optional<Level> Level_FromString(std::string_view str) noexcept;
@@ -176,6 +182,9 @@ constexpr std::size_t LevelCount = 6;
 
         case Level::Critical:
             return "CRITICAL";
+
+        case Level::Off:
+            return "OFF";
     }
 
     return "UNKNOWN";
@@ -210,10 +219,14 @@ enum class LineEnding
 /////////////////////////////////////////////////////////////////////////////
 // TASWLogRecord struct
 //
-// The data of one log entry, as handed to a formatter (see
-// IASWLogFormatter). It is captured on the thread that logged the entry.
-// Message and Location refer to the caller's data, so they are only valid
-// during the call; a formatter that keeps a record beyond it must copy them.
+// The data of one log entry, as passed to IASWLog::Write(), a formatter (see IASWLogFormatter) and the OnLogEntry
+// callback. The Log* methods fill in the level, message, location and flags. Timestamp, ProcessId and ThreadId stay
+// zero until a logger knows it will write the entry: TASWLogBase::Write() then fills in those still zero, on the
+// calling thread before taking any lock, so they record the moment and thread of the call. A record passed on (e.g.
+// by a multi-log to its loggers) keeps them.
+//
+// Message and Location refer to the caller's data, so they are only valid during the call; a logger, formatter or
+// callback that keeps a record beyond it must copy them.
 /////////////////////////////////////////////////////////////////////////////
 struct TASWLogRecord
 {
@@ -223,6 +236,8 @@ struct TASWLogRecord
     std::source_location Location; // Where the entry was logged
     std::uint32_t ProcessId = 0; // The OS process id (see GetCurrentOSProcessId())
     std::uint32_t ThreadId = 0; // The OS id of the thread that logged the entry (see GetCurrentOSThreadId())
+    bool Raw = false; // Written as is, without the line layout or a line ending (LogRaw(), LogForceRaw())
+    bool Forced = false; // Written whatever the minimum level (LogForce(), LogForceRaw())
 };
 
 //---------------------------------------------------------------------------

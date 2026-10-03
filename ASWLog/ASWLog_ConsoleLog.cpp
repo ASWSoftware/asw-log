@@ -120,6 +120,17 @@ bool TASWConsoleLog::DetectStreamColorSupport(bool isStdErr)
 }
 
 //---------------------------------------------------------------------------
+bool TASWConsoleLog::FlushUnlocked()
+{
+    if (!m_IsOpen.load(std::memory_order_acquire))
+        return false;
+
+    std::cout.flush();
+    std::cerr.flush();
+    return std::cout.good() && std::cerr.good();
+}
+
+//---------------------------------------------------------------------------
 ColorMode TASWConsoleLog::GetColorMode() const noexcept
 {
     return m_ColorMode.load(std::memory_order_acquire);
