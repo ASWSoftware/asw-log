@@ -30,6 +30,16 @@ see [0.26.1](#0261---2026-09-17) for the initial versioned baseline.
   `ShouldLog()` is true if `Log()` would write an entry at that level (for a
   multi-log, if any of its loggers would); use it to skip building an
   expensive message.
+- `IASWLog::Flush()`, so code holding only an `IASWLog&` can push buffered
+  entries out, e.g. before a risky operation or with `FlushMode::Manual`.
+  The console logger flushes stdout and stderr, and a multi-log flushes
+  every logger it holds, returning false if any of them failed. It returns
+  false if the output isn't open, works while the logger is disabled, and
+  never throws. A custom logger must add `bool Flush() noexcept override`,
+  including one deriving from `TASWLogBase` (there is no default); one
+  deriving from `TASWTextLogBase` implements the hook
+  `bool FlushUnlocked() override` instead, which is called with the lock
+  held.
 
 ### Changed
 

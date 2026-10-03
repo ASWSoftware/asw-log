@@ -75,6 +75,7 @@ private:
 
 protected: // TASWTextLogBase hooks
     bool CloseUnlocked() override;
+    bool FlushUnlocked() override; // Flushes both stdout and stderr
     bool InitializeUnlocked() override;
     bool OpenUnlocked() override;
     void WriteLineUnlocked(Level level, std::string_view line, bool endsLine) override;

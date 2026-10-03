@@ -67,6 +67,51 @@ protected:
     }
 };
 
+// RAII helper: redirects a standard stream's buffer to one that counts how often the stream is flushed, restoring the
+// original buffer on destruction.
+class TFlushCounter
+{
+private:
+    class TCountingBuffer final : public std::stringbuf
+    {
+    public:
+        int SyncCount = 0;
+
+    protected:
+        int sync() override
+        {
+            ++SyncCount;
+            return std::stringbuf::sync();
+        }
+    };
+
+private:
+    std::ostream& m_Stream;
+    TCountingBuffer m_Buffer;
+    std::streambuf* m_OriginalBuffer;
+
+public:
+    explicit TFlushCounter(std::ostream& stream)
+        : m_Stream(stream),
+          m_Buffer(),
+          m_OriginalBuffer(stream.rdbuf(&m_Buffer))
+    {
+    }
+
+    ~TFlushCounter()
+    {
+        m_Stream.rdbuf(m_OriginalBuffer);
+    }
+
+    TFlushCounter(const TFlushCounter&) = delete;
+    TFlushCounter& operator=(const TFlushCounter&) = delete;
+
+    int GetCount() const
+    {
+        return m_Buffer.SyncCount;
+    }
+};
+
 // RAII helper: sets an environment variable (or removes it, given std::nullopt), restoring its previous value on
 // destruction.
 class TScopedEnvironmentVariable
@@ -191,6 +236,7 @@ TTest_ASWLog_ConsoleLog::TTest_ASWLog_ConsoleLog()
     RegisterTest(&TTest_ASWLog_ConsoleLog::Test_ColorModeAuto_ColorsOnlyStreamsThatSupportIt, "ColorModeAuto_ColorsOnlyStreamsThatSupportIt");
     RegisterTest(&TTest_ASWLog_ConsoleLog::Test_ColorModeAuto_HonorsNoColor, "ColorModeAuto_HonorsNoColor");
     RegisterTest(&TTest_ASWLog_ConsoleLog::Test_ColorModeNever_SuppressesAnsiCodes, "ColorModeNever_SuppressesAnsiCodes");
+    RegisterTest(&TTest_ASWLog_ConsoleLog::Test_Flush_FlushesStdOutAndStdErrWhileOpen, "Flush_FlushesStdOutAndStdErrWhileOpen");
     RegisterTest(&TTest_ASWLog_ConsoleLog::Test_GetColorMode_ReflectsSetColorMode, "GetColorMode_ReflectsSetColorMode");
     RegisterTest(&TTest_ASWLog_ConsoleLog::Test_GetInstance_ReturnsSameInstance, "GetInstance_ReturnsSameInstance");
     RegisterTest(&TTest_ASWLog_ConsoleLog::Test_GetLevelColor_OffHasNoColor, "GetLevelColor_OffHasNoColor");
@@ -344,6 +390,43 @@ void TTest_ASWLog_ConsoleLog::Test_ColorModeNever_SuppressesAnsiCodes()
     CheckTrue(initialized, __func__, __LINE__, "Initialize should succeed");
     CheckTrue(contents.find("\x1b[") == std::string::npos, __func__, __LINE__, "ColorMode::Never should suppress all ANSI escape codes");
     CheckTrue(contents.find("plain_message") != std::string::npos, __func__, __LINE__, "The message should still be written");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_ConsoleLog::Test_Flush_FlushesStdOutAndStdErrWhileOpen()
+{
+    // Arrange
+    ASWLog::TASWConsoleLog consoleLog;
+    ASWLog::IASWLog& logger = consoleLog; // As generic code would flush it
+
+    bool initialized = false;
+    bool flushed = false;
+    bool flushedWhileClosed = true;
+    int stdOutFlushes = 0;
+    int stdErrFlushes = 0;
+
+    // Act: count only the flushes made by Flush()
+    {
+        TFlushCounter stdOutCounter(std::cout);
+        TFlushCounter stdErrCounter(std::cerr);
+        initialized = logger.Initialize(MakeQuietConfig());
+
+        const int stdOutBefore = stdOutCounter.GetCount();
+        const int stdErrBefore = stdErrCounter.GetCount();
+        flushed = logger.Flush();
+        stdOutFlushes = stdOutCounter.GetCount() - stdOutBefore;
+        stdErrFlushes = stdErrCounter.GetCount() - stdErrBefore;
+
+        logger.Close();
+        flushedWhileClosed = logger.Flush();
+    }
+
+    // Assert
+    CheckTrue(initialized, __func__, __LINE__, "Initialize should succeed");
+    CheckTrue(flushed, __func__, __LINE__, "Flush() should succeed while the logger is open");
+    // At least once: std::cerr is tied to std::cout, and some standard libraries flush the tie when std::cerr is flushed
+    CheckTrue(stdOutFlushes >= 1, __func__, __LINE__, "Flush() should flush stdout");
+    CheckTrue(stdErrFlushes >= 1, __func__, __LINE__, "Flush() should flush stderr");
+    CheckFalse(flushedWhileClosed, __func__, __LINE__, "Flush() should return false while the logger is closed");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_ConsoleLog::Test_GetColorMode_ReflectsSetColorMode()

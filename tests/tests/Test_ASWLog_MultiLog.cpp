@@ -90,6 +90,7 @@ protected:
 
 public:
     std::vector<std::string> Calls;
+    bool FlushResult = true; // Returned by Flush()
 
     bool Initialize(const ASWLog::TASWLogConfig& /*config*/) override
     {
@@ -104,6 +105,12 @@ public:
     bool Close() override
     {
         return true;
+    }
+
+    bool Flush() noexcept override
+    {
+        Calls.emplace_back("Flush");
+        return FlushResult;
     }
 
     bool IsOpen() const noexcept override
@@ -155,6 +162,11 @@ public:
     bool Close() override
     {
         return true;
+    }
+
+    bool Flush() noexcept override
+    {
+        return false; // Flush() is noexcept, so a faulty sink can only report the failure
     }
 
     bool IsOpen() const noexcept override
@@ -233,6 +245,10 @@ TTest_ASWLog_MultiLog::TTest_ASWLog_MultiLog()
     RegisterTest(&TTest_ASWLog_MultiLog::Test_AddLogger_RejectsSelfRegistration, "AddLogger_RejectsSelfRegistration");
     RegisterTest(&TTest_ASWLog_MultiLog::Test_Close_AllowsInitializeAgain, "Close_AllowsInitializeAgain");
     RegisterTest(&TTest_ASWLog_MultiLog::Test_Contains_ReflectsRegistrationState, "Contains_ReflectsRegistrationState");
+    RegisterTest(&TTest_ASWLog_MultiLog::Test_Flush_ReachesEverySinkEvenAfterAFailure, "Flush_ReachesEverySinkEvenAfterAFailure");
+    RegisterTest(&TTest_ASWLog_MultiLog::Test_Flush_SucceedsWithNoSinks, "Flush_SucceedsWithNoSinks");
+    RegisterTest(&TTest_ASWLog_MultiLog::Test_Flush_WorksWhileDisabled, "Flush_WorksWhileDisabled");
+    RegisterTest(&TTest_ASWLog_MultiLog::Test_Flush_WritesBufferedEntriesOfEveryFileSink, "Flush_WritesBufferedEntriesOfEveryFileSink");
     RegisterTest(&TTest_ASWLog_MultiLog::Test_GetLoggerCount_ReflectsAddAndRemove, "GetLoggerCount_ReflectsAddAndRemove");
     RegisterTest(&TTest_ASWLog_MultiLog::Test_GetLoggers_ReturnsSnapshotOfRegisteredSinks, "GetLoggers_ReturnsSnapshotOfRegisteredSinks");
     RegisterTest(&TTest_ASWLog_MultiLog::Test_Initialize_ConcurrentCallsSucceedOnce, "Initialize_ConcurrentCallsSucceedOnce");
@@ -365,6 +381,94 @@ void TTest_ASWLog_MultiLog::Test_Contains_ReflectsRegistrationState()
     CheckFalse(multiLog.Contains(sinkA), __func__, __LINE__, "A sink should no longer be reported as contained after RemoveLogger");
 
     sinkA.Close();
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_MultiLog::Test_Flush_ReachesEverySinkEvenAfterAFailure()
+{
+    // Arrange: the first sink's flush fails
+    TRecordingLogger failingSink;
+    failingSink.FlushResult = false;
+    TRecordingLogger sink;
+
+    ASWLog::TASWMultiLog multiLog;
+    multiLog.AddLogger(failingSink);
+    multiLog.AddLogger(sink);
+
+    // Act
+    const bool flushedWithFailure = multiLog.Flush();
+    failingSink.FlushResult = true;
+    const bool flushed = multiLog.Flush();
+
+    // Assert
+    const std::vector<std::string> twoFlushes{ "Flush", "Flush" };
+    CheckFalse(flushedWithFailure, __func__, __LINE__, "Flush() should return false if any sink's flush fails");
+    CheckTrue(flushed, __func__, __LINE__, "Flush() should return true once every sink's flush succeeds");
+    CheckTrue(failingSink.Calls == twoFlushes, __func__, __LINE__, "Each Flush() should reach the failing sink");
+    CheckTrue(sink.Calls == twoFlushes, __func__, __LINE__, "A sink's failed flush should not stop the other sinks from being flushed");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_MultiLog::Test_Flush_SucceedsWithNoSinks()
+{
+    // Arrange
+    ASWLog::TASWMultiLog multiLog;
+
+    // Act & Assert
+    CheckTrue(multiLog.Flush(), __func__, __LINE__, "Flush() with no registered sinks should succeed, like IsOpen()");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_MultiLog::Test_Flush_WorksWhileDisabled()
+{
+    // Arrange
+    TRecordingLogger sink;
+    ASWLog::TASWMultiLog multiLog;
+    multiLog.AddLogger(sink);
+    multiLog.SetEnabled(false);
+
+    // Act
+    const bool flushed = multiLog.Flush();
+
+    // Assert
+    CheckTrue(flushed, __func__, __LINE__, "Flush() should succeed while the composite is disabled");
+    CheckTrue(sink.Calls == std::vector<std::string>{ "Flush" }, __func__, __LINE__, "A disabled composite should still flush its sinks; disabling only stops new entries");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_MultiLog::Test_Flush_WritesBufferedEntriesOfEveryFileSink()
+{
+    // Arrange: FlushMode::Manual keeps each entry in the file's buffer until Flush()
+    const auto fileA = TestTempDir / "flush_sink_a.log";
+    const auto fileB = TestTempDir / "flush_sink_b.log";
+    auto configA = MakeFileConfig(TestTempDir, fileA, ASWLog::Level::Trace);
+    auto configB = MakeFileConfig(TestTempDir, fileB, ASWLog::Level::Trace);
+    configA.LogFlushMode = ASWLog::FlushMode::Manual;
+    configB.LogFlushMode = ASWLog::FlushMode::Manual;
+
+    ASWLog::TASWFileLog sinkA;
+    ASWLog::TASWFileLog sinkB;
+    CheckTrue(sinkA.Initialize(configA), __func__, __LINE__, "sinkA should initialize");
+    CheckTrue(sinkB.Initialize(configB), __func__, __LINE__, "sinkB should initialize");
+
+    ASWLog::TASWMultiLog multiLog;
+    multiLog.AddLogger(sinkA);
+    multiLog.AddLogger(sinkB);
+    ASWLog::IASWLog& logger = multiLog; // As generic code would flush it
+
+    // Act
+    logger.LogInfo("buffered_entry");
+    const auto contentsBeforeA = ReadFileText(fileA);
+    const auto contentsBeforeB = ReadFileText(fileB);
+    const bool flushed = logger.Flush();
+    const auto contentsAfterA = ReadFileText(fileA);
+    const auto contentsAfterB = ReadFileText(fileB);
+
+    sinkA.Close();
+    sinkB.Close();
+
+    // Assert
+    CheckTrue(contentsBeforeA.find("buffered_entry") == std::string::npos, __func__, __LINE__, "Before Flush(), sinkA's entry should still be buffered");
+    CheckTrue(contentsBeforeB.find("buffered_entry") == std::string::npos, __func__, __LINE__, "Before Flush(), sinkB's entry should still be buffered");
+    CheckTrue(flushed, __func__, __LINE__, "Flush() should succeed");
+    CheckTrue(contentsAfterA.find("buffered_entry") != std::string::npos, __func__, __LINE__, "Flush() should write sinkA's buffered entry to its file");
+    CheckTrue(contentsAfterB.find("buffered_entry") != std::string::npos, __func__, __LINE__, "Flush() should write sinkB's buffered entry to its file");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_MultiLog::Test_GetLoggerCount_ReflectsAddAndRemove()

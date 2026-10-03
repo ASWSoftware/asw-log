@@ -117,6 +117,10 @@ public:
     // Closes the output (e.g. the log file). This doesn't always stop logging: a file logger with
     // TASWLogConfig::AutoOpenClosePerWrite reopens its file for the next entry. Use SetEnabled(false) to stop logging.
     virtual bool Close() = 0;
+    // Pushes the entries written so far out of the logger's buffers (e.g. a file's buffer to the operating system), for
+    // use before a risky operation or with FlushMode::Manual. Works while disabled, since it writes no new entries.
+    // Returns false if the output isn't open or the flush failed (a multi-log: if any of its loggers' flushes failed).
+    virtual bool Flush() noexcept = 0;
     virtual bool IsOpen() const noexcept = 0;
 
     // Whether the logger writes anything at all. While disabled, nothing is written, not even LogForce*() entries or

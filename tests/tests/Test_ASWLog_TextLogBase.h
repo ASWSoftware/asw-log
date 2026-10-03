@@ -37,6 +37,8 @@ private:
 
 private: // Test methods
     void Test_Finalize_WritesShutdownLineFromDestructor();
+    void Test_Flush_CallsHookAndReturnsItsResult();
+    void Test_Flush_ThrowingHookDoesNotEscape();
     void Test_Formatter_FormatsEveryFileLine();
     void Test_Initialize_WritesStartupLinesThenCallsAfterEntry();
     void Test_Log_AtLevelOffIsNeverWritten();

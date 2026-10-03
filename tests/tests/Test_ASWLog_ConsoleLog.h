@@ -40,6 +40,7 @@ private: // Test methods
     void Test_ColorModeAuto_ColorsOnlyStreamsThatSupportIt();
     void Test_ColorModeAuto_HonorsNoColor();
     void Test_ColorModeNever_SuppressesAnsiCodes();
+    void Test_Flush_FlushesStdOutAndStdErrWhileOpen();
     void Test_GetColorMode_ReflectsSetColorMode();
     void Test_GetInstance_ReturnsSameInstance();
     void Test_GetLevelColor_OffHasNoColor();

@@ -57,6 +57,7 @@ struct TMemoryOutput
     std::vector<std::string> Lines;
     std::vector<bool> EndsLine;
     int AfterEntryCount = 0;
+    int FlushCount = 0;
 };
 
 // A text logger built only from the TASWTextLogBase hooks, writing to memory
@@ -68,6 +69,8 @@ private:
 public:
     bool IsReady = true; // Result of EnsureReadyUnlocked() while initialized and open
     bool AcceptsWrites = true; // Result of PrepareWriteUnlocked()
+    bool FlushResult = true; // Result of FlushUnlocked()
+    bool ThrowsOnFlush = false;
     bool ThrowsOnWrite = false;
 
 protected:
@@ -86,6 +89,15 @@ protected:
     bool EnsureReadyUnlocked() override
     {
         return IsReady && TASWTextLogBase::EnsureReadyUnlocked();
+    }
+
+    bool FlushUnlocked() override
+    {
+        if (ThrowsOnFlush)
+            throw std::runtime_error("flush failed");
+
+        ++m_Output.FlushCount;
+        return FlushResult;
     }
 
     std::string_view GetLoggerClassName() const noexcept override
@@ -187,6 +199,8 @@ TTest_ASWLog_TextLogBase::TTest_ASWLog_TextLogBase()
     : inherited("ASWLog_TextLogBase_Tests")
 {
     RegisterTest(&TTest_ASWLog_TextLogBase::Test_Finalize_WritesShutdownLineFromDestructor, "Finalize_WritesShutdownLineFromDestructor");
+    RegisterTest(&TTest_ASWLog_TextLogBase::Test_Flush_CallsHookAndReturnsItsResult, "Flush_CallsHookAndReturnsItsResult");
+    RegisterTest(&TTest_ASWLog_TextLogBase::Test_Flush_ThrowingHookDoesNotEscape, "Flush_ThrowingHookDoesNotEscape");
     RegisterTest(&TTest_ASWLog_TextLogBase::Test_Formatter_FormatsEveryFileLine, "Formatter_FormatsEveryFileLine");
     RegisterTest(&TTest_ASWLog_TextLogBase::Test_Initialize_WritesStartupLinesThenCallsAfterEntry, "Initialize_WritesStartupLinesThenCallsAfterEntry");
     RegisterTest(&TTest_ASWLog_TextLogBase::Test_Log_AtLevelOffIsNeverWritten, "Log_AtLevelOffIsNeverWritten");
@@ -252,6 +266,50 @@ void TTest_ASWLog_TextLogBase::Test_Finalize_WritesShutdownLineFromDestructor()
         CheckTrue(line.starts_with("[INFO]: Logger shutdown: "), __func__, __LINE__, "The shutdown line should be formatted: " + line);
         CheckTrue(line.ends_with(", goodbye\n"), __func__, __LINE__, "The shutdown line should end with the shutdown banner: " + line);
     }
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_TextLogBase::Test_Flush_CallsHookAndReturnsItsResult()
+{
+    // Arrange: called through the interface, as generic code would
+    TMemoryOutput output;
+    TMemoryTextLog log(output);
+    ASWLog::IASWLog& logger = log;
+    CheckTrue(logger.Initialize(MakeQuietConfig()), __func__, __LINE__, "Initialize should succeed");
+
+    // Act
+    const bool flushed = logger.Flush();
+
+    log.FlushResult = false;
+    const bool failedFlush = logger.Flush();
+
+    log.FlushResult = true;
+    logger.SetEnabled(false);
+    const bool flushedWhileDisabled = logger.Flush();
+
+    // Assert
+    CheckTrue(flushed, __func__, __LINE__, "Flush() should return true when FlushUnlocked() succeeds");
+    CheckTrue(!failedFlush, __func__, __LINE__, "Flush() should return false when FlushUnlocked() fails");
+    CheckTrue(flushedWhileDisabled, __func__, __LINE__, "Flush() should still flush while the logger is disabled");
+    CheckEquals(3, output.FlushCount, __func__, __LINE__, "Each Flush() should call FlushUnlocked() once");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_TextLogBase::Test_Flush_ThrowingHookDoesNotEscape()
+{
+    // Arrange
+    TMemoryOutput output;
+    TMemoryTextLog log(output);
+    CheckTrue(log.Initialize(MakeQuietConfig()), __func__, __LINE__, "Initialize should succeed");
+    log.ThrowsOnFlush = true;
+    static_assert(noexcept(log.Flush()), "Flush() must be noexcept");
+
+    // Act
+    const bool flushed = log.Flush();
+    log.ThrowsOnFlush = false;
+    log.LogInfo("after_failed_flush");
+
+    // Assert
+    CheckTrue(!flushed, __func__, __LINE__, "A throwing FlushUnlocked() should make Flush() return false, not throw");
+    CheckEquals(static_cast<std::size_t>(1), output.Lines.size(), __func__, __LINE__, "Logging should continue after a failed flush (the lock is released)");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_TextLogBase::Test_Formatter_FormatsEveryFileLine()

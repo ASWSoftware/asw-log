@@ -206,6 +206,7 @@ TTest_ASWLog_FileLog::TTest_ASWLog_FileLog()
     RegisterTest(&TTest_ASWLog_FileLog::Test_FailedReopen_RetriesAndResumesLogging, "FailedReopen_RetriesAndResumesLogging");
     RegisterTest(&TTest_ASWLog_FileLog::Test_FailedReopen_ZeroResetDelayRetriesOnNextWrite, "FailedReopen_ZeroResetDelayRetriesOnNextWrite");
     RegisterTest(&TTest_ASWLog_FileLog::Test_FailedSizeRotation_WaitsBeforeRetrying, "FailedSizeRotation_WaitsBeforeRetrying");
+    RegisterTest(&TTest_ASWLog_FileLog::Test_Flush_WritesBufferedManualModeEntries, "Flush_WritesBufferedManualModeEntries");
     RegisterTest(&TTest_ASWLog_FileLog::Test_GetInstance_ReturnsSameInstance, "GetInstance_ReturnsSameInstance");
     RegisterTest(&TTest_ASWLog_FileLog::Test_InitializeAndLogInfo_WritesText, "InitializeAndLogInfo_WritesText");
     RegisterTest(&TTest_ASWLog_FileLog::Test_Initialize_SuppressesInfoBannersBelowMinimumLevel, "Initialize_SuppressesInfoBannersBelowMinimumLevel");
@@ -730,6 +731,33 @@ void TTest_ASWLog_FileLog::Test_FailedSizeRotation_WaitsBeforeRetrying()
     CheckTrue(backupContents.find("line_three") != std::string::npos, __func__, __LINE__, "A failed rotation should not be retried before RotationRetryDelay has passed");
     CheckTrue(currentContents.find("line_four") != std::string::npos, __func__, __LINE__, "The entry after the retry interval should go to the new log file");
     CheckTrue(currentContents.find("line_three") == std::string::npos, __func__, __LINE__, "The new log file should only hold entries after the successful rotation");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_FileLog::Test_Flush_WritesBufferedManualModeEntries()
+{
+    // Arrange: FlushMode::Manual keeps each entry in the file's buffer until Flush()
+    const auto logFile = TestTempDir / "flush_manual.log";
+    auto config = MakeRotationTestConfig(logFile);
+    config.LogFlushMode = ASWLog::FlushMode::Manual;
+
+    ASWLog::TASWFileLog fileLog;
+    ASWLog::IASWLog& logger = fileLog; // As generic code would flush it
+
+    // Act
+    const bool initialized = logger.Initialize(config);
+    logger.LogInfo("buffered_entry");
+    const auto contentsBefore = ReadFileText(logFile);
+    const bool flushed = logger.Flush();
+    const auto contentsAfter = ReadFileText(logFile);
+    logger.Close();
+    const bool flushedWhileClosed = logger.Flush();
+
+    // Assert
+    CheckTrue(initialized, __func__, __LINE__, "Initialize should succeed");
+    CheckTrue(contentsBefore.find("buffered_entry") == std::string::npos, __func__, __LINE__, "Before Flush(), the entry should still be buffered");
+    CheckTrue(flushed, __func__, __LINE__, "Flush() should succeed while the file is open");
+    CheckTrue(contentsAfter.find("buffered_entry") != std::string::npos, __func__, __LINE__, "Flush() should write the buffered entry to the file");
+    CheckFalse(flushedWhileClosed, __func__, __LINE__, "Flush() should return false while the file is closed");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_FileLog::Test_GetInstance_ReturnsSameInstance()

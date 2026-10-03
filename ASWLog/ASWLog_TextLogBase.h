@@ -93,6 +93,10 @@ protected:
     // class's destructor.
     void Finalize() noexcept;
 
+    // Called by Flush(): pushes the written entries out of the output's buffers. Returns false if the output isn't open
+    // or the flush failed.
+    virtual bool FlushUnlocked() = 0;
+
     // Called by Initialize() after it has stored the config: prepares and opens the output. Returning false fails
     // Initialize().
     virtual bool InitializeUnlocked() = 0;
@@ -112,6 +116,7 @@ public:
 
     bool Open() final;
     bool Close() final;
+    bool Flush() noexcept final;
     bool IsOpen() const noexcept final;
 
     void Log(Level level, std::string_view message, std::source_location loc = std::source_location::current()) final;

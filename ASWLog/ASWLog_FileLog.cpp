@@ -392,13 +392,6 @@ bool TASWFileLog::EnsureReadyUnlocked()
 }
 
 //---------------------------------------------------------------------------
-bool TASWFileLog::Flush()
-{
-    std::lock_guard<std::mutex> lock(m_Mutex);
-    return FlushUnlocked();
-}
-
-//---------------------------------------------------------------------------
 bool TASWFileLog::FlushUnlocked()
 {
     if (!m_FileStream.IsOpen())

@@ -128,6 +128,11 @@ public:
         return true;
     }
 
+    bool Flush() noexcept override
+    {
+        return true;
+    }
+
     bool IsOpen() const noexcept override
     {
         return m_IsInitialized.load(std::memory_order_acquire);

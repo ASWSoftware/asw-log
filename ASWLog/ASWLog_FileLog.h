@@ -117,7 +117,6 @@ private:
     std::chrono::system_clock::time_point m_LastRotationFailure{}; // NowUTC() when a rotation last failed
 
 private:
-    bool FlushUnlocked();
     void MaybeFlush(bool isNewLine);
     void RotateDailyLogFromEarlierDayUnlocked();
     bool RotateLogFilesUnlocked(std::string_view reasonTag, std::string_view timeLabel);
@@ -126,6 +125,7 @@ protected: // TASWTextLogBase hooks
     void AfterEntryUnlocked() override;
     bool CloseUnlocked() override;
     bool EnsureReadyUnlocked() override;
+    bool FlushUnlocked() override;
     bool InitializeUnlocked() override;
     bool OpenUnlocked() override;
     bool PrepareWriteUnlocked(std::chrono::system_clock::time_point now) override;
@@ -153,8 +153,6 @@ public: // Static methods
 public:
     TASWFileLog() = default;
     ~TASWFileLog();
-
-    bool Flush();
 
     // Renames the log file to "<stem>.<reasonTag>.<YYYY-MM-DD_HHMMSS_mmm>.bak" (UTC), adding "_1", "_2", ... to the
     // time if that name is taken, so an existing backup is never replaced. Then reopens the log if it was open.

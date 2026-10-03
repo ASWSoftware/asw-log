@@ -116,6 +116,20 @@ void TASWTextLogBase::Finalize() noexcept
 }
 
 //---------------------------------------------------------------------------
+bool TASWTextLogBase::Flush() noexcept
+{
+    try
+    {
+        std::lock_guard<std::mutex> lock(m_Mutex);
+        return FlushUnlocked();
+    }
+    catch (...)
+    {
+        return false;
+    }
+}
+
+//---------------------------------------------------------------------------
 bool TASWTextLogBase::Initialize(const TASWLogConfig& config)
 {
     std::lock_guard<std::mutex> lock(m_Mutex);

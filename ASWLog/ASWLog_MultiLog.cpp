@@ -106,6 +106,26 @@ void TASWMultiLog::FanOut(const TLogCall& logCall) const noexcept
 }
 
 //---------------------------------------------------------------------------
+bool TASWMultiLog::Flush() noexcept
+{
+    try
+    {
+        bool allSucceeded = true;
+        for (auto* sink : SnapshotSinks())
+        {
+            if (!sink->Flush())
+                allSucceeded = false;
+        }
+
+        return allSucceeded;
+    }
+    catch (...)
+    {
+        return false;
+    }
+}
+
+//---------------------------------------------------------------------------
 std::size_t TASWMultiLog::GetLoggerCount() const noexcept
 {
     std::lock_guard<std::mutex> lock(m_ListMutex);

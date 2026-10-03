@@ -105,6 +105,9 @@ public:
 
     bool Open() override;
     bool Close() override;
+    // Flushes every registered sink, even if one fails, whether or not this composite is enabled. Returns true only if
+    // every sink's Flush() succeeds (vacuously true if none are registered).
+    bool Flush() noexcept override;
     bool IsOpen() const noexcept override; // True if every registered sink reports open (vacuously true if none are registered).
 
     // True if this composite's own gate passes (enabled, not Off, minimum level) and at least one registered sink's

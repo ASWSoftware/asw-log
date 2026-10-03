@@ -40,6 +40,10 @@ private: // Test methods
     void Test_AddLogger_RejectsSelfRegistration();
     void Test_Close_AllowsInitializeAgain();
     void Test_Contains_ReflectsRegistrationState();
+    void Test_Flush_ReachesEverySinkEvenAfterAFailure();
+    void Test_Flush_SucceedsWithNoSinks();
+    void Test_Flush_WorksWhileDisabled();
+    void Test_Flush_WritesBufferedEntriesOfEveryFileSink();
     void Test_GetLoggerCount_ReflectsAddAndRemove();
     void Test_GetLoggers_ReturnsSnapshotOfRegisteredSinks();
     void Test_Initialize_ConcurrentCallsSucceedOnce();
