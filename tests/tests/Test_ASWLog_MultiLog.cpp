@@ -26,6 +26,7 @@ limitations under the License.
 //---------------------------------------------------------------------------
 #include <algorithm>
 #include <atomic>
+#include <chrono>
 #include <filesystem>
 #include <format>
 #include <fstream>
@@ -41,6 +42,7 @@ limitations under the License.
 //---------------------------------------------------------------------------
 #include "ASWLog_FileLog.h"
 #include "ASWLog_MultiLog.h"
+#include "ASWLog_Utils.h"
 //---------------------------------------------------------------------------
 
 namespace
@@ -79,7 +81,8 @@ namespace
 const auto GroupBaseTempDir = std::filesystem::temp_directory_path() / "aswlog_multilog_tests";
 const auto TestTempDir = GroupBaseTempDir / "test";
 
-// A sink that records which logging method received which message, e.g. "LogForce:text"
+// A sink that records each entry it writes, named for the logging method that makes such a record, e.g.
+// "LogForce:text", and the records themselves. Like any TASWLogBase sink it applies its own level (Info by default).
 class TRecordingLogger final : public ASWLog::TASWLogBase
 {
 protected:
@@ -88,8 +91,17 @@ protected:
         return "TRecordingLogger";
     }
 
+    void WriteRecord(const ASWLog::TASWLogRecord& record) override
+    {
+        const char* method = record.Raw ? (record.Forced ? "LogForceRaw:" : "LogRaw:") : (record.Forced ? "LogForce:" : "Log:");
+        Calls.push_back(std::string(method).append(record.Message));
+        Records.push_back(record);
+        Records.back().Message = {}; // The caller's message is only valid during the call; Calls keeps a copy
+    }
+
 public:
     std::vector<std::string> Calls;
+    std::vector<ASWLog::TASWLogRecord> Records; // Every field but Message
     bool FlushResult = true; // Returned by Flush()
 
     bool Initialize(const ASWLog::TASWLogConfig& /*config*/) override
@@ -117,35 +129,33 @@ public:
     {
         return true;
     }
+};
 
-    void Log(ASWLog::Level /*level*/, std::string_view message, std::source_location /*loc*/) override
-    {
-        Calls.push_back(std::string("Log:").append(message));
-    }
+// A TASWMultiLog whose clock the test sets, through TASWLogBase's NowUTC() hook
+class TFixedClockMultiLog final : public ASWLog::TASWMultiLog
+{
+public:
+    std::chrono::system_clock::time_point CurrentTime{};
 
-    void LogRaw(ASWLog::Level /*level*/, std::string_view message, std::source_location /*loc*/) override
+protected:
+    std::chrono::system_clock::time_point NowUTC() const noexcept override
     {
-        Calls.push_back(std::string("LogRaw:").append(message));
-    }
-
-    void LogForce(ASWLog::Level /*level*/, std::string_view message, std::source_location /*loc*/) override
-    {
-        Calls.push_back(std::string("LogForce:").append(message));
-    }
-
-    void LogForceRaw(ASWLog::Level /*level*/, std::string_view message, std::source_location /*loc*/) override
-    {
-        Calls.push_back(std::string("LogForceRaw:").append(message));
+        return CurrentTime;
     }
 };
 
-// A sink whose logging methods all throw, standing in for a faulty custom IASWLog
+// A sink that throws for every entry, standing in for a faulty custom IASWLog
 class TThrowingLogger final : public ASWLog::TASWLogBase
 {
 protected:
     std::string_view GetLoggerClassName() const noexcept override
     {
         return "TThrowingLogger";
+    }
+
+    void WriteRecord(const ASWLog::TASWLogRecord& /*record*/) override
+    {
+        throw std::runtime_error("sink failed");
     }
 
 public:
@@ -172,26 +182,6 @@ public:
     bool IsOpen() const noexcept override
     {
         return true;
-    }
-
-    void Log(ASWLog::Level /*level*/, std::string_view /*message*/, std::source_location /*loc*/) override
-    {
-        throw std::runtime_error("sink failed");
-    }
-
-    void LogRaw(ASWLog::Level /*level*/, std::string_view /*message*/, std::source_location /*loc*/) override
-    {
-        throw std::runtime_error("sink failed");
-    }
-
-    void LogForce(ASWLog::Level /*level*/, std::string_view /*message*/, std::source_location /*loc*/) override
-    {
-        throw std::runtime_error("sink failed");
-    }
-
-    void LogForceRaw(ASWLog::Level /*level*/, std::string_view /*message*/, std::source_location /*loc*/) override
-    {
-        throw std::runtime_error("sink failed");
     }
 };
 
@@ -263,6 +253,7 @@ TTest_ASWLog_MultiLog::TTest_ASWLog_MultiLog()
     RegisterTest(&TTest_ASWLog_MultiLog::Test_SetEnabled_FalseStopsFanOut, "SetEnabled_FalseStopsFanOut");
     RegisterTest(&TTest_ASWLog_MultiLog::Test_SetMinimumLevel_GatesFanOutBeforeSinks, "SetMinimumLevel_GatesFanOutBeforeSinks");
     RegisterTest(&TTest_ASWLog_MultiLog::Test_ShouldLog_RequiresCompositeGateAndAnySink, "ShouldLog_RequiresCompositeGateAndAnySink");
+    RegisterTest(&TTest_ASWLog_MultiLog::Test_Write_PassesOneStampedRecordToEverySink, "Write_PassesOneStampedRecordToEverySink");
 }
 //---------------------------------------------------------------------------
 TTest_ASWLog_MultiLog::~TTest_ASWLog_MultiLog()
@@ -871,6 +862,38 @@ void TTest_ASWLog_MultiLog::Test_ShouldLog_RequiresCompositeGateAndAnySink()
     CheckTrue(shouldLogErrorWithWarnSinkDisabled, __func__, __LINE__, "The enabled sink still accepts Error");
     CheckFalse(shouldLogErrorBelowCompositeLevel, __func__, __LINE__, "The composite's own minimum level should apply first");
     CheckFalse(shouldLogErrorWithCompositeDisabled, __func__, __LINE__, "A disabled composite should log nothing");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_MultiLog::Test_Write_PassesOneStampedRecordToEverySink()
+{
+    // Arrange: sinks on the system clock behind a composite with a fixed clock; sinkB only takes Error and above
+    TRecordingLogger sinkA;
+    TRecordingLogger sinkB;
+    sinkB.SetMinimumLevel(ASWLog::Level::Error);
+
+    TFixedClockMultiLog multiLog;
+    multiLog.CurrentTime = std::chrono::system_clock::time_point(std::chrono::hours(1000));
+    multiLog.SetMinimumLevel(ASWLog::Level::Trace);
+    multiLog.AddLogger(sinkA);
+    multiLog.AddLogger(sinkB);
+
+    // Act
+    multiLog.LogWarn("warn");
+    multiLog.LogForceRaw(ASWLog::Level::Debug, "forced_raw");
+
+    // Assert
+    CheckTrue(sinkA.Calls == std::vector<std::string>{ "Log:warn", "LogForceRaw:forced_raw" }, __func__, __LINE__,
+        "sinkA should get both entries, with their Raw and Forced flags");
+    CheckTrue(sinkB.Calls == std::vector<std::string>{ "LogForceRaw:forced_raw" }, __func__, __LINE__,
+        "sinkB should apply its own level, so only the forced entry reaches it");
+
+    std::vector<ASWLog::TASWLogRecord> records = sinkA.Records;
+    records.insert(records.end(), sinkB.Records.begin(), sinkB.Records.end());
+    for (const auto& record : records)
+    {
+        CheckTrue(record.Timestamp == multiLog.CurrentTime, __func__, __LINE__, "Each sink should keep the composite's stamp, not read its own clock");
+        CheckEquals(static_cast<int64_t>(ASWLog::GetCurrentOSThreadId()), static_cast<int64_t>(record.ThreadId), __func__, __LINE__, "The record should carry the logging thread's id");
+    }
 }
 //---------------------------------------------------------------------------
 

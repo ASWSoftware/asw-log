@@ -45,8 +45,9 @@ namespace ASWLog
 // TASWTextLogBase
 //
 // Base for loggers that write each entry as a line of text, such as TASWFileLog and TASWConsoleLog. It implements
-// the public logging methods once for all of them: the level check, the lock, the safety net that keeps logging from
-// throwing into the application, the startup and shutdown lines, the line format, and the OnLogEntry callback.
+// WriteRecord() once for all of them: the lock, the safety net that keeps logging from throwing into the application,
+// the line format, and the OnLogEntry callback, as well as the startup and shutdown lines. (TASWLogBase::Write() has
+// already checked the level and stamped the record.)
 //
 // A derived logger implements the protected hooks for its own output. Each hook whose name ends in "Unlocked" is
 // called with m_Mutex held, so it must not call a public method of this logger (which would lock it again). The
@@ -65,27 +66,27 @@ protected:
 
 private:
     void AppendLineEnding(std::string& line) const;
-    void DispatchLogCallback(Level level, std::string_view formattedLine) const noexcept;
-    void LogEntry(Level level, std::string_view message, bool force, bool raw, bool includeNewLine, std::source_location loc) noexcept;
+    void DispatchLogCallback(const TASWLogRecord& record, std::string_view formattedLine) const noexcept;
     void WriteApplicationInfo();
     void WriteDriveInfo();
+    void WriteInfoLine(std::string_view message, std::source_location loc = std::source_location::current());
     void WriteInitializationInfo();
-    std::string WriteLogEntry(Level level, std::string_view message, bool force, bool raw, bool includeNewLine, std::source_location loc);
+    std::string WriteLogEntry(const TASWLogRecord& record);
     void WriteMemoryUsageInfo();
     void WriteOSInfo();
     void WriteSystemMemoryInfo();
     void WriteTimeInfo();
 
 protected:
-    // Called after each entry from the Log* methods, and after Initialize() wrote the startup lines. Does nothing by
+    // Called after each entry passed to Write(), and after Initialize() wrote the startup lines. Does nothing by
     // default.
     virtual void AfterEntryUnlocked();
 
     // Closes the output. Must clear m_IsOpen and m_IsInitialized.
     virtual bool CloseUnlocked() = 0;
 
-    // Called before each entry from the Log* methods; returns false to drop the entry. By default, true if the
-    // logger is initialized and open.
+    // Called before each entry passed to Write(); returns false to drop the entry. By default, true if the logger is
+    // initialized and open.
     virtual bool EnsureReadyUnlocked();
 
     // Writes the shutdown line (if TASWLogConfig::WriteShutdownLog) and closes the output, if the logger is
@@ -104,12 +105,18 @@ protected:
     // Opens the output. Must set m_IsOpen and m_IsInitialized.
     virtual bool OpenUnlocked() = 0;
 
-    // Called before each line is formatted and written, including the startup and shutdown lines, with the line's
-    // time; returns false to drop the line. E.g. a file logger rotates its file here. Returns true by default.
+    // Called before each line is formatted and written, including the startup and shutdown lines, with the record's
+    // time; returns false to drop the line. E.g. a file logger rotates its file here. Entries stamped by different
+    // threads can get the lock out of time order, so 'now' can be a little earlier than for the previous line.
+    // Returns true by default.
     virtual bool PrepareWriteUnlocked(std::chrono::system_clock::time_point now);
 
-    // Writes a finished line. 'endsLine' is true if 'line' ends with the line ending (false for LogRaw()).
+    // Writes a finished line. 'endsLine' is true if 'line' ends with the line ending (false for a Raw record).
     virtual void WriteLineUnlocked(Level level, std::string_view line, bool endsLine) = 0;
+
+protected: // TASWLogBase hook
+    // Writes the entry under m_Mutex, through the hooks above, then calls OnLogEntry. Never throws.
+    void WriteRecord(const TASWLogRecord& record) noexcept final;
 
 public:
     bool Initialize(const TASWLogConfig& config) final;
@@ -118,12 +125,6 @@ public:
     bool Close() final;
     bool Flush() noexcept final;
     bool IsOpen() const noexcept final;
-
-    void Log(Level level, std::string_view message, std::source_location loc = std::source_location::current()) final;
-    void LogRaw(Level level, std::string_view message, std::source_location loc = std::source_location::current()) final;
-
-    void LogForce(Level level, std::string_view message, std::source_location loc = std::source_location::current()) final;
-    void LogForceRaw(Level level, std::string_view message, std::source_location loc = std::source_location::current()) final;
 };
 
 } // namespace ASWLog

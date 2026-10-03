@@ -219,10 +219,14 @@ enum class LineEnding
 /////////////////////////////////////////////////////////////////////////////
 // TASWLogRecord struct
 //
-// The data of one log entry, as handed to a formatter (see
-// IASWLogFormatter). It is captured on the thread that logged the entry.
-// Message and Location refer to the caller's data, so they are only valid
-// during the call; a formatter that keeps a record beyond it must copy them.
+// The data of one log entry, as passed to IASWLog::Write(), a formatter (see IASWLogFormatter) and the OnLogEntry
+// callback. The Log* methods fill in the level, message, location and flags. Timestamp, ProcessId and ThreadId stay
+// zero until a logger knows it will write the entry: TASWLogBase::Write() then fills in those still zero, on the
+// calling thread before taking any lock, so they record the moment and thread of the call. A record passed on (e.g.
+// by a multi-log to its loggers) keeps them.
+//
+// Message and Location refer to the caller's data, so they are only valid during the call; a logger, formatter or
+// callback that keeps a record beyond it must copy them.
 /////////////////////////////////////////////////////////////////////////////
 struct TASWLogRecord
 {
@@ -232,6 +236,8 @@ struct TASWLogRecord
     std::source_location Location; // Where the entry was logged
     std::uint32_t ProcessId = 0; // The OS process id (see GetCurrentOSProcessId())
     std::uint32_t ThreadId = 0; // The OS id of the thread that logged the entry (see GetCurrentOSThreadId())
+    bool Raw = false; // Written as is, without the line layout or a line ending (LogRaw(), LogForceRaw())
+    bool Forced = false; // Written whatever the minimum level (LogForce(), LogForceRaw())
 };
 
 //---------------------------------------------------------------------------

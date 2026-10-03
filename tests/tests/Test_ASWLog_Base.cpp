@@ -24,6 +24,7 @@ limitations under the License.
 // Module header
 #include "Test_ASWLog_Base.h"
 //---------------------------------------------------------------------------
+#include <chrono>
 #include <format>
 #include <source_location>
 #include <stdexcept>
@@ -33,6 +34,7 @@ limitations under the License.
 #include "ASWUnitTests_Registry.h"
 //---------------------------------------------------------------------------
 #include "ASWLog_Base.h"
+#include "ASWLog_Utils.h"
 //---------------------------------------------------------------------------
 
 namespace
@@ -100,11 +102,31 @@ public:
     ASWLog::Level LastLevel = ASWLog::Level::Info;
     std::string LastMessage;
     std::source_location LastLocation;
+    ASWLog::TASWLogRecord LastRecord; // The last record passed to WriteRecord(); its Message refers to LastMessage
+    int WriteRecordCount = 0;
+    std::chrono::system_clock::time_point FixedNow{}; // What NowUTC() returns, if set
+    mutable int NowUTCCount = 0; // How many times NowUTC() was called
 
 protected:
     std::string_view GetLoggerClassName() const noexcept override
     {
         return "TTestLogger";
+    }
+
+    std::chrono::system_clock::time_point NowUTC() const noexcept override
+    {
+        ++NowUTCCount;
+        return FixedNow != std::chrono::system_clock::time_point{} ? FixedNow : inherited::NowUTC();
+    }
+
+    void WriteRecord(const ASWLog::TASWLogRecord& record) override
+    {
+        ++WriteRecordCount;
+        LastLevel = record.LogLevel;
+        LastMessage = std::string(record.Message);
+        LastLocation = record.Location;
+        LastRecord = record;
+        LastRecord.Message = LastMessage;
     }
 
 public:
@@ -137,28 +159,6 @@ public:
     {
         return m_IsInitialized.load(std::memory_order_acquire);
     }
-
-    void Log(ASWLog::Level level, std::string_view message, std::source_location loc = std::source_location::current()) override
-    {
-        LastLevel = level;
-        LastMessage = std::string(message);
-        LastLocation = loc;
-    }
-
-    void LogRaw(ASWLog::Level level, std::string_view message, std::source_location loc = std::source_location::current()) override
-    {
-        Log(level, message, loc);
-    }
-
-    void LogForce(ASWLog::Level level, std::string_view message, std::source_location loc = std::source_location::current()) override
-    {
-        Log(level, message, loc);
-    }
-
-    void LogForceRaw(ASWLog::Level level, std::string_view message, std::source_location loc = std::source_location::current()) override
-    {
-        Log(level, message, loc);
-    }
 };
 
 } // namespace
@@ -180,8 +180,12 @@ TTest_ASWLog_Base::TTest_ASWLog_Base()
     RegisterTest(&TTest_ASWLog_Base::Test_LogFormatMethods_PassCallerLocation, "LogFormatMethods_PassCallerLocation");
     RegisterTest(&TTest_ASWLog_Base::Test_LogFormatMethods_SkipFormattingWhenNotWritten, "LogFormatMethods_SkipFormattingWhenNotWritten");
     RegisterTest(&TTest_ASWLog_Base::Test_LogLevelConvenienceMethods, "LogLevelConvenienceMethods");
+    RegisterTest(&TTest_ASWLog_Base::Test_LogMethods_PassRecordsToWrite, "LogMethods_PassRecordsToWrite");
     RegisterTest(&TTest_ASWLog_Base::Test_SetGetMinimumLevel_RoundTrips, "SetGetMinimumLevel_RoundTrips");
     RegisterTest(&TTest_ASWLog_Base::Test_ShouldLog_ReflectsEnabledAndLevel, "ShouldLog_ReflectsEnabledAndLevel");
+    RegisterTest(&TTest_ASWLog_Base::Test_Write_AppliesEnabledOffAndLevelChecks, "Write_AppliesEnabledOffAndLevelChecks");
+    RegisterTest(&TTest_ASWLog_Base::Test_Write_KeepsFieldsAlreadyStamped, "Write_KeepsFieldsAlreadyStamped");
+    RegisterTest(&TTest_ASWLog_Base::Test_Write_StampsOnlyWrittenEntries, "Write_StampsOnlyWrittenEntries");
 }
 //---------------------------------------------------------------------------
 TTest_ASWLog_Base::~TTest_ASWLog_Base()
@@ -403,6 +407,7 @@ void TTest_ASWLog_Base::Test_LogLevelConvenienceMethods()
 {
     // Arrange
     TTestLogger logger;
+    logger.SetMinimumLevel(ASWLog::Level::Trace); // So TASWLogBase::Write() passes LogTrace()/LogDebug() on
 
     // Act
     logger.LogTrace("trace");
@@ -445,6 +450,65 @@ void TTest_ASWLog_Base::Test_LogLevelConvenienceMethods()
     // Assert
     CheckEquals(static_cast<int32_t>(ASWLog::Level::Critical), static_cast<int32_t>(logger.LastLevel), __func__, __LINE__, "LogCritical should set Critical level");
     CheckEquals(std::string("critical"), logger.LastMessage, __func__, __LINE__, "LogCritical should store the message");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_Base::Test_LogMethods_PassRecordsToWrite()
+{
+    // Arrange: a logger that only implements WriteRecord(), as a custom logger would
+    TTestLogger logger;
+    logger.SetMinimumLevel(ASWLog::Level::Trace);
+    const std::string testName = __func__;
+
+    // Checks the record the last logging call passed on
+    const auto checkRecord = [&](int expectedLine, const std::string& method, ASWLog::Level expectedLevel,
+                                 const std::string& expectedMessage, bool expectedRaw, bool expectedForced)
+        {
+            const auto& record = logger.LastRecord;
+            CheckEquals(static_cast<int32_t>(expectedLevel), static_cast<int32_t>(record.LogLevel), testName, __LINE__, method + " should pass its level");
+            CheckEquals(expectedMessage, std::string(record.Message), testName, __LINE__, method + " should pass its message");
+            CheckEquals(static_cast<int64_t>(expectedLine), static_cast<int64_t>(record.Location.line()), testName, __LINE__, method + " should pass the caller's line");
+            CheckTrue(expectedRaw == record.Raw, testName, __LINE__, method + " should set Raw correctly");
+            CheckTrue(expectedForced == record.Forced, testName, __LINE__, method + " should set Forced correctly");
+        };
+
+    // Act and Assert: each expected line is the line after the one that records it
+    int line = __LINE__ + 1;
+    logger.Log(ASWLog::Level::Info, "log");
+    checkRecord(line, "Log", ASWLog::Level::Info, "log", false, false);
+
+    line = __LINE__ + 1;
+    logger.LogRaw(ASWLog::Level::Warn, "raw");
+    checkRecord(line, "LogRaw", ASWLog::Level::Warn, "raw", true, false);
+
+    line = __LINE__ + 1;
+    logger.LogForce(ASWLog::Level::Debug, "force");
+    checkRecord(line, "LogForce", ASWLog::Level::Debug, "force", false, true);
+
+    line = __LINE__ + 1;
+    logger.LogForceRaw(ASWLog::Level::Error, "force raw");
+    checkRecord(line, "LogForceRaw", ASWLog::Level::Error, "force raw", true, true);
+
+    line = __LINE__ + 1;
+    logger.LogTrace("trace");
+    checkRecord(line, "LogTrace", ASWLog::Level::Trace, "trace", false, false);
+
+    line = __LINE__ + 1;
+    logger.LogCritical("critical");
+    checkRecord(line, "LogCritical", ASWLog::Level::Critical, "critical", false, false);
+
+    line = __LINE__ + 1;
+    logger.LogRawFmt(ASWLog::Level::Info, "raw {}", 1);
+    checkRecord(line, "LogRawFmt", ASWLog::Level::Info, "raw 1", true, false);
+
+    line = __LINE__ + 1;
+    logger.LogForceFmt(ASWLog::Level::Info, "force {}", 2);
+    checkRecord(line, "LogForceFmt", ASWLog::Level::Info, "force 2", false, true);
+
+    line = __LINE__ + 1;
+    logger.LogForceRawFmt(ASWLog::Level::Info, "force raw {}", 3);
+    checkRecord(line, "LogForceRawFmt", ASWLog::Level::Info, "force raw 3", true, true);
+
+    CheckEquals(9, logger.WriteRecordCount, testName, __LINE__, "Each call should pass exactly one record to WriteRecord()");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_Base::Test_SetGetMinimumLevel_RoundTrips()
@@ -497,6 +561,75 @@ void TTest_ASWLog_Base::Test_ShouldLog_ReflectsEnabledAndLevel()
     CheckFalse(enabledAfterDisable, __func__, __LINE__, "SetEnabled(false) should disable the logger");
     CheckFalse(shouldLogCriticalWhileDisabled, __func__, __LINE__, "Nothing should be logged while the logger is disabled");
     CheckFalse(shouldLogCriticalAtMinimumOff, __func__, __LINE__, "Nothing should be logged at a minimum level of Off");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_Base::Test_Write_AppliesEnabledOffAndLevelChecks()
+{
+    // Arrange
+    TTestLogger logger;
+    logger.SetMinimumLevel(ASWLog::Level::Warn);
+
+    // Act and Assert: WriteRecordCount shows whether each entry reached WriteRecord()
+    logger.LogInfo("below_minimum");
+    CheckEquals(0, logger.WriteRecordCount, __func__, __LINE__, "An entry below the minimum level should not reach WriteRecord()");
+
+    logger.LogWarn("at_minimum");
+    CheckEquals(1, logger.WriteRecordCount, __func__, __LINE__, "An entry at the minimum level should reach WriteRecord()");
+
+    logger.LogForce(ASWLog::Level::Info, "forced");
+    CheckEquals(2, logger.WriteRecordCount, __func__, __LINE__, "A forced entry should ignore the minimum level");
+
+    logger.LogForce(ASWLog::Level::Off, "forced_off");
+    CheckEquals(2, logger.WriteRecordCount, __func__, __LINE__, "An entry at Off should never be written, even forced");
+
+    logger.SetEnabled(false);
+    logger.LogForce(ASWLog::Level::Critical, "forced_while_disabled");
+    CheckEquals(2, logger.WriteRecordCount, __func__, __LINE__, "A disabled logger should write nothing, even forced");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_Base::Test_Write_KeepsFieldsAlreadyStamped()
+{
+    // Arrange: a record stamped elsewhere, e.g. by a multi-log before passing it on
+    TTestLogger logger;
+    logger.FixedNow = std::chrono::system_clock::time_point(std::chrono::hours(1000));
+
+    ASWLog::TASWLogRecord record;
+    record.LogLevel = ASWLog::Level::Error;
+    record.Message = "already_stamped";
+    record.Timestamp = std::chrono::system_clock::time_point(std::chrono::hours(2000));
+    record.ProcessId = 7;
+    record.ThreadId = 9;
+
+    // Act
+    logger.Write(record);
+
+    // Assert
+    CheckEquals(1, logger.WriteRecordCount, __func__, __LINE__, "The record should be written");
+    CheckTrue(logger.LastRecord.Timestamp == record.Timestamp, __func__, __LINE__, "A Timestamp already set should be kept");
+    CheckEquals(static_cast<int64_t>(7), static_cast<int64_t>(logger.LastRecord.ProcessId), __func__, __LINE__, "A ProcessId already set should be kept");
+    CheckEquals(static_cast<int64_t>(9), static_cast<int64_t>(logger.LastRecord.ThreadId), __func__, __LINE__, "A ThreadId already set should be kept");
+    CheckEquals(0, logger.NowUTCCount, __func__, __LINE__, "The clock should not be read for a record that already has its Timestamp");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_Base::Test_Write_StampsOnlyWrittenEntries()
+{
+    // Arrange
+    TTestLogger logger;
+    logger.FixedNow = std::chrono::system_clock::time_point(std::chrono::hours(1000));
+    logger.SetMinimumLevel(ASWLog::Level::Warn);
+
+    // Act
+    logger.LogInfo("filtered");
+    const int clockReadsWhenFiltered = logger.NowUTCCount;
+
+    logger.LogError("written");
+
+    // Assert
+    CheckEquals(0, clockReadsWhenFiltered, __func__, __LINE__, "A filtered entry should not be stamped (no clock read)");
+    CheckEquals(1, logger.NowUTCCount, __func__, __LINE__, "A written entry should be stamped once");
+    CheckTrue(logger.LastRecord.Timestamp == logger.FixedNow, __func__, __LINE__, "The Timestamp should come from the logger's NowUTC()");
+    CheckEquals(static_cast<int64_t>(ASWLog::GetCurrentOSProcessId()), static_cast<int64_t>(logger.LastRecord.ProcessId), __func__, __LINE__, "The ProcessId should be this process's");
+    CheckEquals(static_cast<int64_t>(ASWLog::GetCurrentOSThreadId()), static_cast<int64_t>(logger.LastRecord.ThreadId), __func__, __LINE__, "The ThreadId should be the calling thread's");
 }
 //---------------------------------------------------------------------------
 

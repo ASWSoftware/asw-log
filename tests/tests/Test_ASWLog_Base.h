@@ -43,8 +43,12 @@ private: // Test methods
     void Test_LogFormatMethods_PassCallerLocation();
     void Test_LogFormatMethods_SkipFormattingWhenNotWritten();
     void Test_LogLevelConvenienceMethods();
+    void Test_LogMethods_PassRecordsToWrite();
     void Test_SetGetMinimumLevel_RoundTrips();
     void Test_ShouldLog_ReflectsEnabledAndLevel();
+    void Test_Write_AppliesEnabledOffAndLevelChecks();
+    void Test_Write_KeepsFieldsAlreadyStamped();
+    void Test_Write_StampsOnlyWrittenEntries();
 
 public:
     TTest_ASWLog_Base();

@@ -174,50 +174,6 @@ bool TASWMultiLog::IsOpen() const noexcept
 }
 
 //---------------------------------------------------------------------------
-void TASWMultiLog::Log(Level level, std::string_view message, std::source_location loc)
-{
-    if (!PassesLevelGate(level))
-        return;
-
-    FanOut([&](IASWLog& sink) {
-            sink.Log(level, message, loc);
-        });
-}
-
-//---------------------------------------------------------------------------
-void TASWMultiLog::LogForce(Level level, std::string_view message, std::source_location loc)
-{
-    if (level == Level::Off || !IsEnabled()) // Off isn't a severity; disabled writes nothing. Even when forced.
-        return;
-
-    FanOut([&](IASWLog& sink) {
-            sink.LogForce(level, message, loc);
-        });
-}
-
-//---------------------------------------------------------------------------
-void TASWMultiLog::LogForceRaw(Level level, std::string_view message, std::source_location loc)
-{
-    if (level == Level::Off || !IsEnabled()) // Off isn't a severity; disabled writes nothing. Even when forced.
-        return;
-
-    FanOut([&](IASWLog& sink) {
-            sink.LogForceRaw(level, message, loc);
-        });
-}
-
-//---------------------------------------------------------------------------
-void TASWMultiLog::LogRaw(Level level, std::string_view message, std::source_location loc)
-{
-    if (!PassesLevelGate(level))
-        return;
-
-    FanOut([&](IASWLog& sink) {
-            sink.LogRaw(level, message, loc);
-        });
-}
-
-//---------------------------------------------------------------------------
 bool TASWMultiLog::Open()
 {
     bool allSucceeded = true;
@@ -276,6 +232,14 @@ std::vector<IASWLog*> TASWMultiLog::SnapshotSinks() const
 {
     std::lock_guard<std::mutex> lock(m_ListMutex);
     return m_Sinks;
+}
+
+//---------------------------------------------------------------------------
+void TASWMultiLog::WriteRecord(const TASWLogRecord& record)
+{
+    FanOut([&](IASWLog& sink) {
+            sink.Write(record);
+        });
 }
 
 //---------------------------------------------------------------------------

@@ -682,7 +682,7 @@ void TTest_ASWLog_ConsoleLog::Test_OnLogEntry_FiresForQualifyingLevelsOnly()
     config.CallbackMinimumLevel = ASWLog::Level::Error;
 
     std::vector<std::string> callbackMessages;
-    config.OnLogEntry = [&callbackMessages](ASWLog::Level, std::string_view line)
+    config.OnLogEntry = [&callbackMessages](const ASWLog::TASWLogRecord&, std::string_view line)
         {
             callbackMessages.emplace_back(line);
         };

@@ -133,10 +133,25 @@ private:
 /////////////////////////////////////////////////////////////////////////////
 // IASWLog
 //
-// Interface for the logger.
+// Interface for the logger. Every logging method ends in Write(), the one
+// method a logger implements to receive entries (a logger deriving from
+// TASWLogBase implements its WriteRecord() hook instead).
 /////////////////////////////////////////////////////////////////////////////
 class IASWLog
 {
+private:
+    [[nodiscard]] static TASWLogRecord MakeRecord(Level level, std::string_view message, std::source_location loc, bool raw,
+        bool forced) noexcept
+    {
+        TASWLogRecord record;
+        record.LogLevel = level;
+        record.Message = message;
+        record.Location = loc;
+        record.Raw = raw;
+        record.Forced = forced;
+        return record;
+    }
+
 public:
     virtual ~IASWLog() = default;
 
@@ -174,18 +189,64 @@ public:
     // formatting an entry that wouldn't be written; use it the same way to skip building an expensive message.
     virtual bool ShouldLog(Level level) const noexcept = 0;
 
-    virtual void Log(Level level, std::string_view message, std::source_location loc = std::source_location::current()) = 0;
-    virtual void LogRaw(Level level, std::string_view message, std::source_location loc = std::source_location::current()) = 0;
+    // Receives every entry: from the logging methods below, or passed on by another logger (e.g. a multi-log). Writes
+    // it unless the logger is disabled, its level is Off, or it is below the minimum level and not record.Forced. A
+    // logger that writes it first fills in the record's Timestamp, ProcessId and ThreadId if they are still zero, on
+    // the calling thread (see TASWLogRecord).
+    virtual void Write(const TASWLogRecord& record) = 0;
 
-    virtual void LogForce(Level level, std::string_view message, std::source_location loc = std::source_location::current()) = 0;
-    virtual void LogForceRaw(Level level, std::string_view message, std::source_location loc = std::source_location::current()) = 0;
+    // --- Non-virtual Inline Logging Methods ---
+    // Each passes a record with the caller's source location to Write(). LogRaw() writes the message as is, without the
+    // line layout or a line ending (e.g. a multi-line HTTP body); LogForce() writes it whatever the minimum level.
+    inline void Log(Level level, std::string_view msg, std::source_location loc = std::source_location::current())
+    {
+        Write(MakeRecord(level, msg, loc, false, false));
+    }
 
-    virtual void LogTrace(std::string_view msg, std::source_location loc = std::source_location::current()) = 0;
-    virtual void LogDebug(std::string_view msg, std::source_location loc = std::source_location::current()) = 0;
-    virtual void LogInfo(std::string_view msg, std::source_location loc = std::source_location::current()) = 0;
-    virtual void LogWarn(std::string_view msg, std::source_location loc = std::source_location::current()) = 0;
-    virtual void LogError(std::string_view msg, std::source_location loc = std::source_location::current()) = 0;
-    virtual void LogCritical(std::string_view msg, std::source_location loc = std::source_location::current()) = 0;
+    inline void LogRaw(Level level, std::string_view msg, std::source_location loc = std::source_location::current())
+    {
+        Write(MakeRecord(level, msg, loc, true, false));
+    }
+
+    inline void LogForce(Level level, std::string_view msg, std::source_location loc = std::source_location::current())
+    {
+        Write(MakeRecord(level, msg, loc, false, true));
+    }
+
+    inline void LogForceRaw(Level level, std::string_view msg, std::source_location loc = std::source_location::current())
+    {
+        Write(MakeRecord(level, msg, loc, true, true));
+    }
+
+    inline void LogTrace(std::string_view msg, std::source_location loc = std::source_location::current())
+    {
+        Write(MakeRecord(Level::Trace, msg, loc, false, false));
+    }
+
+    inline void LogDebug(std::string_view msg, std::source_location loc = std::source_location::current())
+    {
+        Write(MakeRecord(Level::Debug, msg, loc, false, false));
+    }
+
+    inline void LogInfo(std::string_view msg, std::source_location loc = std::source_location::current())
+    {
+        Write(MakeRecord(Level::Info, msg, loc, false, false));
+    }
+
+    inline void LogWarn(std::string_view msg, std::source_location loc = std::source_location::current())
+    {
+        Write(MakeRecord(Level::Warn, msg, loc, false, false));
+    }
+
+    inline void LogError(std::string_view msg, std::source_location loc = std::source_location::current())
+    {
+        Write(MakeRecord(Level::Error, msg, loc, false, false));
+    }
+
+    inline void LogCritical(std::string_view msg, std::source_location loc = std::source_location::current())
+    {
+        Write(MakeRecord(Level::Critical, msg, loc, false, false));
+    }
 
     // --- Non-virtual Inline Template Format Methods ---
     // Each passes on the caller's source location, captured by TASWFormatString. The format string is checked against

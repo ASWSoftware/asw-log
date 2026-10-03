@@ -70,6 +70,7 @@ private: // Test methods
     void Test_SizeRotation_AutoOpenCloseCountsOtherWriters();
     void Test_SizeRotation_CountsExistingFileSize();
     void Test_SizeRotation_RotatesWhenLimitReached();
+    void Test_Write_EarlierRecordDoesNotRollLogBack();
 
 public:
     TTest_ASWLog_FileLog();

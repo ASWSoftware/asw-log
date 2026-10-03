@@ -55,7 +55,7 @@ public:
     virtual ~IASWLogFormatter() = default;
 
     // Returns the line for 'record', without its line ending (the logger adds TASWLogConfig::LogLineEnding).
-    // 'config' is the calling logger's config. Not called for LogRaw()/LogForceRaw(), which write the message as is.
+    // 'config' is the calling logger's config. Not called for a Raw record (LogRaw()/LogForceRaw()), whose message is written as is.
     // May throw, e.g. std::bad_alloc: the entry is then dropped.
     [[nodiscard]] virtual std::string Format(const TASWLogRecord& record, const TASWLogConfig& config) const = 0;
 };

@@ -40,6 +40,9 @@ see [0.26.1](#0261---2026-09-17) for the initial versioned baseline.
   deriving from `TASWTextLogBase` implements the hook
   `bool FlushUnlocked() override` instead, which is called with the lock
   held.
+- `IASWLog::Write(const TASWLogRecord&)`, the one method through which a
+  logger receives every entry, and `Raw`/`Forced` flags on
+  `TASWLogRecord`. A record can be passed on as is, e.g. to another logger.
 
 ### Changed
 
@@ -61,6 +64,24 @@ see [0.26.1](#0261---2026-09-17) for the initial versioned baseline.
   logs the format error on a mismatch. A custom `std::formatter` used with
   them needs a `constexpr` `parse()`, as `std::format` already requires.
   `TASWFormatString` is now a class template.
+- Every logging method now builds a `TASWLogRecord` and passes it to
+  `Write()`. `Log`, `LogRaw`, `LogForce`, `LogForceRaw` and the level
+  shortcuts (`LogTrace` ... `LogCritical`) are no longer virtual, and a
+  filtered `LogTrace` etc. is about 3x faster (one virtual call instead of
+  two). An entry's time, process id and thread id are read when the call is
+  made, on the calling thread, rather than once the logger holds its lock,
+  so the time is the moment of the call; all loggers of a multi-log show
+  the same time. Daily rolling only moves forward: an entry stamped just
+  before midnight that is written after the log rolled over goes into the
+  new day's log. Custom loggers must change: one deriving from
+  `TASWLogBase` replaces its `Log`/`LogRaw`/`LogForce`/`LogForceRaw`
+  overrides with `void WriteRecord(const TASWLogRecord&) override`, which
+  gets only entries that pass its enabled and level checks, already
+  stamped (use `record.Raw` and `record.Forced`); one implementing
+  `IASWLog` directly implements `Write()` and applies those checks itself.
+  `OnLogEntry` callbacks now take `(const TASWLogRecord& record,
+  std::string_view formattedLine)` instead of `(Level, std::string_view)`;
+  the level is `record.LogLevel`.
 
 ## [0.45.0] - 2026-10-01
 

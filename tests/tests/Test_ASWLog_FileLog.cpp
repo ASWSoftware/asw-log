@@ -227,6 +227,7 @@ TTest_ASWLog_FileLog::TTest_ASWLog_FileLog()
     RegisterTest(&TTest_ASWLog_FileLog::Test_SizeRotation_AutoOpenCloseCountsOtherWriters, "SizeRotation_AutoOpenCloseCountsOtherWriters");
     RegisterTest(&TTest_ASWLog_FileLog::Test_SizeRotation_CountsExistingFileSize, "SizeRotation_CountsExistingFileSize");
     RegisterTest(&TTest_ASWLog_FileLog::Test_SizeRotation_RotatesWhenLimitReached, "SizeRotation_RotatesWhenLimitReached");
+    RegisterTest(&TTest_ASWLog_FileLog::Test_Write_EarlierRecordDoesNotRollLogBack, "Write_EarlierRecordDoesNotRollLogBack");
 }
 //---------------------------------------------------------------------------
 TTest_ASWLog_FileLog::~TTest_ASWLog_FileLog()
@@ -1204,10 +1205,15 @@ void TTest_ASWLog_FileLog::Test_OnLogEntry_FiresForQualifyingLevelsOnly()
 
     std::vector<ASWLog::Level> callbackLevels;
     std::vector<std::string> callbackMessages;
-    config.OnLogEntry = [&callbackLevels, &callbackMessages](ASWLog::Level level, std::string_view line)
+    std::vector<std::string> callbackRecordMessages;
+    std::vector<ASWLog::TASWLogRecord> callbackRecords; // Message cleared: it's only valid during the call
+    config.OnLogEntry = [&](const ASWLog::TASWLogRecord& record, std::string_view line)
         {
-            callbackLevels.push_back(level);
+            callbackLevels.push_back(record.LogLevel);
             callbackMessages.emplace_back(line);
+            callbackRecordMessages.emplace_back(record.Message);
+            callbackRecords.push_back(record);
+            callbackRecords.back().Message = {};
         };
 
     ASWLog::TASWFileLog logger;
@@ -1231,6 +1237,9 @@ void TTest_ASWLog_FileLog::Test_OnLogEntry_FiresForQualifyingLevelsOnly()
         CheckTrue(callbackMessages[0].find("at_threshold") != std::string::npos, __func__, __LINE__, "Callback should receive the same formatted line written to disk");
         CheckEquals(static_cast<int32_t>(ASWLog::Level::Critical), static_cast<int32_t>(callbackLevels[1]), __func__, __LINE__, "Second callback should report the Critical entry's level");
         CheckTrue(callbackMessages[1].find("above_threshold") != std::string::npos, __func__, __LINE__, "Callback should receive the same formatted line written to disk");
+        CheckEquals(std::string("at_threshold"), callbackRecordMessages[0], __func__, __LINE__, "Callback should receive the entry's record, with the unformatted message");
+        CheckTrue(callbackRecords[0].Timestamp != std::chrono::system_clock::time_point{}, __func__, __LINE__, "The callback's record should be stamped with its time");
+        CheckEquals(static_cast<int64_t>(ASWLog::GetCurrentOSThreadId()), static_cast<int64_t>(callbackRecords[0].ThreadId), __func__, __LINE__, "The callback's record should carry the logging thread's id");
     }
 }
 //---------------------------------------------------------------------------
@@ -1254,7 +1263,7 @@ void TTest_ASWLog_FileLog::Test_OnLogEntry_ReentrantCallbackDoesNotDeadlock()
 
     ASWLog::TASWFileLog logger;
     bool reentered = false;
-    config.OnLogEntry = [&logger, &reentered](ASWLog::Level, std::string_view)
+    config.OnLogEntry = [&logger, &reentered](const ASWLog::TASWLogRecord&, std::string_view)
         {
             // A callback that logs again must not deadlock: DispatchLogCallback is
             // invoked only after the sink's internal mutex has been released.
@@ -1553,6 +1562,47 @@ void TTest_ASWLog_FileLog::Test_SizeRotation_RotatesWhenLimitReached()
         const bool foundOnce = first != std::string::npos && allContents.find(marker, first + 1) == std::string::npos;
         CheckTrue(foundOnce, __func__, __LINE__, "Each line should be in exactly one of the log and its backups: " + marker);
     }
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_FileLog::Test_Write_EarlierRecordDoesNotRollLogBack()
+{
+    // Arrange: the logger's clock is just past UTC midnight, so the log already belongs to the new day, and an entry
+    // stamped just before midnight arrives late (e.g. its thread got the lock after another thread's entry)
+    using namespace std::chrono_literals;
+    const auto logFile = TestTempDir / "late_entry.log";
+    auto config = MakeRotationTestConfig(logFile);
+    config.EnableDailyRolling = true;
+    config.LogUTCDateTime = true; // Shows which time each line got
+
+    const auto dayTwo = std::chrono::sys_days{ 2026y / 1 / 16 };
+    TFixedClockFileLog logger;
+    logger.CurrentTime = dayTwo + 1min;
+
+    ASWLog::TASWLogRecord lateRecord;
+    lateRecord.LogLevel = ASWLog::Level::Info;
+    lateRecord.Message = "late_entry";
+    lateRecord.Timestamp = dayTwo - 1ms;
+
+    // Act
+    const bool initialized = logger.Initialize(config);
+    logger.Write(lateRecord);
+    logger.LogInfo("next_entry");
+    logger.Close();
+
+    // Assert
+    int backupCount = 0;
+    for (const auto& entry : std::filesystem::directory_iterator(TestTempDir))
+    {
+        if (entry.path().extension() == ".bak")
+            ++backupCount;
+    }
+
+    const auto contents = ReadFileText(logFile);
+    CheckTrue(initialized, __func__, __LINE__, "Initialize should succeed");
+    CheckEquals(0, backupCount, __func__, __LINE__, "An entry stamped before midnight should not roll the new day's log back over");
+    CheckTrue(contents.find("[2026-01-15T23:59:59.999Z]") != std::string::npos, __func__, __LINE__, "The late entry's line should show its record's time: " + contents);
+    CheckTrue(contents.find("late_entry") != std::string::npos && contents.find("next_entry") != std::string::npos, __func__, __LINE__,
+        "Both entries should be in the current log");
 }
 //---------------------------------------------------------------------------
 

@@ -505,8 +505,10 @@ bool TASWFileLog::PrepareWriteUnlocked(std::chrono::system_clock::time_point now
 {
     if (m_Config.EnableDailyRolling)
     {
+        // Only rolls forward (ISO dates compare as text): an entry stamped just before midnight can get the lock after
+        // another thread's entry has rolled the log over, and then goes into the new day's log
         const auto currentDateStr = Time::ToDateString(now);
-        if (currentDateStr != m_LastLogDateStr)
+        if (currentDateStr > m_LastLogDateStr)
         {
             // Name the backup for the day its content is from, not the day that just started. A log shared with other
             // processes may already have been rolled over by one of them, so there the file's last write decides.

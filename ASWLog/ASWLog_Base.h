@@ -62,8 +62,8 @@ protected:
     // Pure virtual helper so the base class knows what implementation name to print
     virtual std::string_view GetLoggerClassName() const noexcept = 0;
 
-    // This logger's own level check for Log()/LogRaw(), without locking: enabled, 'level' isn't Off, and it meets the
-    // minimum level. Non-virtual, so the logging methods can check it without a virtual call (see ShouldLog()).
+    // This logger's own level check for a non-forced entry, without locking: enabled, 'level' isn't Off, and it meets
+    // the minimum level. Non-virtual, so Write() can check it without another virtual call (see ShouldLog()).
     bool PassesLevelGate(Level level) const noexcept
     {
         return m_IsEnabled.load(std::memory_order_relaxed) && level != Level::Off &&
@@ -76,6 +76,14 @@ protected:
     {
         return std::chrono::system_clock::now();
     }
+
+    // Fills in the record's Timestamp (from NowUTC()), ProcessId and ThreadId if they are zero, keeping those already
+    // set. Write() calls it; a logger that writes entries of its own (e.g. startup lines) can too.
+    void StampRecord(TASWLogRecord& record) const noexcept;
+
+    // Called by Write() with each entry this logger writes: it passed the enabled, Level::Off and minimum level checks
+    // (see Write()), and has its Timestamp, ProcessId and ThreadId filled in. Called on the logging thread.
+    virtual void WriteRecord(const TASWLogRecord& record) = 0;
 
 public:
     std::string_view GetVersionStr() const noexcept final
@@ -110,7 +118,7 @@ public:
 
     // Lock-free runtime level gate. Initialize() seeds this from m_Config.InitialMinimumLevel;
     // afterward this atomic (not m_Config.InitialMinimumLevel) is the authoritative value
-    // used by Log()/LogRaw() to skip locking entirely for filtered entries.
+    // used by Write() to skip locking entirely for filtered entries.
     Level GetMinimumLevel() const noexcept final
     {
         return m_MinimumLevel.load(std::memory_order_relaxed);
@@ -127,12 +135,9 @@ public:
     }
 
 public:
-    void LogTrace(std::string_view msg, std::source_location loc = std::source_location::current()) override;
-    void LogDebug(std::string_view msg, std::source_location loc = std::source_location::current()) override;
-    void LogInfo(std::string_view msg, std::source_location loc = std::source_location::current()) override;
-    void LogWarn(std::string_view msg, std::source_location loc = std::source_location::current()) override;
-    void LogError(std::string_view msg, std::source_location loc = std::source_location::current()) override;
-    void LogCritical(std::string_view msg, std::source_location loc = std::source_location::current()) override;
+    // Applies this logger's checks (enabled, not Level::Off, and the minimum level unless record.Forced), then stamps
+    // the record (see StampRecord()) and passes it to WriteRecord(). A filtered entry is never stamped.
+    void Write(const TASWLogRecord& record) final;
 };
 
 } // namespace ASWLog

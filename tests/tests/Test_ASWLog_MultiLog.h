@@ -58,6 +58,7 @@ private: // Test methods
     void Test_SetEnabled_FalseStopsFanOut();
     void Test_SetMinimumLevel_GatesFanOutBeforeSinks();
     void Test_ShouldLog_RequiresCompositeGateAndAnySink();
+    void Test_Write_PassesOneStampedRecordToEverySink();
 
 public:
     TTest_ASWLog_MultiLog();

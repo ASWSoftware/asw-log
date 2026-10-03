@@ -42,9 +42,9 @@ namespace ASWLog
 /////////////////////////////////////////////////////////////////////////////
 // TASWMultiLog
 //
-// Fans a single Log/LogRaw/LogForce/LogForceRaw call out to several
-// independently-owned IASWLog sinks (e.g. a TASWFileLog and a
-// TASWConsoleLog). Registered sinks are non-owning pointers; the caller is
+// Fans each entry out to several independently-owned IASWLog sinks (e.g. a
+// TASWFileLog and a TASWConsoleLog), passing the same record, stamped once,
+// to each sink's Write(). Registered sinks are non-owning pointers; the caller is
 // responsible for their lifetime, which is typically an existing singleton
 // (TASWFileLog::GetInstance()) or a longer-lived instance owned elsewhere.
 //
@@ -81,6 +81,9 @@ protected:
         return "TASWMultiLog";
     }
 
+    // Passes the record, stamped once by Write(), to every registered sink's Write(), so they all show the same time
+    void WriteRecord(const TASWLogRecord& record) override;
+
 public:
     TASWMultiLog() = default;
     ~TASWMultiLog() override = default;
@@ -114,11 +117,6 @@ public:
     // ShouldLog() is true (false if none are registered).
     bool ShouldLog(Level level) const noexcept override;
 
-    void Log(Level level, std::string_view message, std::source_location loc = std::source_location::current()) override;
-    void LogRaw(Level level, std::string_view message, std::source_location loc = std::source_location::current()) override;
-
-    void LogForce(Level level, std::string_view message, std::source_location loc = std::source_location::current()) override;
-    void LogForceRaw(Level level, std::string_view message, std::source_location loc = std::source_location::current()) override;
 };
 
 } // namespace ASWLog

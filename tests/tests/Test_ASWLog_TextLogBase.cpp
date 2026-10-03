@@ -323,7 +323,7 @@ void TTest_ASWLog_TextLogBase::Test_Formatter_FormatsEveryFileLine()
     config.WriteShutdownLog = true;
     config.BannerMessage_Shutdown = "bye";
     config.CallbackMinimumLevel = ASWLog::Level::Info;
-    config.OnLogEntry = [&callbackLines](ASWLog::Level /*level*/, std::string_view line) {
+    config.OnLogEntry = [&callbackLines](const ASWLog::TASWLogRecord& /*record*/, std::string_view line) {
             callbackLines.emplace_back(line);
         };
 
@@ -382,7 +382,7 @@ void TTest_ASWLog_TextLogBase::Test_Log_AtLevelOffIsNeverWritten()
     auto config = MakeQuietConfig();
     config.InitialMinimumLevel = ASWLog::Level::Trace;
     config.CallbackMinimumLevel = ASWLog::Level::Trace;
-    config.OnLogEntry = [&callbackCount](ASWLog::Level, std::string_view) {
+    config.OnLogEntry = [&callbackCount](const ASWLog::TASWLogRecord&, std::string_view) {
             ++callbackCount;
         };
 
@@ -412,7 +412,7 @@ void TTest_ASWLog_TextLogBase::Test_Log_DroppedWhenNotReadyOrNotPrepared()
     int callbackCount = 0;
     auto config = MakeQuietConfig();
     config.CallbackMinimumLevel = ASWLog::Level::Info;
-    config.OnLogEntry = [&callbackCount](ASWLog::Level, std::string_view) {
+    config.OnLogEntry = [&callbackCount](const ASWLog::TASWLogRecord&, std::string_view) {
             ++callbackCount;
         };
 
@@ -449,7 +449,7 @@ void TTest_ASWLog_TextLogBase::Test_Log_FormatsFiltersAndCallsAfterEntry()
     auto config = MakeQuietConfig();
     config.LogLineEnding = ASWLog::LineEnding::CRLF;
     config.CallbackMinimumLevel = ASWLog::Level::Trace;
-    config.OnLogEntry = [&callbackLines](ASWLog::Level, std::string_view line) {
+    config.OnLogEntry = [&callbackLines](const ASWLog::TASWLogRecord&, std::string_view line) {
             callbackLines.emplace_back(line);
         };
 
@@ -480,7 +480,7 @@ void TTest_ASWLog_TextLogBase::Test_Log_MinimumLevelOffAllowsOnlyForcedEntries()
     config.BannerMessage_Init = "startup banner";
     config.Init_LogTimeInfo = true;
     config.CallbackMinimumLevel = ASWLog::Level::Off;
-    config.OnLogEntry = [&callbackCount](ASWLog::Level, std::string_view) {
+    config.OnLogEntry = [&callbackCount](const ASWLog::TASWLogRecord&, std::string_view) {
             ++callbackCount;
         };
 
@@ -559,7 +559,7 @@ void TTest_ASWLog_TextLogBase::Test_SetEnabled_FalseWritesNothing()
     config.Init_LogTimeInfo = true;
     config.WriteShutdownLog = true;
     config.CallbackMinimumLevel = ASWLog::Level::Trace;
-    config.OnLogEntry = [&callbackCount](ASWLog::Level, std::string_view) {
+    config.OnLogEntry = [&callbackCount](const ASWLog::TASWLogRecord&, std::string_view) {
             ++callbackCount;
         };
 

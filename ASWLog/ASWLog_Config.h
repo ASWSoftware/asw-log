@@ -112,7 +112,8 @@ struct TASWLogConfig
     std::chrono::hours RetentionMaxAge{ 0 }; // 0 = disabled. When > 0, backups for this log older than this age are deleted after each rotation.
 
     // --- Log Entry Callback Options ---
-    using LogCallback = std::function<void (Level level, std::string_view formattedLine)>;
+    // Receives the entry's record (with its time and ids) and the line as written. Both are only valid during the call.
+    using LogCallback = std::function<void (const TASWLogRecord& record, std::string_view formattedLine)>;
     LogCallback OnLogEntry; // Optional hook invoked after a successful write (e.g. alerting/crash-reporting). Invoked outside the sink's internal lock; exceptions are swallowed.
     Level CallbackMinimumLevel = Level::Error; // Independent threshold gating OnLogEntry (Off = never); unrelated to InitialMinimumLevel or the Force* APIs.
 

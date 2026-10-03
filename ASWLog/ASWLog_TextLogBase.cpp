@@ -65,17 +65,17 @@ bool TASWTextLogBase::Close()
     TASWTextLogBase::DispatchLogCallback
 
     Called after m_Mutex has been released, so a callback that logs again doesn't deadlock. Calls the config's
-    OnLogEntry if it's set and 'level' meets CallbackMinimumLevel.
+    OnLogEntry if it's set and the record's level meets CallbackMinimumLevel.
 */
-void TASWTextLogBase::DispatchLogCallback(Level level, std::string_view formattedLine) const noexcept
+void TASWTextLogBase::DispatchLogCallback(const TASWLogRecord& record, std::string_view formattedLine) const noexcept
 {
     const auto& callback = m_Config.OnLogEntry;
-    if (callback == nullptr || level < m_Config.CallbackMinimumLevel)
+    if (callback == nullptr || record.LogLevel < m_Config.CallbackMinimumLevel)
         return;
 
     try
     {
-        callback(level, formattedLine);
+        callback(record, formattedLine);
     }
     catch (...)
     {
@@ -105,7 +105,7 @@ void TASWTextLogBase::Finalize() noexcept
             if (!m_Config.BannerMessage_Shutdown.empty())
                 msg += ", " + m_Config.BannerMessage_Shutdown;
 
-            WriteLogEntry(Level::Info, msg, false, false, true, std::source_location::current());
+            WriteInfoLine(msg);
         }
 
         CloseUnlocked();
@@ -148,7 +148,7 @@ bool TASWTextLogBase::Initialize(const TASWLogConfig& config)
 
     if (!m_Config.BannerMessage_Init.empty())
     {
-        WriteLogEntry(Level::Info, m_Config.BannerMessage_Init, false, false, true, std::source_location::current());
+        WriteInfoLine(m_Config.BannerMessage_Init);
     }
 
     WriteInitializationInfo();
@@ -162,72 +162,6 @@ bool TASWTextLogBase::Initialize(const TASWLogConfig& config)
 bool TASWTextLogBase::IsOpen() const noexcept
 {
     return m_IsOpen.load(std::memory_order_acquire);
-}
-
-//---------------------------------------------------------------------------
-void TASWTextLogBase::Log(Level level, std::string_view message, std::source_location loc)
-{
-    if (!PassesLevelGate(level))
-        return;
-
-    LogEntry(level, message, false, false, true, loc);
-}
-
-//---------------------------------------------------------------------------
-/*
-    TASWTextLogBase::LogEntry
-
-    Writes one entry for the public Log* methods, then calls OnLogEntry. Never throws, so that logging can't throw
-    into the application: if writing fails (e.g. out of memory), the entry is dropped.
-*/
-void TASWTextLogBase::LogEntry(
-    Level level, std::string_view message, bool force, bool raw, bool includeNewLine, std::source_location loc) noexcept
-{
-    // Nothing is written while disabled, and Off isn't a severity, so a message logged at Off is never written; both
-    // apply even when forced. Checked before locking, so a disabled file logger doesn't reopen its file either.
-    if (level == Level::Off || !IsEnabled())
-        return;
-
-    try
-    {
-        std::string writtenLine;
-        {
-            std::lock_guard<std::mutex> lock(m_Mutex);
-            if (!EnsureReadyUnlocked())
-                return;
-
-            writtenLine = WriteLogEntry(level, message, force, raw, includeNewLine, loc);
-
-            AfterEntryUnlocked();
-        }
-
-        if (!writtenLine.empty())
-            DispatchLogCallback(level, writtenLine);
-    }
-    catch (...)
-    {
-    }
-}
-
-//---------------------------------------------------------------------------
-void TASWTextLogBase::LogForce(Level level, std::string_view message, std::source_location loc)
-{
-    LogEntry(level, message, true, false, true, loc);
-}
-
-//---------------------------------------------------------------------------
-void TASWTextLogBase::LogForceRaw(Level level, std::string_view message, std::source_location loc)
-{
-    LogEntry(level, message, true, true, false, loc);
-}
-
-//---------------------------------------------------------------------------
-void TASWTextLogBase::LogRaw(Level level, std::string_view message, std::source_location loc)
-{
-    if (!PassesLevelGate(level))
-        return;
-
-    LogEntry(level, message, false, true, false, loc);
 }
 
 //---------------------------------------------------------------------------
@@ -265,14 +199,29 @@ void TASWTextLogBase::WriteApplicationInfo()
     if (m_Config.Init_LogCommandLine)
         applicationInfo += std::format(", command_line='{}'", GetCommandLineString());
 
-    WriteLogEntry(Level::Info, std::format("App: {}", applicationInfo), false, false, true, std::source_location::current());
+    WriteInfoLine(std::format("App: {}", applicationInfo));
 }
 
 //---------------------------------------------------------------------------
 void TASWTextLogBase::WriteDriveInfo()
 {
-    WriteLogEntry(Level::Info,
-        std::format("Drive: {}", GetDriveInfoString()), false, false, true, std::source_location::current());
+    WriteInfoLine(std::format("Drive: {}", GetDriveInfoString()));
+}
+
+//---------------------------------------------------------------------------
+/*
+    TASWTextLogBase::WriteInfoLine
+
+    Writes one of this logger's own Info lines (startup, banner or shutdown), stamped now, with the caller's location.
+*/
+void TASWTextLogBase::WriteInfoLine(std::string_view message, std::source_location loc)
+{
+    TASWLogRecord record;
+    record.LogLevel = Level::Info;
+    record.Message = message;
+    record.Location = loc;
+    StampRecord(record);
+    WriteLogEntry(record);
 }
 
 //---------------------------------------------------------------------------
@@ -301,73 +250,89 @@ void TASWTextLogBase::WriteInitializationInfo()
 /*
     TASWTextLogBase::WriteLogEntry
 
-    Formats and writes one entry, unless the logger is disabled, its level is filtered out (and it isn't forced), or
-    PrepareWriteUnlocked() drops it. Returns the line written, or an empty string if nothing was written. The startup
-    and shutdown lines come through here too, so they aren't written while the logger is disabled.
+    Formats and writes one stamped entry, unless the logger is disabled, its level is filtered out (and it isn't
+    forced), or PrepareWriteUnlocked() drops it. Returns the line written, or an empty string if nothing was written.
+    The startup and shutdown lines come through here too, so they aren't written while the logger is disabled.
 */
-std::string TASWTextLogBase::WriteLogEntry(
-    Level level, std::string_view message, bool force, bool raw, bool includeNewLine, std::source_location loc)
+std::string TASWTextLogBase::WriteLogEntry(const TASWLogRecord& record)
 {
-    if (!IsEnabled() || (!force && level < GetMinimumLevel()))
+    if (!IsEnabled() || (!record.Forced && record.LogLevel < GetMinimumLevel()))
         return {};
 
-    const auto now = NowUTC();
-    if (!PrepareWriteUnlocked(now))
+    if (!PrepareWriteUnlocked(record.Timestamp))
         return {};
 
     std::string line;
-    if (raw)
+    if (record.Raw)
     {
-        line.reserve(message.size() + 2);
-        line.append(message);
+        line.reserve(record.Message.size() + 2);
+        line.append(record.Message);
     }
     else
     {
-        const TASWLogRecord record{
-            .Timestamp = now,
-            .LogLevel = level,
-            .Message = message,
-            .Location = loc,
-            .ProcessId = GetCurrentOSProcessId(),
-            .ThreadId = GetCurrentOSThreadId(),
-        };
-
         // Without a formatter, calls the built-in layout directly (no default formatter object, which could be
         // destroyed at exit before a never-destroyed singleton logger writes its shutdown line)
         const auto* formatter = m_Config.Formatter.get();
         line = formatter != nullptr ? formatter->Format(record, m_Config) : TASWTextFormatter::FormatLine(record, m_Config);
+        AppendLineEnding(line);
     }
 
-    if (includeNewLine)
-        AppendLineEnding(line);
-
-    WriteLineUnlocked(level, line, includeNewLine);
+    WriteLineUnlocked(record.LogLevel, line, !record.Raw);
     return line;
 }
 
 //---------------------------------------------------------------------------
 void TASWTextLogBase::WriteMemoryUsageInfo()
 {
-    WriteLogEntry(Level::Info, std::format("App Memory: {}", GetMemoryUsageString()), false, false, true, std::source_location::current());
+    WriteInfoLine(std::format("App Memory: {}", GetMemoryUsageString()));
 }
 
 //---------------------------------------------------------------------------
 void TASWTextLogBase::WriteOSInfo()
 {
-    WriteLogEntry(Level::Info, std::format("OS: {}", GetOSInfoString()), false, false, true, std::source_location::current());
+    WriteInfoLine(std::format("OS: {}", GetOSInfoString()));
+}
+
+//---------------------------------------------------------------------------
+/*
+    TASWTextLogBase::WriteRecord
+
+    Writes one entry passed to Write(), then calls OnLogEntry. Never throws, so that logging can't throw into the
+    application: if writing fails (e.g. out of memory), the entry is dropped.
+*/
+void TASWTextLogBase::WriteRecord(const TASWLogRecord& record) noexcept
+{
+    try
+    {
+        std::string writtenLine;
+        {
+            std::lock_guard<std::mutex> lock(m_Mutex);
+            if (!EnsureReadyUnlocked())
+                return;
+
+            writtenLine = WriteLogEntry(record);
+
+            AfterEntryUnlocked();
+        }
+
+        if (!writtenLine.empty())
+            DispatchLogCallback(record, writtenLine);
+    }
+    catch (...)
+    {
+    }
 }
 
 //---------------------------------------------------------------------------
 void TASWTextLogBase::WriteSystemMemoryInfo()
 {
-    WriteLogEntry(Level::Info,
-        std::format("System memory: {}", GetSystemMemoryUsageString()), false, false, true, std::source_location::current());
+    WriteInfoLine(std::format("System memory: {}", GetSystemMemoryUsageString()));
 }
 
 //---------------------------------------------------------------------------
 void TASWTextLogBase::WriteTimeInfo()
 {
-    WriteLogEntry(Level::Info, std::format("Time: {}", GetTimeInfoString()), false, false, true, std::source_location::current());
+    WriteInfoLine(std::format("Time: {}", GetTimeInfoString()));
 }
 
 //---------------------------------------------------------------------------
