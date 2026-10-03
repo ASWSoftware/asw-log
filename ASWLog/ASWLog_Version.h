@@ -36,8 +36,8 @@ limitations under the License.
 #define ASWLOG_VERSION_MAJOR 0
 #define ASWLOG_VERSION_MINOR 65
 #define ASWLOG_VERSION_PATCH 0
-#define ASWLOG_VERSION_PRERELEASE "dev.1"
-#define ASWLOG_VERSION_STRING "0.65.0-dev.1"
+#define ASWLOG_VERSION_PRERELEASE "dev.2"
+#define ASWLOG_VERSION_STRING "0.65.0-dev.2"
 
 namespace ASWLog
 {
