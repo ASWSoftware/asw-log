@@ -228,6 +228,10 @@
             <DependentOn>..\..\..\..\ASWLog\ASWLog_Utils.h</DependentOn>
             <BuildOrder>9</BuildOrder>
         </CppCompile>
+        <CppCompile Include="..\..\..\..\ASWLog\ASWLog_Version.cpp">
+            <DependentOn>..\..\..\..\ASWLog\ASWLog_Version.h</DependentOn>
+            <BuildOrder>38</BuildOrder>
+        </CppCompile>
         <CppCompile Include="..\..\..\tests\Test_ASWLog_Base.cpp">
             <DependentOn>..\..\..\tests\Test_ASWLog_Base.h</DependentOn>
             <BuildOrder>27</BuildOrder>
@@ -263,6 +267,10 @@
         <CppCompile Include="..\..\..\tests\Test_ASWLog_Utils.cpp">
             <DependentOn>..\..\..\tests\Test_ASWLog_Utils.h</DependentOn>
             <BuildOrder>33</BuildOrder>
+        </CppCompile>
+        <CppCompile Include="..\..\..\tests\Test_ASWLog_Version.cpp">
+            <DependentOn>..\..\..\tests\Test_ASWLog_Version.h</DependentOn>
+            <BuildOrder>39</BuildOrder>
         </CppCompile>
         <CppCompile Include="ASWLogTests_VCL_GUI.cpp">
             <BuildOrder>0</BuildOrder>

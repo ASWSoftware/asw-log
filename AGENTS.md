@@ -81,7 +81,8 @@ For other environments, use the repository's CMake configuration when present or
 
 - Record each notable change under `## [Unreleased]`, in the matching `### Added`, `### Changed`, `### Deprecated`, `### Removed`, `### Fixed`, or `### Security` section.
 - Describe the effect on someone using the logger, not the commit. For a breaking change, say what existing code must change.
-- When preparing a release, update the version returned by `TASWLogBase::GetVersionStr()` in `ASWLog/ASWLog_Base.h`, rename `[Unreleased]` to `[x.y.z] - YYYY-MM-DD`, start a new empty `[Unreleased]`, and update the compare links at the bottom of the file.
+- The version lives only in `ASWLog/ASWLog_Version.h` (the `ASWLOG_VERSION_*` macros; the constants and `GetVersionStr()` come from them). `main` carries only release versions, with an empty `ASWLOG_VERSION_PRERELEASE`. Between releases, `develop` carries the next planned version with a pre-release such as `dev.1` (e.g. `1.1.0-dev.1` after `1.0.0`), which sorts before that release; bump its number only to tell dev builds apart, and never bump the patch number on `develop`. A unit test checks that `ASWLOG_VERSION_STRING` matches the parts.
+- When preparing a release, set the release version in `ASWLog/ASWLog_Version.h` (empty pre-release; the number develop forecast may change, e.g. to a patch release or the next major), rename `[Unreleased]` to `[x.y.z] - YYYY-MM-DD`, start a new empty `[Unreleased]`, and update the compare links at the bottom of the file. After merging the release into `develop`, move `develop` to the next minor version with pre-release `dev.1`.
 
 ## Formatting and Review
 

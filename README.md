@@ -69,6 +69,21 @@ cmake --build example/cmake/build --config Release
 
 The executable is written to `example/build/bin/Release/ASWLogExample.exe`, alongside RAD Studio output.
 
+## Versions
+
+ASWLog follows [Semantic Versioning](https://semver.org). Releases are tagged on `main` (e.g. `v1.1.0`). Between
+releases, the `develop` branch carries the next planned version with a pre-release, e.g. `1.1.0-dev.1`, which comes
+before `1.1.0`. `ASWLog/ASWLog_Version.h` has the version as macros, for code that supports several ASWLog versions,
+and as constants in the `ASWLog` namespace:
+
+```
+#include "ASWLog_Version.h"
+
+#if ASWLOG_VERSION_MAJOR > 1 || (ASWLOG_VERSION_MAJOR == 1 && ASWLOG_VERSION_MINOR >= 1)
+    // Uses something added in 1.1 (also present in 1.1.0-dev.N builds)
+#endif
+```
+
 # Unit Tests
 
 Using the logger only requires the `ASWLog` source. The unit tests in `tests` additionally use the

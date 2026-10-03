@@ -52,6 +52,16 @@ see [0.26.1](#0261---2026-09-17) for the initial versioned baseline.
   It doesn't change the minimum level (use `SetMinimumLevel()`) or write the
   startup lines. A multi-log passes the settings on to every logger it
   holds, like `Initialize()`.
+- `ASWLog_Version.h`, the single source of the version: the macros
+  `ASWLOG_VERSION_MAJOR`, `ASWLOG_VERSION_MINOR`, `ASWLOG_VERSION_PATCH`,
+  `ASWLOG_VERSION_PRERELEASE` (empty on a release, e.g. `dev.1` between
+  releases) and `ASWLOG_VERSION_STRING` (e.g. `1.1.0-dev.1`), usable in
+  `#if` to support several ASWLog versions, and the same values as
+  `ASWLog::VersionMajor`, `VersionMinor`, `VersionPatch`,
+  `VersionPreRelease` and `Version` constants. `GetVersionStr()` returns
+  `ASWLOG_VERSION_STRING`. Projects that list the ASWLog sources themselves
+  (rather than using the CMake target) must add `ASWLog_Version.cpp` and
+  `ASWLog_Version.h`.
 
 ### Changed
 

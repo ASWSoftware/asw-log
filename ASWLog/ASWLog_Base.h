@@ -37,6 +37,7 @@ limitations under the License.
 #include <string_view>
 //---------------------------------------------------------------------------
 #include "ASWLog_Interface.h"
+#include "ASWLog_Version.h"
 //---------------------------------------------------------------------------
 
 namespace ASWLog
@@ -117,7 +118,7 @@ protected:
 public:
     std::string_view GetVersionStr() const noexcept final
     {
-        return "0.65.0-dev.1"; // Semantic Versioning
+        return Version; // See ASWLog_Version.h
     }
 
     std::string GetFullVersionStr() const final
