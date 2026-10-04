@@ -29,12 +29,11 @@ limitations under the License.
 //---------------------------------------------------------------------------
 #include <atomic>
 #include <chrono>
+#include <functional>
 #include <mutex>
 #include <source_location>
-#include <memory>
 #include <string>
 #include <string_view>
-#include <utility>
 #include <vector>
 //---------------------------------------------------------------------------
 #include "ASWLog_Base.h"
@@ -69,16 +68,15 @@ protected:
     std::atomic<bool> m_IsOpen{ false };
 
 private:
-    // The failures reported while m_Mutex was held (see ReportErrorUnlocked()), each with the config in force then,
-    // waiting to be passed to ReportError() once it is released. Guarded by m_Mutex; m_HasPendingErrors lets a thread
-    // check for them without the lock.
-    std::vector<std::pair<std::shared_ptr<const TASWLogConfig>, TASWLogError> > m_PendingErrors;
-    std::atomic<bool> m_HasPendingErrors{ false };
+    // The work queued while m_Mutex was held (see DeferUnlocked()), waiting to run once it is released. Guarded by
+    // m_Mutex; m_HasDeferredWork lets a thread check for it without the lock.
+    std::vector<std::function<void()> > m_DeferredWork;
+    std::atomic<bool> m_HasDeferredWork{ false };
 
 private:
     void AppendLineEnding(std::string& line) const;
     void DispatchLogCallback(const TASWLogConfig& config, const TASWLogRecord& record, std::string_view formattedLine) const noexcept;
-    void ReportPendingErrors() noexcept;
+    void RunDeferredWork() noexcept;
     void WriteApplicationInfo();
     void WriteDriveInfo();
     void WriteInfoLine(std::string_view message, std::source_location loc = std::source_location::current());
@@ -90,27 +88,27 @@ private:
     void WriteTimeInfo();
 
 protected:
-    // Reports the failures found while m_Mutex was held (see ReportErrorUnlocked()). Declare it before the lock_guard
-    // in a method that takes m_Mutex, so that it is destroyed after the lock is released, also when the method returns
-    // early or throws.
-    class TPendingErrorReporter
+    // Runs the work queued while m_Mutex was held (see DeferUnlocked()). Declare it before the lock_guard in a method
+    // that takes m_Mutex, so that it is destroyed after the lock is released, also when the method returns early or
+    // throws.
+    class TDeferredWorkRunner
     {
     private:
         TASWTextLogBase& m_Log;
 
     public:
-        explicit TPendingErrorReporter(TASWTextLogBase& log) noexcept
+        explicit TDeferredWorkRunner(TASWTextLogBase& log) noexcept
             : m_Log(log)
         {
         }
 
-        ~TPendingErrorReporter()
+        ~TDeferredWorkRunner()
         {
-            m_Log.ReportPendingErrors();
+            m_Log.RunDeferredWork();
         }
 
-        TPendingErrorReporter(const TPendingErrorReporter&) = delete;
-        TPendingErrorReporter& operator=(const TPendingErrorReporter&) = delete;
+        TDeferredWorkRunner(const TDeferredWorkRunner&) = delete;
+        TDeferredWorkRunner& operator=(const TDeferredWorkRunner&) = delete;
     };
 
 protected:
@@ -120,6 +118,13 @@ protected:
 
     // Closes the output. Must clear m_IsOpen and m_IsInitialized.
     virtual bool CloseUnlocked() = 0;
+
+    // Queues 'work' to run once m_Mutex is released, for code holding it (e.g. a hook) that must call into the
+    // application, such as a callback that may log again: the method's TDeferredWorkRunner runs it after the unlock.
+    // Work runs in the order it was queued, on the thread that took the lock, or on another thread that takes it first
+    // (so it must only use what it captures and this logger). An exception from the work is swallowed. Can throw (e.g.
+    // out of memory); the work is then not queued.
+    void DeferUnlocked(std::function<void()> work);
 
     // Called before each entry passed to Write(); returns false to drop the entry. By default, true if the logger is
     // initialized and open.
@@ -155,9 +160,9 @@ protected:
     // ReportCurrentException() for code holding m_Mutex (see ReportErrorUnlocked()). Never throws.
     void ReportCurrentExceptionUnlocked(std::string_view action) noexcept;
 
-    // Reports one of this logger's failures from code holding m_Mutex (e.g. a hook): queues it with the current config,
-    // and the method's TPendingErrorReporter passes it to ReportError() after the lock is released. A failure that
-    // can't be queued (out of memory) is dropped. Never throws.
+    // Reports one of this logger's failures from code holding m_Mutex (e.g. a hook): passes it to ReportError(), with
+    // the current config, after the lock is released (see DeferUnlocked()). A failure that can't be queued (out of
+    // memory) is dropped. Never throws.
     void ReportErrorUnlocked(TASWLogError error) noexcept;
 
     // Writes a finished line. 'endsLine' is true if 'line' ends with the line ending (false for a Raw record).

@@ -38,6 +38,17 @@ see [0.26.1](#0261---2026-09-17) for the initial versioned baseline.
   Backups are ordered by their last write time, when their newest entry was
   written, so a daily backup counts as newer than the size backups of the
   same day. A backup that can't be deleted is reported to `OnError`.
+- `File.OnBackupCreated`, called once for each backup that rotation makes,
+  with a `TASWBackupInfo` (the log's path, the backup's path, and the
+  reason: "size", "daily", or the tag given to `RotateLogFiles()`), e.g. to
+  compress, upload or move the backup. Like `OnError`, it is called outside
+  the logger's lock, on the thread whose call rotated the log, so hand slow
+  work to another thread; exceptions are swallowed. The backup cleanup
+  (`RetentionMaxAge`, `MaxBackupFiles`, `MaxBackupTotalBytes`) now runs
+  after it, also outside the lock, so the callback always finds its backup;
+  a backup it renames out of the `<stem>.<reason>.<time>.bak` form is left
+  to the application. A logger derived from `TASWTextLogBase` can run its own
+  work after the lock with `DeferUnlocked()`.
 
 ### Fixed
 

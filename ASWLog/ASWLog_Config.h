@@ -47,6 +47,19 @@ namespace ASWLog
 class IASWLogFormatter; // See ASWLog_Formatter.h
 
 /////////////////////////////////////////////////////////////////////////////
+// TASWBackupInfo
+//
+// A backup a file logger made by rotating its log, as passed to TASWFileConfig::OnBackupCreated.
+/////////////////////////////////////////////////////////////////////////////
+struct TASWBackupInfo
+{
+    std::filesystem::path LogPath; // The log file that was rotated
+    std::filesystem::path BackupPath; // What it was renamed to: "<stem>.<reason>.<time>.bak"
+    std::string Reason; // "size", "daily", or the reason tag given to TASWFileLog::RotateLogFiles()
+};
+
+
+/////////////////////////////////////////////////////////////////////////////
 // TASWFileConfig
 //
 // The log file's location, flushing, reopening, rotation and retention (TASWLogConfig::File). Only a file logger
@@ -85,7 +98,18 @@ struct TASWFileConfig
     // backup is named for the day it holds.
     bool EnableDailyRolling   = false;
 
-    // --- Backup Cleanup Options (applied after each successful rotation) ---
+    // --- Backup Event ---
+    // Called once for each backup that rotation makes, e.g. to compress it, upload it or move it elsewhere. Called
+    // outside the logger's lock, on the thread whose call rotated the log (a logging call, Initialize(), Reconfigure()
+    // or RotateLogFiles()), so that call waits for it: hand slow work to another thread. Exceptions are swallowed. The
+    // backup cleanup below runs after it, so the backup still exists during the call. A backup it renames out of the
+    // "<stem>.<reason>.<time>.bak" form (e.g. to ".bak.gz") is the application's to clean up from then on. With
+    // AutoOpenClosePerWrite, only the process that rotated the shared log calls it. Not called if the rotation failed
+    // (see TASWLogConfig::OnError).
+    using BackupCallback = std::function<void (const TASWBackupInfo& backup)>;
+    BackupCallback OnBackupCreated;
+
+    // --- Backup Cleanup Options (applied after each successful rotation, after OnBackupCreated) ---
     // Each rule deletes some of this log's backups: the files in its folder named "<stem>.<reason>.<time>.bak", as
     // rotation names them (not those of another log whose name starts the same way). A backup is deleted if any rule
     // says so. Backups are ordered by when their newest entry was written (their last write time).

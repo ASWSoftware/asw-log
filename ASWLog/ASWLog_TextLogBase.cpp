@@ -26,6 +26,7 @@ limitations under the License.
 //---------------------------------------------------------------------------
 // System includes here
 #include <format>
+#include <utility>
 //---------------------------------------------------------------------------
 #include "ASWLog_Utils.h"
 //---------------------------------------------------------------------------
@@ -58,7 +59,7 @@ bool TASWTextLogBase::Close() noexcept
 {
     try
     {
-        TPendingErrorReporter errorReporter(*this);
+        TDeferredWorkRunner deferredWorkRunner(*this);
         std::lock_guard<std::mutex> lock(m_Mutex);
         return CloseUnlocked();
     }
@@ -66,6 +67,13 @@ bool TASWTextLogBase::Close() noexcept
     {
         return false;
     }
+}
+
+//---------------------------------------------------------------------------
+void TASWTextLogBase::DeferUnlocked(std::function<void()> work)
+{
+    m_DeferredWork.push_back(std::move(work));
+    m_HasDeferredWork.store(true, std::memory_order_relaxed);
 }
 
 //---------------------------------------------------------------------------
@@ -99,7 +107,7 @@ void TASWTextLogBase::Finalize() noexcept
     // Called from the destructors, where an exception would terminate the program
     try
     {
-        TPendingErrorReporter errorReporter(*this);
+        TDeferredWorkRunner deferredWorkRunner(*this);
         std::lock_guard<std::mutex> lock(m_Mutex);
         if (!m_IsInitialized.load(std::memory_order_acquire))
             return;
@@ -129,7 +137,7 @@ bool TASWTextLogBase::Flush() noexcept
 {
     try
     {
-        TPendingErrorReporter errorReporter(*this);
+        TDeferredWorkRunner deferredWorkRunner(*this);
         std::lock_guard<std::mutex> lock(m_Mutex);
         return FlushUnlocked();
     }
@@ -144,7 +152,7 @@ bool TASWTextLogBase::Initialize(const TASWLogConfig& config) noexcept
 {
     try
     {
-        TPendingErrorReporter errorReporter(*this);
+        TDeferredWorkRunner deferredWorkRunner(*this);
         std::shared_ptr<const TASWLogConfig> previousConfig; // Released after the lock (see SetConfig())
         std::lock_guard<std::mutex> lock(m_Mutex);
         if (m_IsInitialized.load(std::memory_order_acquire))
@@ -197,7 +205,7 @@ bool TASWTextLogBase::Open() noexcept
 {
     try
     {
-        TPendingErrorReporter errorReporter(*this);
+        TDeferredWorkRunner deferredWorkRunner(*this);
         std::lock_guard<std::mutex> lock(m_Mutex);
         return OpenUnlocked();
     }
@@ -218,7 +226,7 @@ bool TASWTextLogBase::Reconfigure(const TASWLogConfig& config) noexcept
 {
     try
     {
-        TPendingErrorReporter errorReporter(*this);
+        TDeferredWorkRunner deferredWorkRunner(*this);
         std::shared_ptr<const TASWLogConfig> previousConfig; // Released after the lock (see SetConfig())
         std::lock_guard<std::mutex> lock(m_Mutex);
         if (!m_IsInitialized.load(std::memory_order_acquire))
@@ -256,8 +264,9 @@ void TASWTextLogBase::ReportErrorUnlocked(TASWLogError error) noexcept
 {
     try
     {
-        m_PendingErrors.emplace_back(GetConfigSnapshotUnlocked(), std::move(error));
-        m_HasPendingErrors.store(true, std::memory_order_relaxed);
+        DeferUnlocked([this, config = GetConfigSnapshotUnlocked(), error = std::move(error)]() mutable {
+                ReportError(*config, std::move(error));
+            });
     }
     catch (...)
     {
@@ -266,33 +275,41 @@ void TASWTextLogBase::ReportErrorUnlocked(TASWLogError error) noexcept
 
 //---------------------------------------------------------------------------
 /*
-    TASWTextLogBase::ReportPendingErrors
+    TASWTextLogBase::RunDeferredWork
 
-    Passes the failures queued by ReportErrorUnlocked() to ReportError(), after m_Mutex has been released (see
-    TPendingErrorReporter), so OnError may log again or call the logger. Any thread may report another thread's
-    failures: whichever takes them from the queue first.
+    Runs the work queued by DeferUnlocked(), after m_Mutex has been released (see TDeferredWorkRunner), so it may call
+    into the application, which may log again or call the logger. Any thread may run another thread's work: whichever
+    takes it from the queue first.
 */
-void TASWTextLogBase::ReportPendingErrors() noexcept
+void TASWTextLogBase::RunDeferredWork() noexcept
 {
-    // Checked without the lock, so a method that found no failure (the usual case) doesn't take m_Mutex again. A
-    // failure queued by this thread is always seen here.
-    if (!m_HasPendingErrors.load(std::memory_order_relaxed))
+    // Checked without the lock, so a method that queued nothing (the usual case) doesn't take m_Mutex again. Work
+    // queued by this thread is always seen here.
+    if (!m_HasDeferredWork.load(std::memory_order_relaxed))
         return;
 
-    decltype(m_PendingErrors) pendingErrors; // Released after the lock (see SetConfig())
+    decltype(m_DeferredWork) deferredWork; // Released after the lock: destroying it can run other code (see SetConfig())
     try
     {
         std::lock_guard<std::mutex> lock(m_Mutex);
-        pendingErrors.swap(m_PendingErrors);
-        m_HasPendingErrors.store(false, std::memory_order_relaxed);
+        deferredWork.swap(m_DeferredWork);
+        m_HasDeferredWork.store(false, std::memory_order_relaxed);
     }
     catch (...)
     {
         return;
     }
 
-    for (auto& [config, error] : pendingErrors)
-        ReportError(*config, std::move(error));
+    for (auto& work : deferredWork)
+    {
+        try
+        {
+            work();
+        }
+        catch (...)
+        {
+        }
+    }
 }
 
 //---------------------------------------------------------------------------
@@ -422,7 +439,7 @@ void TASWTextLogBase::WriteOSInfo()
 */
 void TASWTextLogBase::WriteRecord(const TASWLogRecord& record)
 {
-    TPendingErrorReporter errorReporter(*this);
+    TDeferredWorkRunner deferredWorkRunner(*this);
     std::string writtenLine;
     // Set only if OnLogEntry is called: the callback runs outside the lock, from the config the entry was written with
     std::shared_ptr<const TASWLogConfig> callbackConfig;

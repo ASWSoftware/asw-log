@@ -68,6 +68,12 @@ private: // Test methods
     void Test_LogRawOptions();
     void Test_MultiThreadedStress_WritesAllMessagesToDisk();
     void Test_MultiThreadedStress_WritesAllMessagesToDisk_OpenClose();
+    void Test_OnBackupCreated_IsNotCalledWhenRotationFails();
+    void Test_OnBackupCreated_LeavesARenamedBackupToTheApp();
+    void Test_OnBackupCreated_ReportsDailyBackupAtInitialize();
+    void Test_OnBackupCreated_ReportsEachBackup();
+    void Test_OnBackupCreated_RunsOutsideTheLockBeforeCleanup();
+    void Test_OnBackupCreated_ThrowingCallbackStillCleansUp();
     void Test_OnError_ReportsFailedDelete();
     void Test_OnError_ReportsFailedOpen();
     void Test_OnError_ReportsFailedRotationAndReopen();

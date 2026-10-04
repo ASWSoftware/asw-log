@@ -16,7 +16,8 @@ ASWLog is a thread-safe light-weight C++ logging tool for Windows and Linux proj
 - Internal failures (e.g. a log file that can't be opened, written or rotated) are reported to a
   `TASWLogConfig::OnError` handler, or to stderr, instead of silently dropping entries.
 - Backup cleanup after each rotation, by age, count and total size, plus wildcard-based cleanup of files older than a
-  specified age (`TASWFileLog::DeleteOldLogs()`).
+  specified age (`TASWFileLog::DeleteOldLogs()`). An event for each new backup (`File.OnBackupCreated`) lets the
+  application compress, upload or move it.
 - Extensible: assign your own formatter (`IASWLogFormatter`) to `TASWLogConfig::Line.Formatter` for your own line layout,
   or derive a new text logger from `TASWTextLogBase` and implement only its output.
 

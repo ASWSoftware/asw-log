@@ -439,16 +439,18 @@ bool TASWFileLog::CloseUnlocked()
 
 //---------------------------------------------------------------------------
 /*
-    TASWFileLog::DeleteOldBackupsUnlocked
+    TASWFileLog::DeleteOldBackups
 
-    Applies TASWFileConfig's backup rules after a successful rotation: deletes this log's backups (see IsBackupName())
-    that are older than RetentionMaxAge, and, keeping the newest, those beyond MaxBackupFiles or MaxBackupTotalBytes.
-    Reports each backup it couldn't delete. If the folder can't be fully listed, it reports that and deletes nothing,
-    since a partial list could make it count the wrong backups as the newest.
+    Applies the backup rules of 'config' (the snapshot of a successful rotation) without the lock, after
+    OnBackupCreated: deletes this log's backups (see IsBackupName()) that are older than RetentionMaxAge, and, keeping
+    the newest, those beyond MaxBackupFiles or MaxBackupTotalBytes. Reports each backup it couldn't delete. If the
+    folder can't be fully listed, it reports that and deletes nothing, since a partial list could make it count the
+    wrong backups as the newest. Another thread or process cleaning up at the same time is harmless: a backup already
+    deleted is skipped.
 */
-void TASWFileLog::DeleteOldBackupsUnlocked()
+void TASWFileLog::DeleteOldBackups(const TASWLogConfig& config)
 {
-    const auto& file = GetConfigUnlocked().File;
+    const auto& file = config.File;
     const bool hasMaxAge = file.RetentionMaxAge.count() > 0;
     if (!hasMaxAge && file.MaxBackupFiles == 0 && file.MaxBackupTotalBytes == 0)
         return;
@@ -458,7 +460,7 @@ void TASWFileLog::DeleteOldBackupsUnlocked()
     const auto backups = ListBackups(logPath, listError);
     if (listError)
     {
-        ReportFileErrorUnlocked(ErrorKind::DeleteFailed, "Couldn't list the log folder to delete old backups", file.ResolveFolder(), listError);
+        ReportFileError(config, ErrorKind::DeleteFailed, "Couldn't list the log folder to delete old backups", file.ResolveFolder(), listError);
         return;
     }
 
@@ -487,7 +489,7 @@ void TASWFileLog::DeleteOldBackupsUnlocked()
         std::error_code deleteError;
         std::filesystem::remove(backup.Path, deleteError);
         if (deleteError)
-            ReportFileErrorUnlocked(ErrorKind::DeleteFailed, "Couldn't delete an old backup", backup.Path, deleteError);
+            ReportFileError(config, ErrorKind::DeleteFailed, "Couldn't delete an old backup", backup.Path, deleteError);
     }
 }
 
@@ -747,6 +749,24 @@ bool TASWFileLog::ReconfigureUnlocked(const TASWLogConfig& previous)
 }
 
 //---------------------------------------------------------------------------
+void TASWFileLog::ReportFileError(const TASWLogConfig& config, ErrorKind kind, std::string_view message,
+    const std::filesystem::path& path, std::error_code errorCode) noexcept
+{
+    try
+    {
+        TASWLogError error;
+        error.Kind = kind;
+        error.Message = message;
+        error.Path = path;
+        error.Code = errorCode;
+        ReportError(config, std::move(error));
+    }
+    catch (...)
+    {
+    }
+}
+
+//---------------------------------------------------------------------------
 void TASWFileLog::ReportFileErrorUnlocked(
     ErrorKind kind, std::string_view message, const std::filesystem::path& path, std::error_code errorCode) noexcept
 {
@@ -767,7 +787,7 @@ void TASWFileLog::ReportFileErrorUnlocked(
 //---------------------------------------------------------------------------
 bool TASWFileLog::RotateLogFiles(std::string_view reasonTag)
 {
-    TPendingErrorReporter errorReporter(*this);
+    TDeferredWorkRunner deferredWorkRunner(*this);
     std::lock_guard<std::mutex> lock(m_Mutex);
     return RotateLogFilesUnlocked(reasonTag, ToBackupTimeLabel(NowUTC()));
 }
@@ -821,12 +841,13 @@ bool TASWFileLog::RotateLogFilesUnlocked(std::string_view reasonTag, std::string
     const auto logPath = GetConfigUnlocked().File.ResolvePath();
 
     std::error_code errorCode;
+    std::filesystem::path backupPath; // Stays empty if there was no log file to rename
     if (std::filesystem::exists(logPath, errorCode))
     {
         // Another process sharing the log may take the free name first, so on "already exists" the next one is tried
         for (int attempt = 0; attempt < MaxBackupRenameAttempts; ++attempt)
         {
-            const auto backupPath = FindFreeBackupPath(logPath, reasonTag, timeLabel);
+            backupPath = FindFreeBackupPath(logPath, reasonTag, timeLabel);
             if (backupPath.empty())
             {
                 errorCode = std::make_error_code(std::errc::file_exists);
@@ -848,12 +869,34 @@ bool TASWFileLog::RotateLogFilesUnlocked(std::string_view reasonTag, std::string
         return false;
     }
 
-    DeleteOldBackupsUnlocked();
+    const bool isOpen = wasOpen ? OpenUnlocked() : true;
 
-    if (wasOpen)
-        return OpenUnlocked();
+    // OnBackupCreated calls into the application and the cleanup scans the folder, so both run after the lock is
+    // released, the event first, so that it sees its backup
+    TASWBackupInfo backup;
+    if (!backupPath.empty())
+    {
+        backup.LogPath = logPath;
+        backup.BackupPath = backupPath;
+        backup.Reason = reasonTag;
+    }
 
-    return true;
+    DeferUnlocked([this, config = GetConfigSnapshotUnlocked(), backup = std::move(backup)] {
+            if (!backup.BackupPath.empty() && config->File.OnBackupCreated != nullptr)
+            {
+                try
+                {
+                    config->File.OnBackupCreated(backup);
+                }
+                catch (...)
+                {
+                }
+            }
+
+            DeleteOldBackups(*config);
+        });
+
+    return isOpen;
 }
 
 //---------------------------------------------------------------------------

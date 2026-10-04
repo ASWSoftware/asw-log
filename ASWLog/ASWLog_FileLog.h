@@ -119,9 +119,10 @@ private:
 
 private:
     void CloseFileUnlocked(); // Closes the file but, unlike CloseUnlocked(), leaves the logger initialized
-    void DeleteOldBackupsUnlocked();
+    void DeleteOldBackups(const TASWLogConfig& config); // Runs without m_Mutex
     void MaybeFlush(bool isNewLine);
-    // Reports a file failure (see ReportErrorUnlocked()). Never throws.
+    // Report a file failure: without m_Mutex (see ReportError()), or holding it (see ReportErrorUnlocked()). Never throw.
+    void ReportFileError(const TASWLogConfig& config, ErrorKind kind, std::string_view message, const std::filesystem::path& path, std::error_code errorCode) noexcept;
     void ReportFileErrorUnlocked(ErrorKind kind, std::string_view message, const std::filesystem::path& path, std::error_code errorCode) noexcept;
     void RotateDailyLogFromEarlierDayUnlocked();
     bool RotateLogFilesUnlocked(std::string_view reasonTag, std::string_view timeLabel);
