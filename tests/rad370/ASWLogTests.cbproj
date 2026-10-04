@@ -274,6 +274,10 @@
             <DependentOn>..\..\third_party\asw-unit-tests\src\ASWUnitTests_TestBase.h</DependentOn>
             <BuildOrder>16</BuildOrder>
         </CppCompile>
+        <CppCompile Include="..\..\third_party\asw-unit-tests\src\ASWUnitTests_Utils.cpp">
+            <DependentOn>..\..\third_party\asw-unit-tests\src\ASWUnitTests_Utils.h</DependentOn>
+            <BuildOrder>32</BuildOrder>
+        </CppCompile>
         <CppCompile Include="..\..\third_party\asw-unit-tests\src\ASWUnitTests_Version.cpp">
             <DependentOn>..\..\third_party\asw-unit-tests\src\ASWUnitTests_Version.h</DependentOn>
             <BuildOrder>17</BuildOrder>
