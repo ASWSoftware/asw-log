@@ -76,59 +76,59 @@ void TTest_ASWLog_Config::Test_Defaults_MatchDocumentedValues()
     const ASWLog::TASWLogConfig config;
 
     // Assert: top level
-    CheckTrue(config.InitialMinimumLevel == ASWLog::Level::Info, __func__, __LINE__, "InitialMinimumLevel should default to Info");
-    CheckTrue(config.OnLogEntry == nullptr, __func__, __LINE__, "OnLogEntry should default to unset");
-    CheckTrue(config.OnLogEntryMinimumLevel == ASWLog::Level::Error, __func__, __LINE__, "OnLogEntryMinimumLevel should default to Error");
-    CheckTrue(config.OnError == nullptr, __func__, __LINE__, "OnError should default to unset (reports go to stderr)");
-    CheckTrue(config.ErrorReportInterval == std::chrono::minutes(1), __func__, __LINE__, "ErrorReportInterval should default to 1 minute");
+    CheckTrue(config.InitialMinimumLevel == ASWLog::Level::Info, "InitialMinimumLevel should default to Info");
+    CheckTrue(config.OnLogEntry == nullptr, "OnLogEntry should default to unset");
+    CheckTrue(config.OnLogEntryMinimumLevel == ASWLog::Level::Error, "OnLogEntryMinimumLevel should default to Error");
+    CheckTrue(config.OnError == nullptr, "OnError should default to unset (reports go to stderr)");
+    CheckTrue(config.ErrorReportInterval == std::chrono::minutes(1), "ErrorReportInterval should default to 1 minute");
 
     // Assert: Line
-    CheckTrue(config.Line.Formatter == nullptr, __func__, __LINE__, "Line.Formatter should default to unset (the built-in layout)");
-    CheckTrue(config.Line.Ending == ASWLog::LineEnding::LF, __func__, __LINE__, "Line.Ending should default to LF");
-    CheckTrue(config.Line.ShowTimestamp, __func__, __LINE__, "Line.ShowTimestamp should default to true");
-    CheckTrue(config.Line.ShowLevel, __func__, __LINE__, "Line.ShowLevel should default to true");
-    CheckTrue(config.Line.ShowProcessId, __func__, __LINE__, "Line.ShowProcessId should default to true");
-    CheckTrue(config.Line.ShowThreadId, __func__, __LINE__, "Line.ShowThreadId should default to true");
-    CheckFalse(config.Line.ShowWorkingSet, __func__, __LINE__, "Line.ShowWorkingSet should default to false");
-    CheckFalse(config.Line.ShowPeakWorkingSet, __func__, __LINE__, "Line.ShowPeakWorkingSet should default to false");
-    CheckFalse(config.Line.ShowFunctionName, __func__, __LINE__, "Line.ShowFunctionName should default to false");
-    CheckFalse(config.Line.ShowSourceLine, __func__, __LINE__, "Line.ShowSourceLine should default to false");
+    CheckTrue(config.Line.Formatter == nullptr, "Line.Formatter should default to unset (the built-in layout)");
+    CheckTrue(config.Line.Ending == ASWLog::LineEnding::LF, "Line.Ending should default to LF");
+    CheckTrue(config.Line.ShowTimestamp, "Line.ShowTimestamp should default to true");
+    CheckTrue(config.Line.ShowLevel, "Line.ShowLevel should default to true");
+    CheckTrue(config.Line.ShowProcessId, "Line.ShowProcessId should default to true");
+    CheckTrue(config.Line.ShowThreadId, "Line.ShowThreadId should default to true");
+    CheckFalse(config.Line.ShowWorkingSet, "Line.ShowWorkingSet should default to false");
+    CheckFalse(config.Line.ShowPeakWorkingSet, "Line.ShowPeakWorkingSet should default to false");
+    CheckFalse(config.Line.ShowFunctionName, "Line.ShowFunctionName should default to false");
+    CheckFalse(config.Line.ShowSourceLine, "Line.ShowSourceLine should default to false");
 
     // Assert: Startup
-    CheckTrue(config.Startup.Banner.empty(), __func__, __LINE__, "Startup.Banner should default to empty");
-    CheckTrue(config.Startup.WriteApplicationInfo, __func__, __LINE__, "Startup.WriteApplicationInfo should default to true");
-    CheckFalse(config.Startup.WriteCommandLine, __func__, __LINE__, "Startup.WriteCommandLine should default to false");
-    CheckTrue(config.Startup.WriteDriveInfo, __func__, __LINE__, "Startup.WriteDriveInfo should default to true");
-    CheckTrue(config.Startup.WriteMemoryUsage, __func__, __LINE__, "Startup.WriteMemoryUsage should default to true");
-    CheckTrue(config.Startup.WriteOSInfo, __func__, __LINE__, "Startup.WriteOSInfo should default to true");
-    CheckTrue(config.Startup.WriteSystemMemoryInfo, __func__, __LINE__, "Startup.WriteSystemMemoryInfo should default to true");
-    CheckTrue(config.Startup.WriteTimeInfo, __func__, __LINE__, "Startup.WriteTimeInfo should default to true");
+    CheckTrue(config.Startup.Banner.empty(), "Startup.Banner should default to empty");
+    CheckTrue(config.Startup.WriteApplicationInfo, "Startup.WriteApplicationInfo should default to true");
+    CheckFalse(config.Startup.WriteCommandLine, "Startup.WriteCommandLine should default to false");
+    CheckTrue(config.Startup.WriteDriveInfo, "Startup.WriteDriveInfo should default to true");
+    CheckTrue(config.Startup.WriteMemoryUsage, "Startup.WriteMemoryUsage should default to true");
+    CheckTrue(config.Startup.WriteOSInfo, "Startup.WriteOSInfo should default to true");
+    CheckTrue(config.Startup.WriteSystemMemoryInfo, "Startup.WriteSystemMemoryInfo should default to true");
+    CheckTrue(config.Startup.WriteTimeInfo, "Startup.WriteTimeInfo should default to true");
 
     // Assert: Shutdown
-    CheckTrue(config.Shutdown.WriteLine, __func__, __LINE__, "Shutdown.WriteLine should default to true");
-    CheckTrue(config.Shutdown.Banner.empty(), __func__, __LINE__, "Shutdown.Banner should default to empty");
+    CheckTrue(config.Shutdown.WriteLine, "Shutdown.WriteLine should default to true");
+    CheckTrue(config.Shutdown.Banner.empty(), "Shutdown.Banner should default to empty");
 
     // Assert: File
-    CheckTrue(config.File.FolderPath == std::filesystem::path("logs"), __func__, __LINE__, "File.FolderPath should default to logs");
-    CheckTrue(config.File.FilePath == std::filesystem::path("aswlog.txt"), __func__, __LINE__, "File.FilePath should default to aswlog.txt");
-    CheckFalse(config.File.AutoOpenClosePerWrite, __func__, __LINE__, "File.AutoOpenClosePerWrite should default to false");
-    CheckTrue(config.File.Flush == ASWLog::FlushMode::EveryWrite, __func__, __LINE__, "File.Flush should default to EveryWrite");
-    CheckTrue(config.File.FlushInterval == std::chrono::milliseconds(1000), __func__, __LINE__, "File.FlushInterval should default to 1000 ms");
-    CheckTrue(config.File.FlushImmediatelyAtLevel == ASWLog::Level::Error, __func__, __LINE__, "File.FlushImmediatelyAtLevel should default to Error");
-    CheckTrue(config.File.SyncToDiskAtLevel == ASWLog::Level::Off, __func__, __LINE__, "File.SyncToDiskAtLevel should default to Off");
-    CheckEquals(5, config.File.OpenRetryCount, __func__, __LINE__, "File.OpenRetryCount should default to 5");
-    CheckTrue(config.File.OpenRetryDelay == std::chrono::milliseconds(50), __func__, __LINE__, "File.OpenRetryDelay should default to 50 ms");
-    CheckTrue(config.File.CircuitBreakerResetDelay == std::chrono::milliseconds(500), __func__, __LINE__,
+    CheckTrue(config.File.FolderPath == std::filesystem::path("logs"), "File.FolderPath should default to logs");
+    CheckTrue(config.File.FilePath == std::filesystem::path("aswlog.txt"), "File.FilePath should default to aswlog.txt");
+    CheckFalse(config.File.AutoOpenClosePerWrite, "File.AutoOpenClosePerWrite should default to false");
+    CheckTrue(config.File.Flush == ASWLog::FlushMode::EveryWrite, "File.Flush should default to EveryWrite");
+    CheckTrue(config.File.FlushInterval == std::chrono::milliseconds(1000), "File.FlushInterval should default to 1000 ms");
+    CheckTrue(config.File.FlushImmediatelyAtLevel == ASWLog::Level::Error, "File.FlushImmediatelyAtLevel should default to Error");
+    CheckTrue(config.File.SyncToDiskAtLevel == ASWLog::Level::Off, "File.SyncToDiskAtLevel should default to Off");
+    CheckEquals(5, config.File.OpenRetryCount, "File.OpenRetryCount should default to 5");
+    CheckTrue(config.File.OpenRetryDelay == std::chrono::milliseconds(50), "File.OpenRetryDelay should default to 50 ms");
+    CheckTrue(config.File.CircuitBreakerResetDelay == std::chrono::milliseconds(500),
         "File.CircuitBreakerResetDelay should default to 500 ms");
-    CheckFalse(config.File.EnableRotation, __func__, __LINE__, "File.EnableRotation should default to false");
-    CheckTrue(config.File.MaxFileSizeBytes == static_cast<std::uintmax_t>(10 * 1024 * 1024), __func__, __LINE__, "File.MaxFileSizeBytes should default to 10 MB");
-    CheckTrue(config.File.RotationRetryDelay == std::chrono::milliseconds(500), __func__, __LINE__,
+    CheckFalse(config.File.EnableRotation, "File.EnableRotation should default to false");
+    CheckTrue(config.File.MaxFileSizeBytes == static_cast<std::uintmax_t>(10 * 1024 * 1024), "File.MaxFileSizeBytes should default to 10 MB");
+    CheckTrue(config.File.RotationRetryDelay == std::chrono::milliseconds(500),
         "File.RotationRetryDelay should default to 500 ms");
-    CheckFalse(config.File.EnableDailyRolling, __func__, __LINE__, "File.EnableDailyRolling should default to false");
-    CheckTrue(config.File.RetentionMaxAge == std::chrono::hours(0), __func__, __LINE__, "File.RetentionMaxAge should default to 0 (disabled)");
-    CheckTrue(config.File.OnBackupCreated == nullptr, __func__, __LINE__, "File.OnBackupCreated should default to unset");
-    CheckEquals(static_cast<std::size_t>(0), config.File.MaxBackupFiles, __func__, __LINE__, "File.MaxBackupFiles should default to 0 (unlimited)");
-    CheckEquals(static_cast<std::uintmax_t>(0), config.File.MaxBackupTotalBytes, __func__, __LINE__, "File.MaxBackupTotalBytes should default to 0 (unlimited)");
+    CheckFalse(config.File.EnableDailyRolling, "File.EnableDailyRolling should default to false");
+    CheckTrue(config.File.RetentionMaxAge == std::chrono::hours(0), "File.RetentionMaxAge should default to 0 (disabled)");
+    CheckTrue(config.File.OnBackupCreated == nullptr, "File.OnBackupCreated should default to unset");
+    CheckEquals(0, config.File.MaxBackupFiles, "File.MaxBackupFiles should default to 0 (unlimited)");
+    CheckEquals(0, config.File.MaxBackupTotalBytes, "File.MaxBackupTotalBytes should default to 0 (unlimited)");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_Config::Test_ResolveFolder_CustomFolder()
@@ -144,12 +144,12 @@ void TTest_ASWLog_Config::Test_ResolveFolder_CustomFolder()
     const auto resolvedDir = config.ResolveFolder();
 
     // Assert
-    CheckTrue(resolvedDir == expectedDir, __func__, __LINE__, "ResolveFolder should use the configured logs folder");
+    CheckTrue(resolvedDir == expectedDir, "ResolveFolder should use the configured logs folder");
 
 #if defined(_WIN32)
     // Backslash is a separator only on Windows; on POSIX it's an ordinary file name character.
     config.FolderPath = std::filesystem::path("custom\\logs");
-    CheckTrue(config.ResolveFolder() == expectedDir, __func__, __LINE__,
+    CheckTrue(config.ResolveFolder() == expectedDir,
         "ResolveFolder should accept a backslash-separated logs folder on Windows");
 #endif
 }
@@ -167,7 +167,7 @@ void TTest_ASWLog_Config::Test_ResolvePath_AbsolutePath()
     const auto resolvedPath = config.ResolvePath();
 
     // Assert
-    CheckTrue(resolvedPath == absolutePath, __func__, __LINE__, "Absolute log file paths should be preserved");
+    CheckTrue(resolvedPath == absolutePath, "Absolute log file paths should be preserved");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_Config::Test_ResolvePath_Defaults()
@@ -181,7 +181,7 @@ void TTest_ASWLog_Config::Test_ResolvePath_Defaults()
     const auto resolvedPath = config.ResolvePath();
 
     // Assert
-    CheckTrue(resolvedPath == expectedPath, __func__, __LINE__, "Resolved path should default to logs/aswlog.txt");
+    CheckTrue(resolvedPath == expectedPath, "Resolved path should default to logs/aswlog.txt");
 }
 //---------------------------------------------------------------------------
 

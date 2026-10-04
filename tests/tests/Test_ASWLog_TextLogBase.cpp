@@ -309,16 +309,16 @@ void TTest_ASWLog_TextLogBase::Test_Finalize_WritesShutdownLineFromDestructor()
     // Act
     {
         TMemoryTextLog log(output);
-        CheckTrue(log.Initialize(config), __func__, __LINE__, "Initialize should succeed");
+        CheckTrue(log.Initialize(config), "Initialize should succeed");
     }
 
     // Assert
-    CheckEquals(static_cast<std::size_t>(1), output.Lines.size(), __func__, __LINE__, "The destructor should write one shutdown line");
+    CheckEquals(1, output.Lines.size(), "The destructor should write one shutdown line");
     if (output.Lines.size() == 1)
     {
         const auto& line = output.Lines[0];
-        CheckTrue(line.starts_with("[INFO]: Logger shutdown: "), __func__, __LINE__, "The shutdown line should be formatted: " + line);
-        CheckTrue(line.ends_with(", goodbye\n"), __func__, __LINE__, "The shutdown line should end with the shutdown banner: " + line);
+        CheckStartsWith(line, "[INFO]: Logger shutdown: ", "The shutdown line should be formatted: " + line);
+        CheckEndsWith(line, ", goodbye\n", "The shutdown line should end with the shutdown banner");
     }
 }
 //---------------------------------------------------------------------------
@@ -328,7 +328,7 @@ void TTest_ASWLog_TextLogBase::Test_Flush_CallsHookAndReturnsItsResult()
     TMemoryOutput output;
     TMemoryTextLog log(output);
     ASWLog::IASWLog& logger = log;
-    CheckTrue(logger.Initialize(MakeQuietConfig()), __func__, __LINE__, "Initialize should succeed");
+    CheckTrue(logger.Initialize(MakeQuietConfig()), "Initialize should succeed");
 
     // Act
     const bool flushed = logger.Flush();
@@ -341,10 +341,10 @@ void TTest_ASWLog_TextLogBase::Test_Flush_CallsHookAndReturnsItsResult()
     const bool flushedWhileDisabled = logger.Flush();
 
     // Assert
-    CheckTrue(flushed, __func__, __LINE__, "Flush() should return true when FlushUnlocked() succeeds");
-    CheckTrue(!failedFlush, __func__, __LINE__, "Flush() should return false when FlushUnlocked() fails");
-    CheckTrue(flushedWhileDisabled, __func__, __LINE__, "Flush() should still flush while the logger is disabled");
-    CheckEquals(3, output.FlushCount, __func__, __LINE__, "Each Flush() should call FlushUnlocked() once");
+    CheckTrue(flushed, "Flush() should return true when FlushUnlocked() succeeds");
+    CheckTrue(!failedFlush, "Flush() should return false when FlushUnlocked() fails");
+    CheckTrue(flushedWhileDisabled, "Flush() should still flush while the logger is disabled");
+    CheckEquals(3, output.FlushCount, "Each Flush() should call FlushUnlocked() once");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_TextLogBase::Test_Flush_ThrowingHookDoesNotEscape()
@@ -352,7 +352,7 @@ void TTest_ASWLog_TextLogBase::Test_Flush_ThrowingHookDoesNotEscape()
     // Arrange
     TMemoryOutput output;
     TMemoryTextLog log(output);
-    CheckTrue(log.Initialize(MakeQuietConfig()), __func__, __LINE__, "Initialize should succeed");
+    CheckTrue(log.Initialize(MakeQuietConfig()), "Initialize should succeed");
     log.ThrowsOnFlush = true;
     static_assert(noexcept(log.Flush()), "Flush() must be noexcept");
 
@@ -362,8 +362,8 @@ void TTest_ASWLog_TextLogBase::Test_Flush_ThrowingHookDoesNotEscape()
     log.LogInfo("after_failed_flush");
 
     // Assert
-    CheckTrue(!flushed, __func__, __LINE__, "A throwing FlushUnlocked() should make Flush() return false, not throw");
-    CheckEquals(static_cast<std::size_t>(1), output.Lines.size(), __func__, __LINE__, "Logging should continue after a failed flush (the lock is released)");
+    CheckTrue(!flushed, "A throwing FlushUnlocked() should make Flush() return false, not throw");
+    CheckEquals(1, output.Lines.size(), "Logging should continue after a failed flush (the lock is released)");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_TextLogBase::Test_Formatter_FormatsEveryFileLine()
@@ -384,7 +384,7 @@ void TTest_ASWLog_TextLogBase::Test_Formatter_FormatsEveryFileLine()
     // Act
     {
         ASWLog::TASWFileLog log;
-        CheckTrue(log.Initialize(config), __func__, __LINE__, "Initialize should succeed");
+        CheckTrue(log.Initialize(config), "Initialize should succeed");
         log.LogInfo("hello");
         log.LogWarn("careful");
         log.LogRaw(ASWLog::Level::Info, "raw text\n");
@@ -394,12 +394,12 @@ void TTest_ASWLog_TextLogBase::Test_Formatter_FormatsEveryFileLine()
 
     // Assert
     const std::string expectedStart = "INFO|start\nINFO|hello\nWARN|careful\nraw text\nINFO|Logger shutdown: ";
-    CheckTrue(contents.starts_with(expectedStart), __func__, __LINE__,
+    CheckStartsWith(contents, expectedStart,
         "Every formatted line, including the startup and shutdown lines, should use the formatter; raw text should not: " + contents);
-    CheckTrue(contents.ends_with(", bye\n"), __func__, __LINE__, "The shutdown line should end with the shutdown banner: " + contents);
-    CheckEquals(static_cast<std::size_t>(3), callbackLines.size(), __func__, __LINE__, "OnLogEntry should get the three logged entries");
+    CheckEndsWith(contents, ", bye\n", "The shutdown line should end with the shutdown banner");
+    CheckEquals(3, callbackLines.size(), "OnLogEntry should get the three logged entries");
     if (callbackLines.size() == 3)
-        CheckEquals(std::string("INFO|hello\n"), callbackLines[0], __func__, __LINE__, "OnLogEntry should get the line in the formatter's layout");
+        CheckEquals(std::string("INFO|hello\n"), callbackLines[0], "OnLogEntry should get the line in the formatter's layout");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_TextLogBase::Test_Initialize_ThrowingFormatterStillInitializes()
@@ -432,12 +432,12 @@ void TTest_ASWLog_TextLogBase::Test_Initialize_ThrowingFormatterStillInitializes
     }
 
     // Assert
-    CheckFalse(threw, __func__, __LINE__, "A throwing formatter should not throw out of Initialize() or the Log* methods");
-    CheckTrue(initialized, __func__, __LINE__, "Initialize() should succeed: the startup lines are best effort once the output is open");
-    CheckTrue(log.IsOpen(), __func__, __LINE__, "The logger should be open");
-    CheckTrue(output.Lines == std::vector<std::string>{ "raw" }, __func__, __LINE__, "Only the raw entry should be written");
-    CheckEquals(2, output.AfterEntryCount, __func__, __LINE__, "AfterEntryUnlocked should still run after the startup lines, and after the raw entry");
-    CheckTrue(reportedMessages == std::vector<std::string>{ "Skipped the startup lines: format failed", "Dropped an entry: format failed" }, __func__, __LINE__,
+    CheckFalse(threw, "A throwing formatter should not throw out of Initialize() or the Log* methods");
+    CheckTrue(initialized, "Initialize() should succeed: the startup lines are best effort once the output is open");
+    CheckTrue(log.IsOpen(), "The logger should be open");
+    CheckTrue(output.Lines == std::vector<std::string>{ "raw" }, "Only the raw entry should be written");
+    CheckEquals(2, output.AfterEntryCount, "AfterEntryUnlocked should still run after the startup lines, and after the raw entry");
+    CheckTrue(reportedMessages == std::vector<std::string>{ "Skipped the startup lines: format failed", "Dropped an entry: format failed" },
         "The skipped startup lines and the dropped entry should be reported");
 }
 //---------------------------------------------------------------------------
@@ -455,16 +455,16 @@ void TTest_ASWLog_TextLogBase::Test_Initialize_WritesStartupLinesThenCallsAfterE
     const bool initializedAgain = log.Initialize(config);
 
     // Assert
-    CheckTrue(initialized, __func__, __LINE__, "Initialize should succeed");
-    CheckFalse(initializedAgain, __func__, __LINE__, "Initialize should fail while the logger is initialized");
-    CheckTrue(log.IsOpen(), __func__, __LINE__, "The logger should be open after Initialize");
-    CheckEquals(static_cast<std::size_t>(2), output.Lines.size(), __func__, __LINE__, "Initialize should write the banner and the time line");
+    CheckTrue(initialized, "Initialize should succeed");
+    CheckFalse(initializedAgain, "Initialize should fail while the logger is initialized");
+    CheckTrue(log.IsOpen(), "The logger should be open after Initialize");
+    CheckEquals(2, output.Lines.size(), "Initialize should write the banner and the time line");
     if (output.Lines.size() == 2)
     {
-        CheckEquals(std::string("[INFO]: starting\n"), output.Lines[0], __func__, __LINE__, "The banner should come first");
-        CheckTrue(output.Lines[1].starts_with("[INFO]: Time: "), __func__, __LINE__, "The time line should follow: " + output.Lines[1]);
+        CheckEquals(std::string("[INFO]: starting\n"), output.Lines[0], "The banner should come first");
+        CheckStartsWith(output.Lines[1], "[INFO]: Time: ", "The time line should follow: " + output.Lines[1]);
     }
-    CheckEquals(1, output.AfterEntryCount, __func__, __LINE__, "Initialize should call AfterEntryUnlocked once, after the startup lines");
+    CheckEquals(1, output.AfterEntryCount, "Initialize should call AfterEntryUnlocked once, after the startup lines");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_TextLogBase::Test_Log_AtLevelOffIsNeverWritten()
@@ -480,7 +480,7 @@ void TTest_ASWLog_TextLogBase::Test_Log_AtLevelOffIsNeverWritten()
         };
 
     TMemoryTextLog log(output);
-    CheckTrue(log.Initialize(config), __func__, __LINE__, "Initialize should succeed");
+    CheckTrue(log.Initialize(config), "Initialize should succeed");
     const int afterEntryCountAtStart = output.AfterEntryCount;
 
     // Act
@@ -491,10 +491,10 @@ void TTest_ASWLog_TextLogBase::Test_Log_AtLevelOffIsNeverWritten()
     log.LogInfoFmt("{}", "off_fmt_check"); // A normal entry after them, to show the logger still works
 
     // Assert
-    CheckTrue(output.Lines == std::vector<std::string>{ "[INFO]: off_fmt_check\n" }, __func__, __LINE__,
+    CheckTrue(output.Lines == std::vector<std::string>{ "[INFO]: off_fmt_check\n" },
         "A message logged at Off should never be written, even when forced");
-    CheckEquals(1, callbackCount, __func__, __LINE__, "OnLogEntry should only fire for the written entry");
-    CheckEquals(afterEntryCountAtStart + 1, output.AfterEntryCount, __func__, __LINE__,
+    CheckEquals(1, callbackCount, "OnLogEntry should only fire for the written entry");
+    CheckEquals(afterEntryCountAtStart + 1, output.AfterEntryCount,
         "An entry at Off should be dropped before reaching the logger's output");
 }
 //---------------------------------------------------------------------------
@@ -511,7 +511,7 @@ void TTest_ASWLog_TextLogBase::Test_Log_DroppedWhenNotReadyOrNotPrepared()
 
     TMemoryTextLog log(output);
     log.LogInfo("before_initialize");
-    CheckTrue(log.Initialize(config), __func__, __LINE__, "Initialize should succeed");
+    CheckTrue(log.Initialize(config), "Initialize should succeed");
     const int afterEntryCountAtStart = output.AfterEntryCount;
 
     // Act
@@ -528,9 +528,9 @@ void TTest_ASWLog_TextLogBase::Test_Log_DroppedWhenNotReadyOrNotPrepared()
     log.LogInfo("after_close");
 
     // Assert
-    CheckTrue(output.Lines.empty(), __func__, __LINE__, "No entry should be written");
-    CheckEquals(0, callbackCount, __func__, __LINE__, "OnLogEntry should not be called for a dropped entry");
-    CheckEquals(afterEntryCountAtStart + 1, output.AfterEntryCount, __func__, __LINE__,
+    CheckTrue(output.Lines.empty(), "No entry should be written");
+    CheckEquals(0, callbackCount, "OnLogEntry should not be called for a dropped entry");
+    CheckEquals(afterEntryCountAtStart + 1, output.AfterEntryCount,
         "AfterEntryUnlocked should be skipped when EnsureReadyUnlocked fails, but called when only PrepareWriteUnlocked drops the line");
 }
 //---------------------------------------------------------------------------
@@ -547,7 +547,7 @@ void TTest_ASWLog_TextLogBase::Test_Log_FormatsFiltersAndCallsAfterEntry()
         };
 
     TMemoryTextLog log(output);
-    CheckTrue(log.Initialize(config), __func__, __LINE__, "Initialize should succeed");
+    CheckTrue(log.Initialize(config), "Initialize should succeed");
     const int afterEntryCountAtStart = output.AfterEntryCount;
 
     // Act
@@ -557,10 +557,10 @@ void TTest_ASWLog_TextLogBase::Test_Log_FormatsFiltersAndCallsAfterEntry()
 
     // Assert
     const std::vector<std::string> expected = { "[INFO]: info_entry\r\n", "[DEBUG]: forced_entry\r\n" };
-    CheckTrue(output.Lines == expected, __func__, __LINE__, "Only the Info entry and the forced Debug entry should be written, formatted");
-    CheckTrue(callbackLines == expected, __func__, __LINE__, "OnLogEntry should get each written line");
-    CheckTrue(output.EndsLine == std::vector<bool>{ true, true }, __func__, __LINE__, "A formatted entry should end its line");
-    CheckEquals(afterEntryCountAtStart + 2, output.AfterEntryCount, __func__, __LINE__, "AfterEntryUnlocked should be called once per entry that reached the logger");
+    CheckTrue(output.Lines == expected, "Only the Info entry and the forced Debug entry should be written, formatted");
+    CheckTrue(callbackLines == expected, "OnLogEntry should get each written line");
+    CheckTrue(output.EndsLine == std::vector<bool>{ true, true }, "A formatted entry should end its line");
+    CheckEquals(afterEntryCountAtStart + 2, output.AfterEntryCount, "AfterEntryUnlocked should be called once per entry that reached the logger");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_TextLogBase::Test_Log_MinimumLevelOffAllowsOnlyForcedEntries()
@@ -589,13 +589,13 @@ void TTest_ASWLog_TextLogBase::Test_Log_MinimumLevelOffAllowsOnlyForcedEntries()
     log.LogForceRaw(ASWLog::Level::Trace, "forced_raw\n");
 
     // Assert
-    CheckTrue(initialized, __func__, __LINE__, "Initialize should succeed");
-    CheckTrue(log.GetMinimumLevel() == ASWLog::Level::Off, __func__, __LINE__, "InitialMinimumLevel should seed the minimum level");
-    CheckEquals(static_cast<std::size_t>(0), linesAfterInitialize, __func__, __LINE__,
+    CheckTrue(initialized, "Initialize should succeed");
+    CheckTrue(log.GetMinimumLevel() == ASWLog::Level::Off, "InitialMinimumLevel should seed the minimum level");
+    CheckEquals(0, linesAfterInitialize,
         "With the minimum level at Off, Initialize should write no startup lines");
-    CheckTrue(output.Lines == std::vector<std::string>{ "[INFO]: forced\n", "forced_raw\n" }, __func__, __LINE__,
+    CheckTrue(output.Lines == std::vector<std::string>{ "[INFO]: forced\n", "forced_raw\n" },
         "With the minimum level at Off, only forced entries should be written");
-    CheckEquals(0, callbackCount, __func__, __LINE__, "With OnLogEntryMinimumLevel at Off, OnLogEntry should never fire");
+    CheckEquals(0, callbackCount, "With OnLogEntryMinimumLevel at Off, OnLogEntry should never fire");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_TextLogBase::Test_Log_ThrowingWriteDoesNotEscape()
@@ -609,7 +609,7 @@ void TTest_ASWLog_TextLogBase::Test_Log_ThrowingWriteDoesNotEscape()
     config.OnError = [&reportedMessages](const ASWLog::TASWLogError& error) {
             reportedMessages.push_back(error.Message);
         };
-    CheckTrue(log.Initialize(config), __func__, __LINE__, "Initialize should succeed");
+    CheckTrue(log.Initialize(config), "Initialize should succeed");
 
     // Act
     bool threw = false;
@@ -627,9 +627,9 @@ void TTest_ASWLog_TextLogBase::Test_Log_ThrowingWriteDoesNotEscape()
     log.LogInfo("after_throw"); // Would deadlock if the throw had left the mutex locked
 
     // Assert
-    CheckFalse(threw, __func__, __LINE__, "An exception from WriteLineUnlocked should not reach the caller");
-    CheckTrue(output.Lines == std::vector<std::string>{ "[INFO]: after_throw\n" }, __func__, __LINE__, "Logging should work after a failed write");
-    CheckTrue(reportedMessages == std::vector<std::string>{ "Dropped an entry: write failed", "Dropped an entry: write failed" }, __func__, __LINE__,
+    CheckFalse(threw, "An exception from WriteLineUnlocked should not reach the caller");
+    CheckTrue(output.Lines == std::vector<std::string>{ "[INFO]: after_throw\n" }, "Logging should work after a failed write");
+    CheckTrue(reportedMessages == std::vector<std::string>{ "Dropped an entry: write failed", "Dropped an entry: write failed" },
         "Each dropped entry should be reported");
 }
 //---------------------------------------------------------------------------
@@ -638,7 +638,7 @@ void TTest_ASWLog_TextLogBase::Test_LogRaw_WritesMessageAsIs()
     // Arrange
     TMemoryOutput output;
     TMemoryTextLog log(output);
-    CheckTrue(log.Initialize(MakeQuietConfig()), __func__, __LINE__, "Initialize should succeed");
+    CheckTrue(log.Initialize(MakeQuietConfig()), "Initialize should succeed");
 
     // Act
     log.LogRaw(ASWLog::Level::Debug, "filtered_raw");
@@ -646,8 +646,8 @@ void TTest_ASWLog_TextLogBase::Test_LogRaw_WritesMessageAsIs()
     log.LogForceRaw(ASWLog::Level::Trace, " line\n");
 
     // Assert
-    CheckTrue(output.Lines == std::vector<std::string>{ "partial", " line\n" }, __func__, __LINE__, "Raw entries should be written as is, without a format or a line ending");
-    CheckTrue(output.EndsLine == std::vector<bool>{ false, false }, __func__, __LINE__, "A raw entry doesn't end its line");
+    CheckTrue(output.Lines == std::vector<std::string>{ "partial", " line\n" }, "Raw entries should be written as is, without a format or a line ending");
+    CheckTrue(output.EndsLine == std::vector<bool>{ false, false }, "A raw entry doesn't end its line");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_TextLogBase::Test_OnLogEntry_CallbackCanReconfigureTheLogger()
@@ -666,17 +666,17 @@ void TTest_ASWLog_TextLogBase::Test_OnLogEntry_CallbackCanReconfigureTheLogger()
             const bool reconfigured = log.Reconfigure(configWithoutCallback);
             calls.push_back(callbackState + (reconfigured ? ":reconfigured" : ":failed"));
         };
-    CheckTrue(log.Initialize(config), __func__, __LINE__, "Initialize should succeed");
+    CheckTrue(log.Initialize(config), "Initialize should succeed");
 
     // Act
     log.LogError("first_error");
     log.LogError("second_error");
 
     // Assert
-    CheckTrue(calls == std::vector<std::string>{ "callback_state:reconfigured" }, __func__, __LINE__,
+    CheckTrue(calls == std::vector<std::string>{ "callback_state:reconfigured" },
         "The callback should run once, reconfigure the logger, and still have its own state afterwards");
-    CheckTrue(output.Lines == std::vector<std::string>{ "[ERROR]: first_error\n", "[ERROR]: second_error\n" }, __func__,
-        __LINE__, "Both entries should be written");
+    CheckTrue(output.Lines == std::vector<std::string>{ "[ERROR]: first_error\n", "[ERROR]: second_error\n" },
+        "Both entries should be written");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_TextLogBase::Test_Reconfigure_AppliesNewConfigButKeepsLevel()
@@ -695,7 +695,7 @@ void TTest_ASWLog_TextLogBase::Test_Reconfigure_AppliesNewConfigButKeepsLevel()
 
     // Act
     const bool reconfiguredBeforeInitialize = log.Reconfigure(secondConfig);
-    CheckTrue(log.Initialize(firstConfig), __func__, __LINE__, "Initialize should succeed");
+    CheckTrue(log.Initialize(firstConfig), "Initialize should succeed");
     log.SetMinimumLevel(ASWLog::Level::Debug);
     log.LogDebug("before");
     const bool reconfigured = log.Reconfigure(secondConfig);
@@ -706,18 +706,18 @@ void TTest_ASWLog_TextLogBase::Test_Reconfigure_AppliesNewConfigButKeepsLevel()
     const bool reconfiguredWithFailingHook = log.Reconfigure(secondConfig);
 
     // Assert
-    CheckFalse(reconfiguredBeforeInitialize, __func__, __LINE__, "Reconfigure() should fail before Initialize()");
-    CheckTrue(reconfigured, __func__, __LINE__, "Reconfigure() should succeed once initialized");
-    CheckTrue(output.Lines == std::vector<std::string>{ "[INFO]: first\n", "[DEBUG]: before\n", ": after\n" }, __func__,
-        __LINE__, "Entries after Reconfigure() should use the new line layout, and Reconfigure() should write no startup lines");
-    CheckEquals(static_cast<int>(ASWLog::Level::Debug), static_cast<int>(log.GetMinimumLevel()), __func__, __LINE__,
+    CheckFalse(reconfiguredBeforeInitialize, "Reconfigure() should fail before Initialize()");
+    CheckTrue(reconfigured, "Reconfigure() should succeed once initialized");
+    CheckTrue(output.Lines == std::vector<std::string>{ "[INFO]: first\n", "[DEBUG]: before\n", ": after\n" },
+        "Entries after Reconfigure() should use the new line layout, and Reconfigure() should write no startup lines");
+    CheckEquals(static_cast<int>(ASWLog::Level::Debug), static_cast<int>(log.GetMinimumLevel()),
         "Reconfigure() should keep the minimum level set with SetMinimumLevel(), not apply InitialMinimumLevel");
-    CheckTrue(log.ReconfiguredFromBanners == std::vector<std::string>{ "first", "second" }, __func__, __LINE__,
+    CheckTrue(log.ReconfiguredFromBanners == std::vector<std::string>{ "first", "second" },
         "ReconfigureUnlocked() should get the config it replaced (and not be called before Initialize())");
-    CheckTrue(log.ReconfiguredToBanners == std::vector<std::string>{ "second", "third" }, __func__, __LINE__,
+    CheckTrue(log.ReconfiguredToBanners == std::vector<std::string>{ "second", "third" },
         "The new config should be stored before ReconfigureUnlocked() is called");
-    CheckFalse(reconfiguredWithFailingHook, __func__, __LINE__, "Reconfigure() should fail if ReconfigureUnlocked() fails");
-    CheckEquals(std::string("third"), log.GetConfig()->Startup.Banner, __func__, __LINE__,
+    CheckFalse(reconfiguredWithFailingHook, "Reconfigure() should fail if ReconfigureUnlocked() fails");
+    CheckEquals(std::string("third"), log.GetConfig()->Startup.Banner,
         "The new config should be kept when ReconfigureUnlocked() fails");
 }
 //---------------------------------------------------------------------------
@@ -745,7 +745,7 @@ void TTest_ASWLog_TextLogBase::Test_Reconfigure_IsSafeWhileOtherThreadsLog()
     formatterConfig.Line.Formatter = std::make_shared<TPipeFormatter>();
 
     TMemoryTextLog log(output);
-    CheckTrue(log.Initialize(plainConfig), __func__, __LINE__, "Initialize should succeed");
+    CheckTrue(log.Initialize(plainConfig), "Initialize should succeed");
 
     // Act
     std::atomic<bool> loggingDone{ false };
@@ -785,12 +785,12 @@ void TTest_ASWLog_TextLogBase::Test_Reconfigure_IsSafeWhileOtherThreadsLog()
             ++unexpectedLines;
     }
 
-    CheckEquals(static_cast<std::size_t>(ThreadCount * EntriesPerThread), output.Lines.size(), __func__, __LINE__,
+    CheckEquals(static_cast<std::size_t>(ThreadCount * EntriesPerThread), output.Lines.size(),
         "Every entry should be written while the logger is reconfigured");
-    CheckEquals(static_cast<std::size_t>(0), unexpectedLines, __func__, __LINE__, "Every line should be written with one whole config");
-    CheckTrue(reconfigureCount >= MinimumReconfigureCount, __func__, __LINE__, "The logger should have been reconfigured");
-    CheckEquals(0, failedReconfigureCount, __func__, __LINE__, "Every Reconfigure() should succeed");
-    CheckTrue(callbackCount->load() <= ThreadCount * EntriesPerThread, __func__, __LINE__,
+    CheckEquals(0, unexpectedLines, "Every line should be written with one whole config");
+    CheckGreaterThanOrEqual(reconfigureCount, MinimumReconfigureCount, "The logger should have been reconfigured");
+    CheckEquals(0, failedReconfigureCount, "Every Reconfigure() should succeed");
+    CheckLessThanOrEqual(callbackCount->load(), ThreadCount * EntriesPerThread,
         "OnLogEntry should be called at most once per entry");
 }
 //---------------------------------------------------------------------------
@@ -807,7 +807,7 @@ void TTest_ASWLog_TextLogBase::Test_ReportErrorUnlocked_ReportsAfterTheLockIsRel
             reportedMessages.push_back(error.Message);
             isMutexFreeInHandler.push_back(log.IsMutexFree());
         };
-    CheckTrue(log.Initialize(config), __func__, __LINE__, "Initialize should succeed");
+    CheckTrue(log.Initialize(config), "Initialize should succeed");
     log.ReportsOnWrite = true;
 
     // Act
@@ -815,11 +815,11 @@ void TTest_ASWLog_TextLogBase::Test_ReportErrorUnlocked_ReportsAfterTheLockIsRel
     log.LogRaw(ASWLog::Level::Info, "second");
 
     // Assert
-    CheckTrue(reportedMessages == std::vector<std::string>{ "memory write failed", "memory write failed" }, __func__, __LINE__,
+    CheckTrue(reportedMessages == std::vector<std::string>{ "memory write failed", "memory write failed" },
         "Each failure reported by a hook should reach OnError");
-    CheckTrue(isMutexFreeInHandler == std::vector<bool>{ true, true }, __func__, __LINE__,
+    CheckTrue(isMutexFreeInHandler == std::vector<bool>{ true, true },
         "OnError should be called after the logger's lock is released, so it can use the logger");
-    CheckTrue(output.Lines == std::vector<std::string>{ "[INFO]: first\n", "second" }, __func__, __LINE__, "The entries should still be written");
+    CheckTrue(output.Lines == std::vector<std::string>{ "[INFO]: first\n", "second" }, "The entries should still be written");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_TextLogBase::Test_SetEnabled_FalseWritesNothing()
@@ -844,7 +844,7 @@ void TTest_ASWLog_TextLogBase::Test_SetEnabled_FalseWritesNothing()
     {
         TMemoryTextLog log(output);
         log.SetEnabled(false);
-        CheckTrue(log.Initialize(config), __func__, __LINE__, "Initialize should succeed while disabled");
+        CheckTrue(log.Initialize(config), "Initialize should succeed while disabled");
         const int afterEntryCountAtStart = output.AfterEntryCount;
 
         log.LogCritical("critical");
@@ -864,14 +864,14 @@ void TTest_ASWLog_TextLogBase::Test_SetEnabled_FalseWritesNothing()
     }
 
     // Assert
-    CheckTrue(openWhileDisabled, __func__, __LINE__, "A disabled logger should stay open");
-    CheckEquals(static_cast<std::size_t>(0), linesWhileDisabled, __func__, __LINE__,
+    CheckTrue(openWhileDisabled, "A disabled logger should stay open");
+    CheckEquals(0, linesWhileDisabled,
         "A disabled logger should write nothing: no startup lines, entries, or forced entries");
-    CheckEquals(0, afterEntryCountWhileDisabled, __func__, __LINE__, "A disabled logger's entries should not reach its output at all");
-    CheckEquals(static_cast<std::size_t>(1), linesBeforeDestruction, __func__, __LINE__, "Logging should resume once enabled again");
-    CheckTrue(output.Lines == std::vector<std::string>{ "[INFO]: enabled_again\n" }, __func__, __LINE__,
+    CheckEquals(0, afterEntryCountWhileDisabled, "A disabled logger's entries should not reach its output at all");
+    CheckEquals(1, linesBeforeDestruction, "Logging should resume once enabled again");
+    CheckTrue(output.Lines == std::vector<std::string>{ "[INFO]: enabled_again\n" },
         "Disabling before destruction should suppress the shutdown line");
-    CheckEquals(1, callbackCount, __func__, __LINE__, "OnLogEntry should only fire for the entry written while enabled");
+    CheckEquals(1, callbackCount, "OnLogEntry should only fire for the entry written while enabled");
 }
 //---------------------------------------------------------------------------
 
