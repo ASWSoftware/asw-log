@@ -13,7 +13,14 @@ ASWLog is a thread-safe light-weight C++ logging tool for Windows and Linux proj
   while other threads log.
 - Optional application and system memory, OS, drive, time, and command-line diagnostics.
 - Retry handling for temporary file access conflicts and Windows reader-sharing support.
-- Wildcard-based cleanup for logs older than a specified age.
+- Crash durability: every entry is flushed by default, and with buffered flushing Error and Critical entries still
+  are (`File.FlushImmediatelyAtLevel`). Entries at a chosen level can also be synced to disk to survive a power loss
+  (`File.SyncToDiskAtLevel`).
+- Internal failures (e.g. a log file that can't be opened, written or rotated) are reported to a
+  `TASWLogConfig::OnError` handler, or to stderr, instead of silently dropping entries.
+- Backup cleanup after each rotation, by age, count and total size, plus wildcard-based cleanup of files older than a
+  specified age (`TASWFileLog::DeleteOldLogs()`). An event for each new backup (`File.OnBackupCreated`) lets the
+  application compress, upload or move it.
 - Extensible: assign your own formatter (`IASWLogFormatter`) to `TASWLogConfig::Line.Formatter` for your own line layout,
   or derive a new text logger from `TASWTextLogBase` and implement only its output.
 
@@ -48,7 +55,7 @@ or let CMake download it with `FetchContent`:
 include(FetchContent)
 FetchContent_Declare(ASWLog
     GIT_REPOSITORY https://github.com/ASWSoftware/asw-log.git
-    GIT_TAG v0.65.0     # A release tag, 0.45.0 or later
+    GIT_TAG v0.66.0     # A release tag, 0.45.0 or later
     GIT_SUBMODULES ""   # Skip the unit-test framework submodule
 )
 FetchContent_MakeAvailable(ASWLog)

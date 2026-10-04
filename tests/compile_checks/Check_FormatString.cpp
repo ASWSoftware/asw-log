@@ -7,7 +7,7 @@ arguments must fail to compile. tests/cmake/CMakeLists.txt compiles this file (w
 ASWLOG_CHECK_CASE value when the tests are configured: case 0 must compile (the control, so a broken setup can't pass
 as a rejected format string) and every other case must not.
 
-Copyright 2026 Anthony S. West
+Copyright 2026 ASW Software
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.

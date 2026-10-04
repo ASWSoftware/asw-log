@@ -23,7 +23,7 @@ jobs:
     # Safety net: a hung/looping test should fail the job quickly instead of burning the runner's full time
     # allotment. --test-timeout-seconds below covers a single hung test; this covers everything else. A sanitizer
     # build compiles and runs several times slower, so it gets longer.
-    timeout-minutes: ${{ matrix.sanitize && 10 || 3 }}
+    timeout-minutes: ${{ matrix.sanitize && 10 || 5 }}
     strategy:
       fail-fast: false
       matrix:

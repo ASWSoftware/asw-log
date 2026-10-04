@@ -2,7 +2,7 @@
 Test_ASWLog_Types.h
 Author: Anthony S. West - ASW Software
 
-Copyright 2026 Anthony S. West
+Copyright 2026 ASW Software
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -38,12 +38,14 @@ private:
 private: // Test methods
     void Test_ColorMode_FromString();
     void Test_ColorMode_ToString();
+    void Test_ErrorKind_ToString();
     void Test_FlushMode_FromString();
     void Test_FlushMode_ToString();
     void Test_Level_FromString();
     void Test_Level_ToString();
     void Test_LineEnding_FromString();
     void Test_LineEnding_ToString();
+    void Test_LogError_ToString();
 
 public:
     TTest_ASWLog_Types();

@@ -4,7 +4,7 @@ Author: Anthony S. West - ASW Software
 
 See header for info.
 
-Copyright 2026 Anthony S. West
+Copyright 2026 ASW Software
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -24,9 +24,11 @@ limitations under the License.
 // Module header
 #include "Test_ASWLog_ConsoleLog.h"
 //---------------------------------------------------------------------------
+#include <chrono>
 #include <cstdint>
 #include <cstdlib>
 #include <iostream>
+#include <streambuf>
 #include <optional>
 #include <sstream>
 #include <string>
@@ -65,6 +67,47 @@ protected:
     {
         return isStdErr ? StdErrSupportsColor : StdOutSupportsColor;
     }
+};
+
+// RAII helper: redirects a standard stream's buffer to one that fails every write, like a console that's gone,
+// restoring the original buffer (which also clears the stream's failed state) on destruction.
+class TFailingOutput
+{
+private:
+    class TFailingBuffer final : public std::streambuf
+    {
+    protected:
+        int_type overflow(int_type /*character*/) override
+        {
+            return traits_type::eof();
+        }
+
+        std::streamsize xsputn(const char* /*data*/, std::streamsize /*size*/) override
+        {
+            return 0;
+        }
+    };
+
+private:
+    std::ostream& m_Stream;
+    TFailingBuffer m_Buffer;
+    std::streambuf* m_OriginalBuffer;
+
+public:
+    explicit TFailingOutput(std::ostream& stream)
+        : m_Stream(stream),
+          m_Buffer(),
+          m_OriginalBuffer(stream.rdbuf(&m_Buffer))
+    {
+    }
+
+    ~TFailingOutput()
+    {
+        m_Stream.rdbuf(m_OriginalBuffer);
+    }
+
+    TFailingOutput(const TFailingOutput&) = delete;
+    TFailingOutput& operator=(const TFailingOutput&) = delete;
 };
 
 // RAII helper: redirects a standard stream's buffer to one that counts how often the stream is flushed, restoring the
@@ -247,6 +290,7 @@ TTest_ASWLog_ConsoleLog::TTest_ASWLog_ConsoleLog()
     RegisterTest(&TTest_ASWLog_ConsoleLog::Test_LogProcessAndThreadIds_AreOSIds, "LogProcessAndThreadIds_AreOSIds");
     RegisterTest(&TTest_ASWLog_ConsoleLog::Test_LogRawAndForceOptions, "LogRawAndForceOptions");
     RegisterTest(&TTest_ASWLog_ConsoleLog::Test_LogRespectsMinimumLevel, "LogRespectsMinimumLevel");
+    RegisterTest(&TTest_ASWLog_ConsoleLog::Test_OnError_ReportsOnlyTheWriteThatFailedTheStream, "OnError_ReportsOnlyTheWriteThatFailedTheStream");
     RegisterTest(&TTest_ASWLog_ConsoleLog::Test_OnLogEntry_FiresForQualifyingLevelsOnly, "OnLogEntry_FiresForQualifyingLevelsOnly");
     RegisterTest(&TTest_ASWLog_ConsoleLog::Test_ResetLevelColor_RestoresDefault, "ResetLevelColor_RestoresDefault");
     RegisterTest(&TTest_ASWLog_ConsoleLog::Test_ResetLevelColors_RestoresAllDefaults, "ResetLevelColors_RestoresAllDefaults");
@@ -673,6 +717,40 @@ void TTest_ASWLog_ConsoleLog::Test_LogRespectsMinimumLevel()
     CheckTrue(errCapture.Str().find("filtered_message") == std::string::npos, __func__, __LINE__, "Log should respect the minimum level unless forced");
     CheckTrue(errCapture.Str().find("forced_message") != std::string::npos, __func__, __LINE__, "LogForce should bypass the minimum level");
     CheckTrue(errCapture.Str().find("allowed_message") != std::string::npos, __func__, __LINE__, "Log should write a message at or above the minimum level");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_ConsoleLog::Test_OnError_ReportsOnlyTheWriteThatFailedTheStream()
+{
+    // Arrange
+    auto config = MakeQuietConfig();
+    config.ErrorReportInterval = std::chrono::milliseconds(0);
+
+    std::vector<ASWLog::TASWLogError> reports;
+    config.OnError = [&reports](const ASWLog::TASWLogError& error) {
+            reports.push_back(error);
+        };
+
+    ASWLog::TASWConsoleLog logger;
+    logger.SetColorMode(ASWLog::ColorMode::Never);
+
+    // Act: stdout fails, and stays failed
+    bool initialized = false;
+    {
+        TFailingOutput failingOut(std::cout);
+        initialized = logger.Initialize(config);
+        logger.LogInfo("lost_first");
+        logger.LogInfo("lost_second");
+        logger.Close();
+    }
+
+    // Assert
+    CheckTrue(initialized, __func__, __LINE__, "Initialize should succeed");
+    CheckEquals(static_cast<size_t>(1), reports.size(), __func__, __LINE__, "Only the write that failed the stream should be reported, not every line after it");
+    if (reports.empty())
+        return;
+
+    CheckTrue(reports[0].Kind == ASWLog::ErrorKind::WriteFailed, __func__, __LINE__, "A failed console write should be reported as WriteFailed");
+    CheckEquals(std::string("Couldn't write to stdout"), reports[0].Message, __func__, __LINE__, "The report should name the stream");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_ConsoleLog::Test_OnLogEntry_FiresForQualifyingLevelsOnly()

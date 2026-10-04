@@ -4,7 +4,7 @@ Author: Anthony S. West - ASW Software
 
 See header for info.
 
-Copyright 2026 Anthony S. West
+Copyright 2026 ASW Software
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -26,6 +26,7 @@ limitations under the License.
 //---------------------------------------------------------------------------
 // System includes here
 #include <algorithm>
+#include <cerrno>
 #include <cstdlib>
 #include <filesystem>
 #include <format>
@@ -36,8 +37,11 @@ limitations under the License.
 #include <sstream>
 #include <system_error>
 #include <thread>
+#include <utility>
+#include <vector>
 
 #if defined(_WIN32)
+#include <io.h>
 #include <share.h>
 #include <sys/stat.h>
 #include <windows.h>
@@ -63,6 +67,22 @@ constexpr int MaxBackupRenameAttempts = 10;
 
 // How many "_N" suffixes are tried when a backup name is taken, before rotation gives up.
 constexpr int MaxBackupNameSuffix = 1000;
+
+// One of a log's backups, as listed by ListBackups()
+struct TBackupFile
+{
+    std::filesystem::path Path;
+    std::filesystem::file_time_type LastWrite;
+    std::uintmax_t Size = 0;
+};
+
+// True if 'text' isn't empty and holds only the digits 0-9.
+bool AreDigits(std::string_view text) noexcept
+{
+    return !text.empty() && std::all_of(text.begin(), text.end(), [](char character) {
+                return character >= '0' && character <= '9';
+            });
+}
 
 // Returns the first unused backup path for 'logPath': "<stem>.<reasonTag>.<timeLabel>.bak", or with "_1", "_2", ...
 // appended to the time label if that is taken. Returns an empty path if every name is taken or the file system
@@ -90,6 +110,13 @@ std::filesystem::path FindFreeBackupPath(
     return {};
 }
 
+// The error a C library function reported in errno. Call it right after the function failed, before anything else
+// can change errno.
+std::error_code GetErrnoCode() noexcept
+{
+    return std::error_code(errno, std::generic_category());
+}
+
 // Returns the size of an open file, read through its handle, or 0 if that fails. Unlike the size read through the
 // file's path, this is current on Windows while the file is open.
 std::uintmax_t GetOpenFileSize(std::FILE* file)
@@ -107,12 +134,88 @@ std::uintmax_t GetOpenFileSize(std::FILE* file)
     return 0;
 }
 
+bool IsBackupTimeLabel(std::string_view label) noexcept; // See below
+
+// True if 'fileName' is a backup of the log whose file name stem is 'stem', named as rotation names it:
+// "<stem>.<reason>.<time label>.bak", where the reason has no '.' (see IsBackupTimeLabel()). So a backup of another
+// log whose stem starts the same way (e.g. "app.audit.size.<time label>.bak" for the stem "app") doesn't match.
+bool IsBackupName(std::string_view fileName, std::string_view stem) noexcept
+{
+    constexpr std::string_view Extension = ".bak";
+    if (fileName.size() <= stem.size() + 1 + Extension.size() || !fileName.starts_with(stem) ||
+        fileName[stem.size()] != '.' || !fileName.ends_with(Extension))
+    {
+        return false;
+    }
+
+    const auto reasonAndLabel = fileName.substr(stem.size() + 1, fileName.size() - stem.size() - 1 - Extension.size());
+    const auto reasonEnd = reasonAndLabel.find('.');
+    return reasonEnd != std::string_view::npos && IsBackupTimeLabel(reasonAndLabel.substr(reasonEnd + 1));
+}
+
+// True for the time label of a backup's name: "YYYY-MM-DD" (a daily backup, or any backup made before 0.43) or
+// "YYYY-MM-DD_HHMMSS_mmm", either one optionally followed by "_N" (see FindFreeBackupPath()).
+bool IsBackupTimeLabel(std::string_view label) noexcept
+{
+    if (label.size() < 10 || !AreDigits(label.substr(0, 4)) || label[4] != '-' || !AreDigits(label.substr(5, 2)) ||
+        label[7] != '-' || !AreDigits(label.substr(8, 2)))
+    {
+        return false;
+    }
+
+    auto rest = label.substr(10);
+    if (rest.size() >= 11 && rest[0] == '_' && AreDigits(rest.substr(1, 6)) && rest[7] == '_' && AreDigits(rest.substr(8, 3)))
+        rest.remove_prefix(11);
+
+    return rest.empty() || (rest[0] == '_' && AreDigits(rest.substr(1)));
+}
+
 // True if an operation that last failed at 'lastFailure' may be tried again at 'now', 'retryDelay' later. Also true if
 // the clock went backwards, so that a clock change can't postpone the retry.
 bool IsRetryDue(std::chrono::system_clock::time_point lastFailure, std::chrono::system_clock::time_point now,
     std::chrono::milliseconds retryDelay)
 {
     return now < lastFailure || now - lastFailure >= retryDelay;
+}
+
+// Lists the backups of the log file 'logPath' (see IsBackupName()), newest first: by last write time, which is when a
+// backup's newest entry was written (renaming the log keeps it), then by name. Skips a file it can't read, e.g. one
+// another process deleted meanwhile. If the folder can't be listed, sets 'errorCode' and returns what it found before.
+std::vector<TBackupFile> ListBackups(const std::filesystem::path& logPath, std::error_code& errorCode)
+{
+    // Names are matched as UTF-8, since the ANSI code page conversion of path::string() can throw
+    const auto stem = PathToUTF8String(logPath.stem());
+    const auto folder = logPath.has_parent_path() ? logPath.parent_path() : std::filesystem::path(".");
+
+    std::vector<TBackupFile> backups;
+    std::filesystem::directory_iterator entries(folder, errorCode);
+    for (const std::filesystem::directory_iterator end; !errorCode && entries != end; entries.increment(errorCode))
+    {
+        const auto& entry = *entries;
+
+        std::error_code entryError;
+        if (!entry.is_regular_file(entryError) || !IsBackupName(PathToUTF8String(entry.path().filename()), stem))
+            continue;
+
+        const auto lastWrite = entry.last_write_time(entryError);
+        if (entryError)
+            continue;
+
+        const auto size = entry.file_size(entryError);
+        if (entryError)
+            continue;
+
+        backups.push_back({ entry.path(), lastWrite, size });
+    }
+
+    std::sort(backups.begin(), backups.end(), [](const TBackupFile& left, const TBackupFile& right) {
+                if (left.LastWrite != right.LastWrite)
+                    return left.LastWrite > right.LastWrite;
+
+                return left.Path.filename() > right.Path.filename();
+            });
+
+    return backups;
 }
 
 // Formats a UTC time for a backup file name: "YYYY-MM-DD_HHMMSS_mmm".
@@ -176,6 +279,30 @@ bool TASWFileStreamBuf::Open(const std::filesystem::path& path)
 
     m_Size = GetOpenFileSize(m_File);
     return true;
+}
+
+//---------------------------------------------------------------------------
+bool TASWFileStreamBuf::SyncToDisk(std::error_code& errorCode)
+{
+    if (m_File == nullptr)
+    {
+        errorCode = std::make_error_code(std::errc::bad_file_descriptor);
+        return false;
+    }
+
+#if defined(_WIN32)
+    const auto handle = reinterpret_cast<HANDLE>(_get_osfhandle(_fileno(m_File)));
+    if (handle != INVALID_HANDLE_VALUE && FlushFileBuffers(handle))
+        return true;
+
+    errorCode = std::error_code(static_cast<int>(GetLastError()), std::system_category());
+#else
+    if (fsync(fileno(m_File)) == 0)
+        return true;
+
+    errorCode = GetErrnoCode();
+#endif
+    return false;
 }
 
 //---------------------------------------------------------------------------
@@ -251,9 +378,15 @@ bool TASWFileStream::Close()
 }
 
 //---------------------------------------------------------------------------
-void TASWFileStream::Flush()
+bool TASWFileStream::Flush()
 {
-    flush();
+    // Go through the buffer - flush() does nothing while the stream is in a failed state, e.g. after a failed write,
+    // which would keep every later entry in the buffer until the file is closed
+    if (m_Buffer.pubsync() == 0)
+        return true;
+
+    setstate(std::ios::failbit);
+    return false;
 }
 
 //---------------------------------------------------------------------------
@@ -276,6 +409,12 @@ bool TASWFileStream::Open(const std::filesystem::path& path)
     if (!result)
         setstate(std::ios::failbit);
     return result;
+}
+
+//---------------------------------------------------------------------------
+bool TASWFileStream::SyncToDisk(std::error_code& errorCode)
+{
+    return m_Buffer.SyncToDisk(errorCode);
 }
 
 //---------------------------------------------------------------------------
@@ -311,10 +450,11 @@ void TASWFileLog::AfterEntryUnlocked()
 //---------------------------------------------------------------------------
 void TASWFileLog::CloseFileUnlocked()
 {
-    if (m_FileStream.IsOpen())
+    // Close() flushes the file first
+    if (m_FileStream.IsOpen() && !m_FileStream.Close())
     {
-        m_FileStream.Flush();
-        m_FileStream.Close();
+        const auto errorCode = GetErrnoCode();
+        ReportFileErrorUnlocked(ErrorKind::CloseFailed, "Couldn't close the log file", GetConfigUnlocked().File.ResolvePath(), errorCode);
     }
 
     m_IsOpen.store(false, std::memory_order_release);
@@ -326,6 +466,62 @@ bool TASWFileLog::CloseUnlocked()
     CloseFileUnlocked();
     m_IsInitialized.store(false, std::memory_order_release);
     return true;
+}
+
+//---------------------------------------------------------------------------
+/*
+    TASWFileLog::DeleteOldBackups
+
+    Applies the backup rules of 'config' (the snapshot of a successful rotation) without the lock, after
+    OnBackupCreated: deletes this log's backups (see IsBackupName()) that are older than RetentionMaxAge, and, keeping
+    the newest, those beyond MaxBackupFiles or MaxBackupTotalBytes. Reports each backup it couldn't delete. If the
+    folder can't be fully listed, it reports that and deletes nothing, since a partial list could make it count the
+    wrong backups as the newest. Another thread or process cleaning up at the same time is harmless: a backup already
+    deleted is skipped.
+*/
+void TASWFileLog::DeleteOldBackups(const TASWLogConfig& config)
+{
+    const auto& file = config.File;
+    const bool hasMaxAge = file.RetentionMaxAge.count() > 0;
+    if (!hasMaxAge && file.MaxBackupFiles == 0 && file.MaxBackupTotalBytes == 0)
+        return;
+
+    const auto logPath = file.ResolvePath();
+    std::error_code listError;
+    const auto backups = ListBackups(logPath, listError);
+    if (listError)
+    {
+        ReportFileError(config, ErrorKind::DeleteFailed, "Couldn't list the log folder to delete old backups", file.ResolveFolder(), listError);
+        return;
+    }
+
+    const auto cutoff = std::filesystem::file_time_type::clock::now() - file.RetentionMaxAge;
+    std::size_t keptCount = 0;
+    std::uintmax_t keptBytes = 0;
+    bool isOverLimit = false; // Once a backup is over a limit, every older one is too
+
+    for (const auto& backup : backups) // Newest first
+    {
+        if (!isOverLimit)
+        {
+            isOverLimit = (file.MaxBackupFiles > 0 && keptCount >= file.MaxBackupFiles) ||
+                (file.MaxBackupTotalBytes > 0 && backup.Size > file.MaxBackupTotalBytes - keptBytes);
+        }
+
+        const bool isExpired = hasMaxAge && backup.LastWrite < cutoff;
+        if (!isOverLimit && !isExpired)
+        {
+            ++keptCount;
+            keptBytes += backup.Size;
+            continue;
+        }
+
+        // Returns false without an error if another process sharing the log deleted it meanwhile
+        std::error_code deleteError;
+        std::filesystem::remove(backup.Path, deleteError);
+        if (deleteError)
+            ReportFileError(config, ErrorKind::DeleteFailed, "Couldn't delete an old backup", backup.Path, deleteError);
+    }
 }
 
 //---------------------------------------------------------------------------
@@ -404,9 +600,15 @@ bool TASWFileLog::FlushUnlocked()
     if (!m_FileStream.IsOpen())
         return false;
 
-    m_FileStream.Flush();
+    const bool isFlushed = m_FileStream.Flush();
+    if (!isFlushed)
+    {
+        const auto errorCode = GetErrnoCode();
+        ReportFileErrorUnlocked(ErrorKind::FlushFailed, "Couldn't flush the log file", GetConfigUnlocked().File.ResolvePath(), errorCode);
+    }
+
     m_LastFlushTime = std::chrono::steady_clock::now();
-    return m_FileStream.good();
+    return isFlushed;
 }
 
 //---------------------------------------------------------------------------
@@ -437,10 +639,18 @@ bool TASWFileLog::InitializeUnlocked()
 }
 
 //---------------------------------------------------------------------------
-void TASWFileLog::MaybeFlush(bool isNewLine)
+void TASWFileLog::MaybeFlush(Level level, bool isNewLine)
 {
-    const auto flushMode = GetConfigUnlocked().File.Flush;
-    if (flushMode == FlushMode::EveryWrite || (flushMode == FlushMode::OnNewLine && isNewLine))
+    // No entry is written at Level::Off, so a level option set to Off never matches
+    const auto& fileConfig = GetConfigUnlocked().File;
+    if (level >= fileConfig.SyncToDiskAtLevel)
+    {
+        SyncToDiskUnlocked(); // Flushes first
+        return;
+    }
+
+    const auto flushMode = fileConfig.Flush;
+    if (flushMode == FlushMode::EveryWrite || (flushMode == FlushMode::OnNewLine && isNewLine) || level >= fileConfig.FlushImmediatelyAtLevel)
     {
         FlushUnlocked();
         return;
@@ -449,7 +659,7 @@ void TASWFileLog::MaybeFlush(bool isNewLine)
     if (flushMode == FlushMode::Periodic)
     {
         const auto now = std::chrono::steady_clock::now();
-        if (now - m_LastFlushTime >= GetConfigUnlocked().File.FlushInterval)
+        if (now - m_LastFlushTime >= fileConfig.FlushInterval)
             FlushUnlocked();
     }
 }
@@ -465,12 +675,11 @@ bool TASWFileLog::OpenUnlocked()
     }
 
     const auto effectivePath = GetConfigUnlocked().File.ResolvePath();
+    std::error_code folderError;
     if (!effectivePath.parent_path().empty())
-    {
-        std::error_code errorCode;
-        std::filesystem::create_directories(effectivePath.parent_path(), errorCode);
-    }
+        std::filesystem::create_directories(effectivePath.parent_path(), folderError);
 
+    std::error_code openError;
     const auto retryCount = std::max<int>(1, GetConfigUnlocked().File.OpenRetryCount);
     for (int attempt = 0; attempt < retryCount; ++attempt)
     {
@@ -479,6 +688,7 @@ bool TASWFileLog::OpenUnlocked()
         if (m_FileStream.IsOpen())
             break;
 
+        openError = GetErrnoCode();
         if (attempt + 1 < retryCount && GetConfigUnlocked().File.OpenRetryDelay.count() > 0)
             std::this_thread::sleep_for(GetConfigUnlocked().File.OpenRetryDelay);
     }
@@ -487,6 +697,13 @@ bool TASWFileLog::OpenUnlocked()
     {
         m_IsOpen.store(false, std::memory_order_release);
         m_LastOpenFailure = NowUTC();
+
+        // A folder that couldn't be created explains the failed open better than the open's own error
+        if (folderError)
+            ReportFileErrorUnlocked(ErrorKind::OpenFailed, "Couldn't create the log file's folder", effectivePath.parent_path(), folderError);
+        else
+            ReportFileErrorUnlocked(ErrorKind::OpenFailed, "Couldn't open the log file", effectivePath, openError);
+
         return false;
     }
 
@@ -571,8 +788,45 @@ bool TASWFileLog::ReconfigureUnlocked(const TASWLogConfig& previous)
 }
 
 //---------------------------------------------------------------------------
+void TASWFileLog::ReportFileError(const TASWLogConfig& config, ErrorKind kind, std::string_view message,
+    const std::filesystem::path& path, std::error_code errorCode) noexcept
+{
+    try
+    {
+        TASWLogError error;
+        error.Kind = kind;
+        error.Message = message;
+        error.Path = path;
+        error.Code = errorCode;
+        ReportError(config, std::move(error));
+    }
+    catch (...)
+    {
+    }
+}
+
+//---------------------------------------------------------------------------
+void TASWFileLog::ReportFileErrorUnlocked(
+    ErrorKind kind, std::string_view message, const std::filesystem::path& path, std::error_code errorCode) noexcept
+{
+    try
+    {
+        TASWLogError error;
+        error.Kind = kind;
+        error.Message = message;
+        error.Path = path;
+        error.Code = errorCode;
+        ReportErrorUnlocked(std::move(error));
+    }
+    catch (...)
+    {
+    }
+}
+
+//---------------------------------------------------------------------------
 bool TASWFileLog::RotateLogFiles(std::string_view reasonTag)
 {
+    TDeferredWorkRunner deferredWorkRunner(*this);
     std::lock_guard<std::mutex> lock(m_Mutex);
     return RotateLogFilesUnlocked(reasonTag, ToBackupTimeLabel(NowUTC()));
 }
@@ -621,20 +875,18 @@ bool TASWFileLog::RotateLogFilesUnlocked(std::string_view reasonTag, std::string
 {
     const bool wasOpen = m_FileStream.IsOpen();
     if (wasOpen)
-    {
-        m_FileStream.Close();
-        m_IsOpen.store(false, std::memory_order_release);
-    }
+        CloseFileUnlocked();
 
     const auto logPath = GetConfigUnlocked().File.ResolvePath();
 
     std::error_code errorCode;
+    std::filesystem::path backupPath; // Stays empty if there was no log file to rename
     if (std::filesystem::exists(logPath, errorCode))
     {
         // Another process sharing the log may take the free name first, so on "already exists" the next one is tried
         for (int attempt = 0; attempt < MaxBackupRenameAttempts; ++attempt)
         {
-            const auto backupPath = FindFreeBackupPath(logPath, reasonTag, timeLabel);
+            backupPath = FindFreeBackupPath(logPath, reasonTag, timeLabel);
             if (backupPath.empty())
             {
                 errorCode = std::make_error_code(std::errc::file_exists);
@@ -649,29 +901,68 @@ bool TASWFileLog::RotateLogFilesUnlocked(std::string_view reasonTag, std::string
 
     if (errorCode)
     {
+        ReportFileErrorUnlocked(ErrorKind::RotationFailed, "Couldn't rename the log file to a backup", logPath, errorCode);
         m_LastRotationFailure = NowUTC();
         if (wasOpen)
             OpenUnlocked();
         return false;
     }
 
-    if (GetConfigUnlocked().File.RetentionMaxAge.count() > 0)
+    const bool isOpen = wasOpen ? OpenUnlocked() : true;
+
+    // OnBackupCreated calls into the application and the cleanup scans the folder, so both run after the lock is
+    // released, the event first, so that it sees its backup
+    TASWBackupInfo backup;
+    if (!backupPath.empty())
     {
-        DeleteOldLogs(GetConfigUnlocked().File.ResolveFolder(),
-            std::format("{}.*.bak", PathToUTF8String(GetConfigUnlocked().File.ResolvePath().stem())), GetConfigUnlocked().File.RetentionMaxAge);
+        backup.LogPath = logPath;
+        backup.BackupPath = backupPath;
+        backup.Reason = reasonTag;
     }
 
-    if (wasOpen)
-        return OpenUnlocked();
+    DeferUnlocked([this, config = GetConfigSnapshotUnlocked(), backup = std::move(backup)] {
+            if (!backup.BackupPath.empty() && config->File.OnBackupCreated != nullptr)
+            {
+                try
+                {
+                    config->File.OnBackupCreated(backup);
+                }
+                catch (...)
+                {
+                }
+            }
 
-    return true;
+            DeleteOldBackups(*config);
+        });
+
+    return isOpen;
 }
 
 //---------------------------------------------------------------------------
-void TASWFileLog::WriteLineUnlocked(Level /*level*/, std::string_view line, bool endsLine)
+/*
+    TASWFileLog::SyncToDiskUnlocked
+
+    Flushes the file and syncs it to disk (see TASWFileConfig::SyncToDiskAtLevel). Kept out of MaybeFlush() so that
+    the per-line check stays small enough to be inlined.
+*/
+void TASWFileLog::SyncToDiskUnlocked()
 {
-    m_FileStream.Write(line);
-    MaybeFlush(endsLine);
+    // A failed flush has been reported already, and left nothing new to sync
+    std::error_code errorCode;
+    if (FlushUnlocked() && !m_FileStream.SyncToDisk(errorCode))
+        ReportFileErrorUnlocked(ErrorKind::SyncFailed, "Couldn't sync the log file to disk", GetConfigUnlocked().File.ResolvePath(), errorCode);
+}
+
+//---------------------------------------------------------------------------
+void TASWFileLog::WriteLineUnlocked(Level level, std::string_view line, bool endsLine)
+{
+    if (!m_FileStream.Write(line))
+    {
+        const auto errorCode = GetErrnoCode();
+        ReportFileErrorUnlocked(ErrorKind::WriteFailed, "Couldn't write to the log file", GetConfigUnlocked().File.ResolvePath(), errorCode);
+    }
+
+    MaybeFlush(level, endsLine);
 }
 
 //---------------------------------------------------------------------------

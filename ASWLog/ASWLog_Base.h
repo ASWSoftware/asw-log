@@ -6,7 +6,7 @@ A light-weight logging tool.
 
 Requires C++ 20 or higher.
 
-Copyright 2026 Anthony S. West
+Copyright 2026 ASW Software
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -27,8 +27,10 @@ limitations under the License.
 #ifndef ASWLog_BaseH
 #define ASWLog_BaseH
 //---------------------------------------------------------------------------
+#include <array>
 #include <atomic>
 #include <chrono>
+#include <cstddef>
 #include <format>
 #include <memory>
 #include <mutex>
@@ -63,6 +65,21 @@ private:
     mutable std::mutex m_ConfigMutex;
     std::shared_ptr<const TASWLogConfig> m_Config{ std::make_shared<const TASWLogConfig>() };
 
+    // When ReportError() last reported each ErrorKind, and how many it left out since (see
+    // TASWLogConfig::ErrorReportInterval). Guarded by m_ErrorReportMutex.
+    struct TErrorReportState
+    {
+        std::chrono::system_clock::time_point LastReport{};
+        std::size_t SuppressedCount = 0;
+        bool HasReported = false;
+    };
+
+    std::mutex m_ErrorReportMutex;
+    std::array<TErrorReportState, ErrorKindCount> m_ErrorReportStates{};
+
+private:
+    void WriteErrorToStdErr(const TASWLogError& error) const;
+
 protected:
     std::atomic<bool> m_IsInitialized{ false };
 
@@ -85,6 +102,10 @@ protected:
     // Pure virtual helper so the base class knows what implementation name to print
     virtual std::string_view GetLoggerClassName() const noexcept = 0;
 
+    // An ErrorKind::Exception error for the exception being handled, so call it in a catch block: 'action' (e.g.
+    // "Dropped an entry") followed by the exception's what(). Can throw (e.g. out of memory).
+    static TASWLogError MakeExceptionError(std::string_view action);
+
     // This logger's own level check for a non-forced entry, without locking: enabled, 'level' isn't Off, and it meets
     // the minimum level. Non-virtual, so Write() can check it without another virtual call (see ShouldLog()).
     bool PassesLevelGate(Level level) const noexcept
@@ -99,6 +120,19 @@ protected:
     {
         return std::chrono::system_clock::now();
     }
+
+    // Reports the exception being handled through ReportError() (see MakeExceptionError()), so call it in a catch
+    // block. Never throws.
+    void ReportCurrentException(std::string_view action) noexcept;
+
+    // Reports one of this logger's failures to config.OnError, or to stderr if that is empty, unless this logger
+    // reported its kind less than config.ErrorReportInterval ago (it is then counted in the next report's
+    // SuppressedCount). 'config' is the snapshot in force when the failure happened. Call it without holding the
+    // derived logger's own lock, since OnError may call back into the logger. A failure caused by OnError itself, on
+    // its own thread, isn't reported. Never throws.
+    void ReportError(const TASWLogConfig& config, TASWLogError error) noexcept;
+    // The same, with the current config (see GetConfig())
+    void ReportError(TASWLogError error) noexcept;
 
     // Replaces the config with a snapshot of 'config' (see GetConfig()), for Initialize() and Reconfigure(). The caller
     // must hold the derived logger's own lock (see GetConfigUnlocked()). Returns the previous config, so the caller can
@@ -163,7 +197,7 @@ public:
 public:
     // Applies this logger's checks (enabled, not Level::Off, and the minimum level unless record.Forced), then stamps
     // the record (see StampRecord()) and passes it to WriteRecord(). A filtered entry is never stamped. If
-    // WriteRecord() throws, the entry is dropped.
+    // WriteRecord() throws, the entry is dropped and reported (see ReportError()).
     void Write(const TASWLogRecord& record) noexcept final;
 };
 

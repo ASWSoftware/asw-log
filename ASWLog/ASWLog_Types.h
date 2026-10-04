@@ -8,7 +8,7 @@ Source for the ASWLog types.
 
 Requires C++ 20 or higher.
 
-Copyright 2026 Anthony S. West
+Copyright 2026 ASW Software
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -32,9 +32,12 @@ limitations under the License.
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
+#include <filesystem>
 #include <optional>
 #include <source_location>
+#include <string>
 #include <string_view>
+#include <system_error>
 //---------------------------------------------------------------------------
 
 namespace ASWLog
@@ -74,6 +77,76 @@ enum class ColorMode
 
         case ColorMode::Never:
             return "NEVER";
+    }
+
+    return "UNKNOWN";
+}
+
+//---------------------------------------------------------------------------
+
+/*
+  ErrorKind enum
+
+  What failed, in a TASWLogError reported to TASWLogConfig::OnError.
+*/
+enum class ErrorKind
+{
+    // The log file couldn't be opened (or its folder created), so entries are dropped until it can be.
+    OpenFailed,
+
+    // An entry couldn't be written to the output (e.g. the disk is full).
+    WriteFailed,
+
+    // The output's buffer couldn't be written out (e.g. the disk is full).
+    FlushFailed,
+
+    // The log file couldn't be synced to disk (see TASWFileConfig::SyncToDiskAtLevel), so entries may be lost if the
+    // system stops (e.g. a power loss).
+    SyncFailed,
+
+    // The log file couldn't be closed cleanly; entries still in its buffer may be lost.
+    CloseFailed,
+
+    // The log file couldn't be renamed to a backup (e.g. another program holds it), so it grows on.
+    RotationFailed,
+
+    // Backup cleanup couldn't delete an old backup, or list the folder that holds them.
+    DeleteFailed,
+
+    // An unexpected exception (e.g. out of memory, or a formatter that throws) dropped an entry or the startup lines.
+    Exception,
+};
+
+// Number of error kinds, e.g. for a table indexed by kind. Update this when a kind is added or removed.
+constexpr std::size_t ErrorKindCount = 8;
+
+[[nodiscard]] constexpr std::string_view ErrorKind_ToString(ErrorKind errorKind) noexcept
+{
+    switch (errorKind)
+    {
+        case ErrorKind::OpenFailed:
+            return "OPEN_FAILED";
+
+        case ErrorKind::WriteFailed:
+            return "WRITE_FAILED";
+
+        case ErrorKind::FlushFailed:
+            return "FLUSH_FAILED";
+
+        case ErrorKind::SyncFailed:
+            return "SYNC_FAILED";
+
+        case ErrorKind::CloseFailed:
+            return "CLOSE_FAILED";
+
+        case ErrorKind::RotationFailed:
+            return "ROTATION_FAILED";
+
+        case ErrorKind::DeleteFailed:
+            return "DELETE_FAILED";
+
+        case ErrorKind::Exception:
+            return "EXCEPTION";
     }
 
     return "UNKNOWN";
@@ -213,6 +286,28 @@ enum class LineEnding
 
     return "UNKNOWN";
 }
+
+//---------------------------------------------------------------------------
+
+/////////////////////////////////////////////////////////////////////////////
+// TASWLogError struct
+//
+// One of a logger's internal failures, as reported to TASWLogConfig::OnError.
+/////////////////////////////////////////////////////////////////////////////
+struct TASWLogError
+{
+    ErrorKind Kind = ErrorKind::Exception;
+    std::string Message; // What failed, e.g. "Couldn't open the log file"
+    std::filesystem::path Path; // The file or folder involved, if any
+    std::error_code Code; // The operating system's or library's error, if known
+    // How many failures of this kind the logger left unreported since its previous report of this kind (see
+    // TASWLogConfig::ErrorReportInterval)
+    std::size_t SuppressedCount = 0;
+
+    // One line describing the failure: "<KIND>: <Message> '<Path>': <Code's message> (<N> more not reported)", leaving
+    // out the parts that are empty. Can throw (e.g. out of memory).
+    [[nodiscard]] std::string ToString() const;
+};
 
 //---------------------------------------------------------------------------
 

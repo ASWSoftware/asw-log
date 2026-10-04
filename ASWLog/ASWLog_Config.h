@@ -8,7 +8,7 @@ Source for the ASWLog config options.
 
 Requires C++ 20 or higher.
 
-Copyright 2026 Anthony S. West
+Copyright 2026 ASW Software
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -30,6 +30,7 @@ limitations under the License.
 #define ASWLog_ConfigH
 //---------------------------------------------------------------------------
 #include <chrono>
+#include <cstddef>
 #include <cstdint>
 #include <filesystem>
 #include <functional>
@@ -44,6 +45,19 @@ namespace ASWLog
 {
 
 class IASWLogFormatter; // See ASWLog_Formatter.h
+
+/////////////////////////////////////////////////////////////////////////////
+// TASWBackupInfo
+//
+// A backup a file logger made by rotating its log, as passed to TASWFileConfig::OnBackupCreated.
+/////////////////////////////////////////////////////////////////////////////
+struct TASWBackupInfo
+{
+    std::filesystem::path LogPath; // The log file that was rotated
+    std::filesystem::path BackupPath; // What it was renamed to: "<stem>.<reason>.<time>.bak"
+    std::string Reason; // "size", "daily", or the reason tag given to TASWFileLog::RotateLogFiles()
+};
+
 
 /////////////////////////////////////////////////////////////////////////////
 // TASWFileConfig
@@ -63,6 +77,13 @@ struct TASWFileConfig
 
     FlushMode Flush = FlushMode::EveryWrite;
     std::chrono::milliseconds FlushInterval{ 1000 }; // Used by FlushMode::Periodic
+    // An entry at or above this level (raw ones too) is flushed as soon as it is written, whatever Flush says, so it
+    // is in the file if the application crashes right after. Level::Off = only Flush decides.
+    Level FlushImmediatelyAtLevel = Level::Error;
+    // An entry at or above this level is flushed and then synced to disk (FlushFileBuffers on Windows, fsync on POSIX),
+    // so it survives a system crash or power loss too. A sync often takes milliseconds, so keep this level for rare
+    // entries. Level::Off = never synced.
+    Level SyncToDiskAtLevel = Level::Off;
 
     // Retry log entry options
     int OpenRetryCount = 5;
@@ -84,8 +105,26 @@ struct TASWFileConfig
     // backup is named for the day it holds.
     bool EnableDailyRolling   = false;
 
-    // --- Log Retention Options (applied automatically after a successful rotation) ---
-    std::chrono::hours RetentionMaxAge{ 0 }; // 0 = disabled. When > 0, backups for this log older than this age are deleted after each rotation.
+    // --- Backup Event ---
+    // Called once for each backup that rotation makes, e.g. to compress it, upload it or move it elsewhere. Called
+    // outside the logger's lock, on the thread whose call rotated the log (a logging call, Initialize(), Reconfigure()
+    // or RotateLogFiles()), so that call waits for it: hand slow work to another thread. Exceptions are swallowed. The
+    // backup cleanup below runs after it, so the backup still exists during the call. A backup it renames out of the
+    // "<stem>.<reason>.<time>.bak" form (e.g. to ".bak.gz") is the application's to clean up from then on. With
+    // AutoOpenClosePerWrite, only the process that rotated the shared log calls it. Not called if the rotation failed
+    // (see TASWLogConfig::OnError).
+    using BackupCallback = std::function<void (const TASWBackupInfo& backup)>;
+    BackupCallback OnBackupCreated;
+
+    // --- Backup Cleanup Options (applied after each successful rotation, after OnBackupCreated) ---
+    // Each rule deletes some of this log's backups: the files in its folder named "<stem>.<reason>.<time>.bak", as
+    // rotation names them (not those of another log whose name starts the same way). A backup is deleted if any rule
+    // says so. Backups are ordered by when their newest entry was written (their last write time).
+    std::chrono::hours RetentionMaxAge{ 0 }; // 0 = disabled. Deletes the backups older than this.
+    std::size_t MaxBackupFiles = 0; // 0 = unlimited. Keeps the newest this many backups, deleting the older ones.
+    // 0 = unlimited. Keeps the newest backups that together take at most this many bytes, deleting the older ones, and
+    // even the backup just made if it alone is larger, so set it above MaxFileSizeBytes.
+    std::uintmax_t MaxBackupTotalBytes = 0;
 
     // The folder that holds the log file
     [[nodiscard]] std::filesystem::path ResolveFolder() const
@@ -189,6 +228,21 @@ struct TASWLogConfig
     using LogCallback = std::function<void (const TASWLogRecord& record, std::string_view formattedLine)>;
     LogCallback OnLogEntry; // Optional hook invoked after a successful write (e.g. alerting/crash-reporting). Invoked outside the sink's internal lock; exceptions are swallowed.
     Level OnLogEntryMinimumLevel = Level::Error; // Independent threshold gating OnLogEntry (Off = never); unrelated to InitialMinimumLevel or the Force* APIs.
+
+    // --- Error Reporting Options ---
+    // Receives the logger's internal failures (e.g. the log file can't be opened, written, flushed or rotated), which
+    // would otherwise only show as missing entries. Empty: each report is written to stderr as one line (see
+    // TASWLogError::ToString()). Called outside the logger's lock, on a thread that was using the logger (e.g. logging,
+    // or calling Flush() or Close()), so it may log to another logger; exceptions are swallowed. Failures caused by the
+    // handler itself, on its own thread, aren't reported again, so a handler that logs to the failing logger doesn't
+    // recurse. A multi-log passes it on to its loggers, which report their own failures. A *Fmt format error isn't a
+    // failure: the entry is written with the error in its line (see RuntimeFormat()).
+    using ErrorCallback = std::function<void (const TASWLogError& error)>;
+    ErrorCallback OnError;
+    // Limits the reports, to OnError or to stderr alike: a logger reports each ErrorKind at most once per interval,
+    // and counts the failures it leaves out in its next report of that kind (TASWLogError::SuppressedCount). Measured
+    // on the logger's clock (see TASWLogBase::NowUTC()). 0 = report every failure.
+    std::chrono::milliseconds ErrorReportInterval{ std::chrono::minutes(1) };
 };
 
 } // namespace ASWLog

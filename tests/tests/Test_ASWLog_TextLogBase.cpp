@@ -4,7 +4,7 @@ Author: Anthony S. West - ASW Software
 
 See header for info.
 
-Copyright 2026 Anthony S. West
+Copyright 2026 ASW Software
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -35,6 +35,7 @@ limitations under the License.
 #include <string>
 #include <string_view>
 #include <thread>
+#include <utility>
 #include <vector>
 //---------------------------------------------------------------------------
 #include "ASWUnitTests_Registry.h"
@@ -73,6 +74,7 @@ public:
     bool AcceptsWrites = true; // Result of PrepareWriteUnlocked()
     bool FlushResult = true; // Result of FlushUnlocked()
     bool ReconfigureResult = true; // Result of ReconfigureUnlocked()
+    bool ReportsOnWrite = false; // WriteLineUnlocked() reports a WriteFailed failure, but writes the line
     bool ThrowsOnFlush = false;
     bool ThrowsOnWrite = false;
     // What ReconfigureUnlocked() saw: the banner of the config it replaced, and of the config stored by then
@@ -140,6 +142,14 @@ protected:
         if (ThrowsOnWrite)
             throw std::runtime_error("write failed");
 
+        if (ReportsOnWrite)
+        {
+            ASWLog::TASWLogError error;
+            error.Kind = ASWLog::ErrorKind::WriteFailed;
+            error.Message = "memory write failed";
+            ReportErrorUnlocked(std::move(error));
+        }
+
         m_Output.Lines.emplace_back(line);
         m_Output.EndsLine.push_back(endsLine);
     }
@@ -148,6 +158,22 @@ public:
     explicit TMemoryTextLog(TMemoryOutput& output)
         : m_Output(output)
     {
+    }
+
+    // True if m_Mutex isn't held, checked from another thread (try_lock on a mutex the calling thread holds is
+    // undefined)
+    bool IsMutexFree()
+    {
+        bool isFree = false;
+        std::thread checker([this, &isFree] {
+            if (m_Mutex.try_lock())
+            {
+                isFree = true;
+                m_Mutex.unlock();
+            }
+                    });
+        checker.join();
+        return isFree;
     }
 
     ~TMemoryTextLog() override
@@ -236,6 +262,7 @@ TTest_ASWLog_TextLogBase::TTest_ASWLog_TextLogBase()
     RegisterTest(&TTest_ASWLog_TextLogBase::Test_OnLogEntry_CallbackCanReconfigureTheLogger, "OnLogEntry_CallbackCanReconfigureTheLogger");
     RegisterTest(&TTest_ASWLog_TextLogBase::Test_Reconfigure_AppliesNewConfigButKeepsLevel, "Reconfigure_AppliesNewConfigButKeepsLevel");
     RegisterTest(&TTest_ASWLog_TextLogBase::Test_Reconfigure_IsSafeWhileOtherThreadsLog, "Reconfigure_IsSafeWhileOtherThreadsLog");
+    RegisterTest(&TTest_ASWLog_TextLogBase::Test_ReportErrorUnlocked_ReportsAfterTheLockIsReleased, "ReportErrorUnlocked_ReportsAfterTheLockIsReleased");
     RegisterTest(&TTest_ASWLog_TextLogBase::Test_SetEnabled_FalseWritesNothing, "SetEnabled_FalseWritesNothing");
 }
 //---------------------------------------------------------------------------
@@ -382,6 +409,11 @@ void TTest_ASWLog_TextLogBase::Test_Initialize_ThrowingFormatterStillInitializes
     auto config = MakeQuietConfig();
     config.Startup.Banner = "banner";
     config.Line.Formatter = std::make_shared<TThrowingFormatter>();
+    std::vector<std::string> reportedMessages;
+    config.ErrorReportInterval = std::chrono::milliseconds(0);
+    config.OnError = [&reportedMessages](const ASWLog::TASWLogError& error) {
+            reportedMessages.push_back(error.Message);
+        };
 
     TMemoryTextLog log(output);
     bool initialized = false;
@@ -405,6 +437,8 @@ void TTest_ASWLog_TextLogBase::Test_Initialize_ThrowingFormatterStillInitializes
     CheckTrue(log.IsOpen(), __func__, __LINE__, "The logger should be open");
     CheckTrue(output.Lines == std::vector<std::string>{ "raw" }, __func__, __LINE__, "Only the raw entry should be written");
     CheckEquals(2, output.AfterEntryCount, __func__, __LINE__, "AfterEntryUnlocked should still run after the startup lines, and after the raw entry");
+    CheckTrue(reportedMessages == std::vector<std::string>{ "Skipped the startup lines: format failed", "Dropped an entry: format failed" }, __func__, __LINE__,
+        "The skipped startup lines and the dropped entry should be reported");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_TextLogBase::Test_Initialize_WritesStartupLinesThenCallsAfterEntry()
@@ -569,7 +603,13 @@ void TTest_ASWLog_TextLogBase::Test_Log_ThrowingWriteDoesNotEscape()
     // Arrange
     TMemoryOutput output;
     TMemoryTextLog log(output);
-    CheckTrue(log.Initialize(MakeQuietConfig()), __func__, __LINE__, "Initialize should succeed");
+    std::vector<std::string> reportedMessages;
+    auto config = MakeQuietConfig();
+    config.ErrorReportInterval = std::chrono::milliseconds(0);
+    config.OnError = [&reportedMessages](const ASWLog::TASWLogError& error) {
+            reportedMessages.push_back(error.Message);
+        };
+    CheckTrue(log.Initialize(config), __func__, __LINE__, "Initialize should succeed");
 
     // Act
     bool threw = false;
@@ -589,6 +629,8 @@ void TTest_ASWLog_TextLogBase::Test_Log_ThrowingWriteDoesNotEscape()
     // Assert
     CheckFalse(threw, __func__, __LINE__, "An exception from WriteLineUnlocked should not reach the caller");
     CheckTrue(output.Lines == std::vector<std::string>{ "[INFO]: after_throw\n" }, __func__, __LINE__, "Logging should work after a failed write");
+    CheckTrue(reportedMessages == std::vector<std::string>{ "Dropped an entry: write failed", "Dropped an entry: write failed" }, __func__, __LINE__,
+        "Each dropped entry should be reported");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_TextLogBase::Test_LogRaw_WritesMessageAsIs()
@@ -750,6 +792,34 @@ void TTest_ASWLog_TextLogBase::Test_Reconfigure_IsSafeWhileOtherThreadsLog()
     CheckEquals(0, failedReconfigureCount, __func__, __LINE__, "Every Reconfigure() should succeed");
     CheckTrue(callbackCount->load() <= ThreadCount * EntriesPerThread, __func__, __LINE__,
         "OnLogEntry should be called at most once per entry");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_TextLogBase::Test_ReportErrorUnlocked_ReportsAfterTheLockIsReleased()
+{
+    // Arrange: WriteLineUnlocked() reports a failure while m_Mutex is held
+    TMemoryOutput output;
+    TMemoryTextLog log(output);
+    std::vector<std::string> reportedMessages;
+    std::vector<bool> isMutexFreeInHandler;
+    auto config = MakeQuietConfig();
+    config.ErrorReportInterval = std::chrono::milliseconds(0);
+    config.OnError = [&log, &reportedMessages, &isMutexFreeInHandler](const ASWLog::TASWLogError& error) {
+            reportedMessages.push_back(error.Message);
+            isMutexFreeInHandler.push_back(log.IsMutexFree());
+        };
+    CheckTrue(log.Initialize(config), __func__, __LINE__, "Initialize should succeed");
+    log.ReportsOnWrite = true;
+
+    // Act
+    log.LogInfo("first");
+    log.LogRaw(ASWLog::Level::Info, "second");
+
+    // Assert
+    CheckTrue(reportedMessages == std::vector<std::string>{ "memory write failed", "memory write failed" }, __func__, __LINE__,
+        "Each failure reported by a hook should reach OnError");
+    CheckTrue(isMutexFreeInHandler == std::vector<bool>{ true, true }, __func__, __LINE__,
+        "OnError should be called after the logger's lock is released, so it can use the logger");
+    CheckTrue(output.Lines == std::vector<std::string>{ "[INFO]: first\n", "second" }, __func__, __LINE__, "The entries should still be written");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_TextLogBase::Test_SetEnabled_FalseWritesNothing()

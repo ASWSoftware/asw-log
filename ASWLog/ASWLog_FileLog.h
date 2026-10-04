@@ -6,7 +6,7 @@ A light-weight logging tool.
 
 Requires C++ 20 or higher.
 
-Copyright 2026 Anthony S. West
+Copyright 2026 ASW Software
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -36,6 +36,7 @@ limitations under the License.
 #include <string_view>
 #include <streambuf>
 #include <string>
+#include <system_error>
 //---------------------------------------------------------------------------
 #include "ASWLog_TextLogBase.h"
 //---------------------------------------------------------------------------
@@ -69,6 +70,9 @@ public:
     // read through the file's path (e.g. std::filesystem::file_size) isn't updated while the file is open.
     std::uintmax_t GetSize() const noexcept;
     bool IsOpen() const noexcept;
+    // Asks the system to write the file's data out to the disk (FlushFileBuffers on Windows, fsync on POSIX). Only
+    // what has been flushed out of this buffer is synced, so call pubsync() first. Sets 'errorCode' if it fails.
+    bool SyncToDisk(std::error_code& errorCode);
     bool Write(std::string_view data);
 };
 
@@ -92,8 +96,9 @@ public:
     bool Open(const std::filesystem::path& path);
     bool Close();
     bool IsOpen() const noexcept;
-    void Flush();
+    bool Flush();
     std::uintmax_t GetSize() const noexcept; // See TASWFileStreamBuf::GetSize()
+    bool SyncToDisk(std::error_code& errorCode); // See TASWFileStreamBuf::SyncToDisk()
     bool Write(std::string_view data);
 };
 
@@ -118,9 +123,14 @@ private:
 
 private:
     void CloseFileUnlocked(); // Closes the file but, unlike CloseUnlocked(), leaves the logger initialized
-    void MaybeFlush(bool isNewLine);
+    void DeleteOldBackups(const TASWLogConfig& config); // Runs without m_Mutex
+    void MaybeFlush(Level level, bool isNewLine);
+    // Report a file failure: without m_Mutex (see ReportError()), or holding it (see ReportErrorUnlocked()). Never throw.
+    void ReportFileError(const TASWLogConfig& config, ErrorKind kind, std::string_view message, const std::filesystem::path& path, std::error_code errorCode) noexcept;
+    void ReportFileErrorUnlocked(ErrorKind kind, std::string_view message, const std::filesystem::path& path, std::error_code errorCode) noexcept;
     void RotateDailyLogFromEarlierDayUnlocked();
     bool RotateLogFilesUnlocked(std::string_view reasonTag, std::string_view timeLabel);
+    void SyncToDiskUnlocked();
 
 protected: // TASWTextLogBase hooks
     void AfterEntryUnlocked() override;
@@ -157,7 +167,8 @@ public:
     ~TASWFileLog();
 
     // Renames the log file to "<stem>.<reasonTag>.<YYYY-MM-DD_HHMMSS_mmm>.bak" (UTC), adding "_1", "_2", ... to the
-    // time if that name is taken, so an existing backup is never replaced. Then reopens the log if it was open.
+    // time if that name is taken, so an existing backup is never replaced. Then reopens the log if it was open. A
+    // 'reasonTag' that contains '.' makes a backup that TASWFileConfig's backup cleanup doesn't recognize, so it is kept.
     bool RotateLogFiles(std::string_view reasonTag = "manual");
 };
 
