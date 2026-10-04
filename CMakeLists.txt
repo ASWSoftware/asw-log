@@ -53,6 +53,11 @@ if(WIN32)
     target_link_libraries(ASWLog PRIVATE psapi)
 endif()
 
+# TASWTextLogBase runs a std::thread (e.g. for FlushMode::Periodic). Public, since the thread is part of the class
+# layout in the headers.
+find_package(Threads REQUIRED)
+target_link_libraries(ASWLog PUBLIC Threads::Threads)
+
 if(ASWLOG_WARNINGS)
     if(MSVC)
         target_compile_options(ASWLog PRIVATE /W4)

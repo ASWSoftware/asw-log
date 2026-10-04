@@ -10,6 +10,25 @@ see [0.26.1](#0261---2026-09-17) for the initial versioned baseline.
 
 ## [Unreleased]
 
+### Fixed
+
+- `FlushMode::Periodic` now flushes on a timer: a thread of the file
+  logger's own flushes the file every `File.FlushInterval`, so the last
+  entries reach the file within that time even when nothing more is logged.
+  They used to stay in the buffer until the next entry came after the
+  interval, or until the file was closed. Writing an entry no longer reads
+  the clock in this mode. The thread runs only while a logger in Periodic
+  mode is initialized (not with `AutoOpenClosePerWrite`, which flushes by
+  closing the file after each entry); `Reconfigure()` starts or stops it or
+  applies a new interval at once, and `Close()`, the destructor and the
+  exit handler of `GetInstance()` stop it without waiting for the interval.
+  A failed flush on that thread goes to `OnError` on that thread. A
+  `FlushInterval` of 0 or less flushes every entry, as before. ASWLog now
+  needs the threads library: the CMake target `ASWLog::ASWLog` links
+  `Threads::Threads`; other Linux builds may need `-pthread`. A logger
+  derived from `TASWTextLogBase` can use the same thread through the new
+  protected hooks `GetWorkerIntervalUnlocked()` and `OnWorkerWakeUnlocked()`.
+
 ## [0.66.0] - 2026-10-04
 
 ### Added

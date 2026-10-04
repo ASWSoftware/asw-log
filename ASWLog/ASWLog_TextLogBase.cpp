@@ -25,6 +25,7 @@ limitations under the License.
 #include "ASWLog_TextLogBase.h"
 //---------------------------------------------------------------------------
 // System includes here
+#include <algorithm>
 #include <format>
 #include <utility>
 //---------------------------------------------------------------------------
@@ -39,6 +40,14 @@ namespace ASWLog
 /////////////////////////////////////////////////////////////////////////////
 // TASWTextLogBase
 /////////////////////////////////////////////////////////////////////////////
+
+//---------------------------------------------------------------------------
+TASWTextLogBase::~TASWTextLogBase()
+{
+    // Normally Finalize() has stopped it. Otherwise the derived logger is already destroyed, so the worker must not wake
+    // again.
+    UpdateWorker(true);
+}
 
 //---------------------------------------------------------------------------
 void TASWTextLogBase::AfterEntryUnlocked()
@@ -59,6 +68,7 @@ bool TASWTextLogBase::Close() noexcept
 {
     try
     {
+        TWorkerUpdater workerUpdater(*this);
         TDeferredWorkRunner deferredWorkRunner(*this);
         std::lock_guard<std::mutex> lock(m_Mutex);
         return CloseUnlocked();
@@ -107,6 +117,9 @@ void TASWTextLogBase::Finalize() noexcept
     // Called from the destructors, where an exception would terminate the program
     try
     {
+        // Stops the worker, which must not outlive the derived logger, also if the logger is still initialized because
+        // an exception skipped CloseUnlocked()
+        TWorkerUpdater workerUpdater(*this, true);
         TDeferredWorkRunner deferredWorkRunner(*this);
         std::lock_guard<std::mutex> lock(m_Mutex);
         if (!m_IsInitialized.load(std::memory_order_acquire))
@@ -148,10 +161,17 @@ bool TASWTextLogBase::Flush() noexcept
 }
 
 //---------------------------------------------------------------------------
+std::chrono::milliseconds TASWTextLogBase::GetWorkerIntervalUnlocked() const
+{
+    return std::chrono::milliseconds(0);
+}
+
+//---------------------------------------------------------------------------
 bool TASWTextLogBase::Initialize(const TASWLogConfig& config) noexcept
 {
     try
     {
+        TWorkerUpdater workerUpdater(*this);
         TDeferredWorkRunner deferredWorkRunner(*this);
         std::shared_ptr<const TASWLogConfig> previousConfig; // Released after the lock (see SetConfig())
         std::lock_guard<std::mutex> lock(m_Mutex);
@@ -201,10 +221,16 @@ bool TASWTextLogBase::IsOpen() const noexcept
 }
 
 //---------------------------------------------------------------------------
+void TASWTextLogBase::OnWorkerWakeUnlocked()
+{
+}
+
+//---------------------------------------------------------------------------
 bool TASWTextLogBase::Open() noexcept
 {
     try
     {
+        TWorkerUpdater workerUpdater(*this);
         TDeferredWorkRunner deferredWorkRunner(*this);
         std::lock_guard<std::mutex> lock(m_Mutex);
         return OpenUnlocked();
@@ -226,6 +252,7 @@ bool TASWTextLogBase::Reconfigure(const TASWLogConfig& config) noexcept
 {
     try
     {
+        TWorkerUpdater workerUpdater(*this);
         TDeferredWorkRunner deferredWorkRunner(*this);
         std::shared_ptr<const TASWLogConfig> previousConfig; // Released after the lock (see SetConfig())
         std::lock_guard<std::mutex> lock(m_Mutex);
@@ -308,6 +335,124 @@ void TASWTextLogBase::RunDeferredWork() noexcept
         }
         catch (...)
         {
+        }
+    }
+}
+
+//---------------------------------------------------------------------------
+/*
+    TASWTextLogBase::RunWorker
+
+    The worker thread: calls OnWorkerWakeUnlocked() under m_Mutex every GetWorkerIntervalUnlocked(), until
+    UpdateWorker() changes m_WorkerGeneration from 'generation'. The interval is read again before each wait, and
+    UpdateWorker() wakes the worker to read it after a Reconfigure(). Each wake ends like a public method: the lock is
+    released, then the work queued meanwhile (e.g. the report of a failed flush) runs, on this thread.
+*/
+void TASWTextLogBase::RunWorker(std::uint64_t generation) noexcept
+{
+    // Waits at most this long at a time, so that a very long interval can't overflow the clock arithmetic
+    constexpr std::chrono::milliseconds MaxWait = std::chrono::hours(1);
+
+    auto lastWake = std::chrono::steady_clock::now();
+    for (;;)
+    {
+        try
+        {
+            TDeferredWorkRunner deferredWorkRunner(*this);
+            std::unique_lock<std::mutex> lock(m_Mutex);
+            for (;;)
+            {
+                if (m_WorkerGeneration != generation)
+                    return;
+
+                const auto interval = GetWorkerIntervalUnlocked();
+                const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - lastWake);
+                if (interval.count() <= 0)
+                    m_WorkerWakeup.wait(lock); // Until stopped, or woken to read a new interval
+                else if (elapsed < interval)
+                    m_WorkerWakeup.wait_for(lock, std::min(interval - elapsed, MaxWait));
+                else
+                    break;
+            }
+
+            lastWake = std::chrono::steady_clock::now();
+            OnWorkerWakeUnlocked();
+        }
+        catch (...)
+        {
+            ReportCurrentException("Couldn't do the worker thread's work");
+        }
+    }
+}
+
+//---------------------------------------------------------------------------
+/*
+    TASWTextLogBase::UpdateWorker
+
+    Starts, wakes or stops the worker thread, as the logger's state says: it runs while the logger is initialized and
+    GetWorkerIntervalUnlocked() is above 0, unless 'mustStop' (Finalize() and the destructor). Called without m_Mutex,
+    after the method that changed the state has released it.
+
+    A stopped worker is joined after m_WorkerMutex is released, since it may be running work that calls this logger
+    (e.g. an OnError handler that calls Reconfigure(), which comes here and takes m_WorkerMutex). Called on the worker
+    thread itself (from such work), it can't join it: it only tells it to stop, and the next call from another thread
+    joins it, at the latest Finalize().
+*/
+void TASWTextLogBase::UpdateWorker(bool mustStop) noexcept
+{
+    std::thread stoppedWorker; // Joined at the end, without the locks
+    try
+    {
+        std::lock_guard<std::mutex> workerLock(m_WorkerMutex);
+        const bool isOnWorker = m_Worker.get_id() == std::this_thread::get_id();
+        bool isWanted = false;
+        std::uint64_t generation = 0;
+        {
+            std::lock_guard<std::mutex> lock(m_Mutex);
+            isWanted = !mustStop && m_IsInitialized.load(std::memory_order_acquire) && GetWorkerIntervalUnlocked().count() > 0;
+
+            // Keep the worker, and wake it to read its interval again. On the worker thread, also if an earlier call on
+            // this thread stopped it: it checks that only once back in its loop, so it hasn't ended yet.
+            const bool isRunning = m_Worker.joinable() && m_WorkerGeneration == m_WorkerStartGeneration;
+            if (isWanted && (isRunning || isOnWorker))
+            {
+                m_WorkerGeneration = m_WorkerStartGeneration;
+                m_WorkerWakeup.notify_all();
+                return;
+            }
+
+            if (!isWanted && !m_Worker.joinable())
+                return;
+
+            // Stops the worker, if there is one: it ends when it next checks its generation
+            generation = ++m_WorkerGeneration;
+            m_WorkerWakeup.notify_all();
+        }
+
+        if (isOnWorker)
+            return;
+
+        stoppedWorker = std::move(m_Worker);
+        if (isWanted)
+        {
+            m_Worker = std::thread(&TASWTextLogBase::RunWorker, this, generation);
+            m_WorkerStartGeneration = generation;
+        }
+    }
+    catch (...)
+    {
+        ReportCurrentException("Couldn't start the worker thread");
+    }
+
+    if (stoppedWorker.joinable())
+    {
+        try
+        {
+            stoppedWorker.join();
+        }
+        catch (...)
+        {
+            stoppedWorker.detach(); // Rather than terminate the program when it is destroyed
         }
     }
 }

@@ -41,8 +41,8 @@ Add the source in `ASWLog` to your C++ project.
 ## CMake
 
 The repository's root `CMakeLists.txt` defines the static library target `ASWLog::ASWLog`. Linking to it adds the
-`ASWLog` include folder, C++20, and the system libraries the logger needs (`psapi` on Windows). Add it from a copy of
-the repository, such as a git submodule:
+`ASWLog` include folder, C++20, and the system libraries the logger needs (the threads library, and `psapi` on
+Windows). Add it from a copy of the repository, such as a git submodule:
 
 ```
 add_subdirectory(third_party/asw-log)

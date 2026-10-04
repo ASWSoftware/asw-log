@@ -117,7 +117,6 @@ private:
     // m_Mutex (see TASWTextLogBase) protects all of these
     TASWFileStream m_FileStream;
     std::string m_LastLogDateStr; // Stores YYYY-MM-DD state to detect structural calendar shifts
-    std::chrono::steady_clock::time_point m_LastFlushTime{};
     std::chrono::system_clock::time_point m_LastOpenFailure{}; // NowUTC() when opening the file last failed
     std::chrono::system_clock::time_point m_LastRotationFailure{}; // NowUTC() when a rotation last failed
 
@@ -137,7 +136,9 @@ protected: // TASWTextLogBase hooks
     bool CloseUnlocked() override;
     bool EnsureReadyUnlocked() override;
     bool FlushUnlocked() override;
+    std::chrono::milliseconds GetWorkerIntervalUnlocked() const override; // FlushMode::Periodic
     bool InitializeUnlocked() override;
+    void OnWorkerWakeUnlocked() override;
     bool OpenUnlocked() override;
     bool PrepareWriteUnlocked(std::chrono::system_clock::time_point now) override;
     bool ReconfigureUnlocked(const TASWLogConfig& previous) override;
@@ -156,10 +157,12 @@ public: // Static methods
     static std::size_t DeleteOldLogs(const std::filesystem::path& logDir, std::string_view pattern, std::chrono::hours maxAge);
     // Singleton support for the common static instance. The instance is never destroyed, so it is safe to use until
     // the process ends, e.g. from another static object's destructor or a thread still running at exit. At exit it is
-    // finalized (shutdown entry, flush, close) in static destruction order: a static object constructed after the
-    // first GetInstance() call can still log from its destructor, while one constructed before it is destroyed after
-    // the finalize, so what it logs is dropped. Leak checkers that list memory still allocated at exit (e.g. the MSVC
-    // debug heap's report) include the instance.
+    // finalized (shutdown entry, flush, close, and its FlushMode::Periodic thread stopped) in static destruction order:
+    // a static object constructed after the first GetInstance() call can still log from its destructor, while one
+    // constructed before it is destroyed after the finalize, so what it logs is dropped. Leak checkers that list memory
+    // still allocated at exit (e.g. the MSVC debug heap's report) include the instance. In a Windows DLL (or package)
+    // that is unloaded before the process ends, Close() it before unloading when using FlushMode::Periodic: stopping a
+    // thread while the DLL is being unloaded can deadlock.
     static TASWFileLog& GetInstance();
 
 public:

@@ -29,11 +29,14 @@ limitations under the License.
 //---------------------------------------------------------------------------
 #include <atomic>
 #include <chrono>
+#include <condition_variable>
+#include <cstdint>
 #include <functional>
 #include <mutex>
 #include <source_location>
 #include <string>
 #include <string_view>
+#include <thread>
 #include <vector>
 //---------------------------------------------------------------------------
 #include "ASWLog_Base.h"
@@ -56,6 +59,13 @@ namespace ASWLog
 // reports a failure with ReportErrorUnlocked(). The derived logger's destructor must call Finalize(), which writes the
 // shutdown line and closes the output.
 //
+// A derived logger that needs work done between entries (e.g. a file logger flushing every FlushInterval) returns how
+// often from GetWorkerIntervalUnlocked(): this class then runs a thread of the logger's own that calls
+// OnWorkerWakeUnlocked() that often, while the logger is initialized. Initialize(), Reconfigure(), Open(), Close() and
+// Finalize() start, wake or stop it as the interval says, after releasing m_Mutex; a thread they stop has ended by the
+// time they return. A logger derived from another one (e.g. from TASWFileLog) that overrides a hook the worker calls
+// must call Finalize() in its own destructor too, so that the worker has stopped before its overrides are destroyed.
+//
 // To change the line layout, assign a formatter to TASWLogConfig::Line.Formatter (see IASWLogFormatter).
 /////////////////////////////////////////////////////////////////////////////
 class TASWTextLogBase : public TASWLogBase
@@ -73,10 +83,46 @@ private:
     std::vector<std::function<void()> > m_DeferredWork;
     std::atomic<bool> m_HasDeferredWork{ false };
 
+    // The worker thread (see GetWorkerIntervalUnlocked()). m_WorkerMutex guards m_Worker and m_WorkerStartGeneration,
+    // and is held while UpdateWorker() starts or stops it; m_Mutex guards m_WorkerGeneration, which UpdateWorker()
+    // changes to stop the worker, and m_WorkerWakeup waits with it.
+    std::mutex m_WorkerMutex;
+    std::thread m_Worker;
+    std::uint64_t m_WorkerStartGeneration = 0; // The generation m_Worker was started with: it runs while they match
+    std::uint64_t m_WorkerGeneration = 0;
+    std::condition_variable m_WorkerWakeup; // Wakes the worker early, to stop or to read its interval again
+
+private:
+    // Calls UpdateWorker() when destroyed. Declare it before the TDeferredWorkRunner in a public method that can change
+    // whether the worker should run, so that it runs after the lock is released.
+    class TWorkerUpdater
+    {
+    private:
+        TASWTextLogBase& m_Log;
+        bool m_MustStop;
+
+    public:
+        explicit TWorkerUpdater(TASWTextLogBase& log, bool mustStop = false) noexcept
+            : m_Log(log),
+              m_MustStop(mustStop)
+        {
+        }
+
+        ~TWorkerUpdater()
+        {
+            m_Log.UpdateWorker(m_MustStop);
+        }
+
+        TWorkerUpdater(const TWorkerUpdater&) = delete;
+        TWorkerUpdater& operator=(const TWorkerUpdater&) = delete;
+    };
+
 private:
     void AppendLineEnding(std::string& line) const;
     void DispatchLogCallback(const TASWLogConfig& config, const TASWLogRecord& record, std::string_view formattedLine) const noexcept;
     void RunDeferredWork() noexcept;
+    void RunWorker(std::uint64_t generation) noexcept;
+    void UpdateWorker(bool mustStop) noexcept;
     void WriteApplicationInfo();
     void WriteDriveInfo();
     void WriteInfoLine(std::string_view message, std::source_location loc = std::source_location::current());
@@ -131,17 +177,28 @@ protected:
     virtual bool EnsureReadyUnlocked();
 
     // Writes the shutdown line (if TASWLogConfig::Shutdown.WriteLine) and closes the output, if the logger is
-    // initialized. Never throws. Each logger calls it from its destructor, since the hooks can't be called from this
-    // class's destructor.
+    // initialized, then stops the worker thread. Never throws. Each logger calls it from its destructor, since the hooks
+    // can't be called from this class's destructor.
     void Finalize() noexcept;
 
     // Called by Flush(): pushes the written entries out of the output's buffers. Returns false if the output isn't open
     // or the flush failed.
     virtual bool FlushUnlocked() = 0;
 
+    // How often the worker thread calls OnWorkerWakeUnlocked(), from the current config; 0 or less = no worker thread.
+    // Read when Initialize(), Reconfigure(), Open(), Close() or Finalize() decide whether the worker should run (only
+    // while the logger is initialized), and by the worker before each wait, so a Reconfigure() that changes it takes
+    // effect at once. Returns 0 by default.
+    virtual std::chrono::milliseconds GetWorkerIntervalUnlocked() const;
+
     // Called by Initialize() after it has stored the config: prepares and opens the output. Returning false fails
     // Initialize().
     virtual bool InitializeUnlocked() = 0;
+
+    // Called on the worker thread, every GetWorkerIntervalUnlocked() (measured from the start of the previous call),
+    // e.g. to flush the output. Reports a failure with ReportErrorUnlocked(): the worker passes it on to OnError after
+    // the unlock, on its own thread. An exception is caught and reported. Does nothing by default.
+    virtual void OnWorkerWakeUnlocked();
 
     // Opens the output. Must set m_IsOpen and m_IsInitialized.
     virtual bool OpenUnlocked() = 0;
@@ -173,6 +230,9 @@ protected: // TASWLogBase hook
     void WriteRecord(const TASWLogRecord& record) final;
 
 public:
+    // Stops the worker thread if the derived logger's destructor didn't (see Finalize())
+    ~TASWTextLogBase() override;
+
     // A startup line that fails (e.g. its formatter throws) doesn't fail Initialize(): the rest are skipped
     bool Initialize(const TASWLogConfig& config) noexcept final;
     // Waits for an entry being written, then stores the config and calls ReconfigureUnlocked()

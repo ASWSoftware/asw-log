@@ -76,7 +76,10 @@ struct TASWFileConfig
     bool AutoOpenClosePerWrite = false;
 
     FlushMode Flush = FlushMode::EveryWrite;
-    std::chrono::milliseconds FlushInterval{ 1000 }; // Used by FlushMode::Periodic
+    // FlushMode::Periodic: a thread of the logger's own flushes the file this often, also when nothing more is logged.
+    // 0 or less = every entry is flushed, as with EveryWrite. Not used with AutoOpenClosePerWrite, which closes (and so
+    // flushes) the file after every entry.
+    std::chrono::milliseconds FlushInterval{ 1000 };
     // An entry at or above this level (raw ones too) is flushed as soon as it is written, whatever Flush says, so it
     // is in the file if the application crashes right after. Level::Off = only Flush decides.
     Level FlushImmediatelyAtLevel = Level::Error;
@@ -233,10 +236,11 @@ struct TASWLogConfig
     // Receives the logger's internal failures (e.g. the log file can't be opened, written, flushed or rotated), which
     // would otherwise only show as missing entries. Empty: each report is written to stderr as one line (see
     // TASWLogError::ToString()). Called outside the logger's lock, on a thread that was using the logger (e.g. logging,
-    // or calling Flush() or Close()), so it may log to another logger; exceptions are swallowed. Failures caused by the
-    // handler itself, on its own thread, aren't reported again, so a handler that logs to the failing logger doesn't
-    // recurse. A multi-log passes it on to its loggers, which report their own failures. A *Fmt format error isn't a
-    // failure: the entry is written with the error in its line (see RuntimeFormat()).
+    // or calling Flush() or Close()) or on the logger's own thread (e.g. a failed FlushMode::Periodic flush), so it may
+    // log to another logger; exceptions are swallowed. Failures caused by the handler itself, on its own thread, aren't
+    // reported again, so a handler that logs to the failing logger doesn't recurse. A multi-log passes it on to its
+    // loggers, which report their own failures. A *Fmt format error isn't a failure: the entry is written with the
+    // error in its line (see RuntimeFormat()).
     using ErrorCallback = std::function<void (const TASWLogError& error)>;
     ErrorCallback OnError;
     // Limits the reports, to OnError or to stderr alike: a logger reports each ErrorKind at most once per interval,

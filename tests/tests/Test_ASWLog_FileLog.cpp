@@ -24,6 +24,8 @@ limitations under the License.
 // Module header
 #include "Test_ASWLog_FileLog.h"
 //---------------------------------------------------------------------------
+#include <algorithm>
+#include <atomic>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
@@ -31,6 +33,7 @@ limitations under the License.
 #include <filesystem>
 #include <format>
 #include <fstream>
+#include <functional>
 #include <iterator>
 #include <stdexcept>
 #include <string>
@@ -63,6 +66,74 @@ namespace
 
 const auto GroupBaseTempDir = std::filesystem::temp_directory_path() / "aswlog_tests";
 const auto TestTempDir = GroupBaseTempDir / "test";
+
+// How long a test waits for something another thread does (e.g. the FlushMode::Periodic thread), before it fails
+constexpr std::chrono::milliseconds WaitTimeout = std::chrono::seconds(5);
+
+// A TASWFileLog whose next FailedFlushCount flushes fail, reporting ErrorKind::FlushFailed as a real failed flush does
+class TFailingFlushFileLog : public ASWLog::TASWFileLog
+{
+public:
+    int FailedFlushCount = 0; // Set before Initialize(); then guarded by m_Mutex
+
+protected:
+    bool FlushUnlocked() override
+    {
+        if (FailedFlushCount <= 0)
+            return TASWFileLog::FlushUnlocked();
+
+        --FailedFlushCount;
+        ASWLog::TASWLogError error;
+        error.Kind = ASWLog::ErrorKind::FlushFailed;
+        error.Message = "Test flush failure";
+        ReportErrorUnlocked(std::move(error));
+        return false;
+    }
+
+public:
+    // Stops the worker thread before this class is destroyed, since the thread calls FlushUnlocked() (see
+    // TASWTextLogBase::Finalize())
+    ~TFailingFlushFileLog() override
+    {
+        Finalize();
+    }
+};
+
+// A TASWFileLog that counts how often its worker thread (FlushMode::Periodic) reads its interval and wakes
+class TWakeCountingFileLog : public ASWLog::TASWFileLog
+{
+private:
+    const std::thread::id m_OwnerThreadId = std::this_thread::get_id();
+
+public:
+    // The worker reads its interval and starts waiting under m_Mutex, so once this is above 0, a Reconfigure() finds
+    // it waiting
+    mutable std::atomic<int> IntervalReadCountOnWorker{ 0 };
+    std::atomic<int> WakeCount{ 0 };
+
+protected:
+    std::chrono::milliseconds GetWorkerIntervalUnlocked() const override
+    {
+        if (std::this_thread::get_id() != m_OwnerThreadId)
+            ++IntervalReadCountOnWorker;
+
+        return TASWFileLog::GetWorkerIntervalUnlocked();
+    }
+
+    void OnWorkerWakeUnlocked() override
+    {
+        ++WakeCount;
+        TASWFileLog::OnWorkerWakeUnlocked();
+    }
+
+public:
+    // Stops the worker thread before this class is destroyed, since the thread calls OnWorkerWakeUnlocked() (see
+    // TASWTextLogBase::Finalize())
+    ~TWakeCountingFileLog() override
+    {
+        Finalize();
+    }
+};
 
 // A TASWFileLog whose clock the test sets, through TASWLogBase's NowUTC() hook
 class TFixedClockFileLog : public ASWLog::TASWFileLog
@@ -240,6 +311,34 @@ std::string ReadFileText(const std::filesystem::path& path)
     return std::string((std::istreambuf_iterator<char>(stream)), std::istreambuf_iterator<char>());
 }
 
+bool WaitUntil(const std::function<bool()>& condition); // See below
+
+// Reads 'path' until it contains 'text', for at most WaitTimeout. Returns what it read last.
+std::string WaitForFileText(const std::filesystem::path& path, std::string_view text)
+{
+    std::string contents;
+    WaitUntil([&] {
+                contents = ReadFileText(path);
+                return contents.find(text) != std::string::npos;
+            });
+    return contents;
+}
+
+// Checks 'condition' until it is true, for at most WaitTimeout. Returns false if it never was.
+bool WaitUntil(const std::function<bool()>& condition)
+{
+    const auto deadline = std::chrono::steady_clock::now() + WaitTimeout;
+    while (!condition())
+    {
+        if (std::chrono::steady_clock::now() >= deadline)
+            return false;
+
+        std::this_thread::sleep_for(std::chrono::milliseconds(2));
+    }
+
+    return true;
+}
+
 } // namespace
 
 //---------------------------------------------------------------------------
@@ -295,6 +394,15 @@ TTest_ASWLog_FileLog::TTest_ASWLog_FileLog()
     RegisterTest(&TTest_ASWLog_FileLog::Test_OnError_ReportsFullDisk, "OnError_ReportsFullDisk");
     RegisterTest(&TTest_ASWLog_FileLog::Test_OnLogEntry_FiresForQualifyingLevelsOnly, "OnLogEntry_FiresForQualifyingLevelsOnly");
     RegisterTest(&TTest_ASWLog_FileLog::Test_OnLogEntry_ReentrantCallbackDoesNotDeadlock, "OnLogEntry_ReentrantCallbackDoesNotDeadlock");
+    RegisterTest(&TTest_ASWLog_FileLog::Test_Periodic_CloseStopsAndOpenRestartsTheThread, "Periodic_CloseStopsAndOpenRestartsTheThread");
+    RegisterTest(&TTest_ASWLog_FileLog::Test_Periodic_CloseStopsTheThreadWithoutWaitingForTheInterval, "Periodic_CloseStopsTheThreadWithoutWaitingForTheInterval");
+    RegisterTest(&TTest_ASWLog_FileLog::Test_Periodic_ConcurrentLoggingAndReconfigure, "Periodic_ConcurrentLoggingAndReconfigure");
+    RegisterTest(&TTest_ASWLog_FileLog::Test_Periodic_DestructorStopsTheThreadWithoutWaitingForTheInterval, "Periodic_DestructorStopsTheThreadWithoutWaitingForTheInterval");
+    RegisterTest(&TTest_ASWLog_FileLog::Test_Periodic_ErrorHandlerCanCloseAndReopenOnTheThread, "Periodic_ErrorHandlerCanCloseAndReopenOnTheThread");
+    RegisterTest(&TTest_ASWLog_FileLog::Test_Periodic_FlushesAfterTheLastEntry, "Periodic_FlushesAfterTheLastEntry");
+    RegisterTest(&TTest_ASWLog_FileLog::Test_Periodic_ReconfigureAppliesANewInterval, "Periodic_ReconfigureAppliesANewInterval");
+    RegisterTest(&TTest_ASWLog_FileLog::Test_Periodic_ReconfigureStartsAndStopsTheThread, "Periodic_ReconfigureStartsAndStopsTheThread");
+    RegisterTest(&TTest_ASWLog_FileLog::Test_Periodic_ZeroIntervalFlushesEveryEntry, "Periodic_ZeroIntervalFlushesEveryEntry");
     RegisterTest(&TTest_ASWLog_FileLog::Test_Reconfigure_FlushesEntriesBufferedByPreviousMode, "Reconfigure_FlushesEntriesBufferedByPreviousMode");
     RegisterTest(&TTest_ASWLog_FileLog::Test_Reconfigure_MovesOutputToNewFile, "Reconfigure_MovesOutputToNewFile");
     RegisterTest(&TTest_ASWLog_FileLog::Test_Reconfigure_UnopenableFileFailsButLoggerStaysInitialized, "Reconfigure_UnopenableFileFailsButLoggerStaysInitialized");
@@ -2045,6 +2153,298 @@ void TTest_ASWLog_FileLog::Test_OnLogEntry_ReentrantCallbackDoesNotDeadlock()
     CheckTrue(initialized, "Initialize should succeed");
     CheckTrue(reentered, "Callback should have fired and re-entered the logger");
     CheckContains(contents, "reentrant_message", "Re-entrant Log call from the callback should complete and be written");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_FileLog::Test_Periodic_CloseStopsAndOpenRestartsTheThread()
+{
+    // Arrange
+    const auto logFile = TestTempDir / "periodic_reopen.log";
+    auto config = MakeRotationTestConfig(logFile);
+    config.File.Flush = ASWLog::FlushMode::Periodic;
+    config.File.FlushInterval = std::chrono::milliseconds(10);
+
+    TWakeCountingFileLog logger;
+    const bool initialized = logger.Initialize(config);
+
+    // Act: whether a stopped thread would still wake can only be seen by waiting several of its intervals
+    const bool closed = logger.Close();
+    const int wakeCountAfterClose = logger.WakeCount.load();
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    const int wakeCountWhileClosed = logger.WakeCount.load();
+    const bool opened = logger.Open();
+    logger.LogInfo("entry_after_reopen");
+    const auto contents = WaitForFileText(logFile, "entry_after_reopen");
+
+    // Assert
+    CheckTrue(initialized, "Initialize should succeed");
+    CheckTrue(closed, "Close should succeed");
+    CheckEquals(wakeCountAfterClose, wakeCountWhileClosed, "Close should stop the flush thread");
+    CheckTrue(opened, "Open should succeed");
+    CheckEquals(std::string(": entry_after_reopen\n"), contents, "Open should start the flush thread again");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_FileLog::Test_Periodic_CloseStopsTheThreadWithoutWaitingForTheInterval()
+{
+    // Arrange: an interval the test would never live to see
+    const auto logFile = TestTempDir / "periodic_close.log";
+    auto config = MakeRotationTestConfig(logFile);
+    config.File.Flush = ASWLog::FlushMode::Periodic;
+    config.File.FlushInterval = std::chrono::hours(1);
+
+    TWakeCountingFileLog logger;
+    const bool initialized = logger.Initialize(config);
+    const bool isWaiting = WaitUntil([&] {
+            return logger.IntervalReadCountOnWorker.load() > 0;
+        });
+
+    // Act
+    logger.LogInfo("buffered_entry");
+    const auto contentsBeforeClose = ReadFileText(logFile);
+    const auto closeStart = std::chrono::steady_clock::now();
+    const bool closed = logger.Close();
+    const auto closeTime = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - closeStart);
+    const auto contentsAfterClose = ReadFileText(logFile);
+
+    // Assert
+    CheckTrue(initialized, "Initialize should succeed");
+    CheckTrue(isWaiting, "The flush thread should have started waiting for its first interval");
+    CheckEquals(std::string(), contentsBeforeClose, "Writing an entry shouldn't flush it in Periodic mode");
+    CheckTrue(closed, "Close should succeed");
+    CheckLessThan(closeTime.count(), WaitTimeout.count(), "Close should stop the flush thread without waiting for its interval");
+    CheckEquals(std::string(": buffered_entry\n"), contentsAfterClose, "Close should flush the buffered entry");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_FileLog::Test_Periodic_ConcurrentLoggingAndReconfigure()
+{
+    // Arrange: a short interval, so the flush thread runs often while the other threads log and reconfigure
+    const auto logFile = TestTempDir / "periodic_concurrent.log";
+    auto config = MakeRotationTestConfig(logFile);
+    config.File.Flush = ASWLog::FlushMode::Periodic;
+    config.File.FlushInterval = std::chrono::milliseconds(1);
+
+    constexpr int ThreadCount = 4;
+    constexpr int MaxEntriesPerThread = 5000;
+
+    ASWLog::TASWFileLog logger;
+    const bool initialized = logger.Initialize(config);
+
+    // Act: while the threads log, switch between Periodic (with changing intervals) and Manual, which starts, wakes and
+    // stops the flush thread
+    std::atomic<bool> stopLogging{ false };
+    std::vector<int> entryCounts(ThreadCount, 0); // Each thread sets its own
+    std::vector<std::thread> threads;
+    for (int threadIndex = 0; threadIndex < ThreadCount; ++threadIndex)
+    {
+        threads.emplace_back([&logger, &stopLogging, &entryCounts, threadIndex] {
+                int entry = 0;
+                while (entry < MaxEntriesPerThread && !stopLogging.load())
+                    logger.LogInfo(std::format("t{}_{}", threadIndex, entry++));
+
+                entryCounts[threadIndex] = entry;
+            });
+    }
+
+    int failedReconfigures = 0;
+    for (int change = 0; change < 30; ++change)
+    {
+        config.File.Flush = change % 3 == 2 ? ASWLog::FlushMode::Manual : ASWLog::FlushMode::Periodic;
+        config.File.FlushInterval = std::chrono::milliseconds(1 + change % 3);
+        if (!logger.Reconfigure(config))
+            ++failedReconfigures;
+    }
+
+    stopLogging.store(true);
+    for (auto& thread : threads)
+        thread.join();
+
+    logger.Flush();
+    const auto contents = ReadFileText(logFile);
+    int entryCount = 0;
+    for (const auto count : entryCounts)
+        entryCount += count;
+
+    // Assert
+    Log(std::format("  Logged {} entries while reconfiguring", entryCount));
+    CheckTrue(initialized, "Initialize should succeed");
+    CheckEquals(0, failedReconfigures, "Every Reconfigure should succeed");
+    CheckEquals(entryCount, std::count(contents.begin(), contents.end(), '\n'), "Every entry should be written once");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_FileLog::Test_Periodic_DestructorStopsTheThreadWithoutWaitingForTheInterval()
+{
+    // Arrange
+    const auto logFile = TestTempDir / "periodic_destructor.log";
+    auto config = MakeRotationTestConfig(logFile);
+    config.File.Flush = ASWLog::FlushMode::Periodic;
+    config.File.FlushInterval = std::chrono::hours(1);
+
+    // Act
+    bool initialized = false;
+    bool isWaiting = false;
+    std::chrono::steady_clock::time_point destroyStart;
+    {
+        TWakeCountingFileLog logger;
+        initialized = logger.Initialize(config);
+        isWaiting = WaitUntil([&] {
+                return logger.IntervalReadCountOnWorker.load() > 0;
+            });
+        logger.LogInfo("buffered_entry");
+        destroyStart = std::chrono::steady_clock::now();
+    }
+    const auto destroyTime = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - destroyStart);
+    const auto contents = ReadFileText(logFile);
+
+    // Assert
+    CheckTrue(initialized, "Initialize should succeed");
+    CheckTrue(isWaiting, "The flush thread should have started waiting for its first interval");
+    CheckLessThan(destroyTime.count(), WaitTimeout.count(), "The destructor should stop the flush thread without waiting for its interval");
+    CheckEquals(std::string(": buffered_entry\n"), contents, "The destructor should flush the buffered entry");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_FileLog::Test_Periodic_ErrorHandlerCanCloseAndReopenOnTheThread()
+{
+    // Arrange: the flush thread's first flush fails, and its OnError call, on that thread, closes and reopens the
+    // logger, which stops and then keeps that same thread
+    const auto logFile = TestTempDir / "periodic_error_handler.log";
+    auto config = MakeRotationTestConfig(logFile);
+    config.File.Flush = ASWLog::FlushMode::Periodic;
+    config.File.FlushInterval = std::chrono::milliseconds(10);
+
+    std::atomic<bool> reported{ false };
+    ASWLog::ErrorKind reportedKind = ASWLog::ErrorKind::Exception;
+    std::thread::id reportThreadId;
+    bool closedInHandler = false;
+    bool reopenedInHandler = false;
+
+    TFailingFlushFileLog logger;
+    logger.FailedFlushCount = 1;
+    config.OnError = [&](const ASWLog::TASWLogError& error) {
+            reportedKind = error.Kind;
+            reportThreadId = std::this_thread::get_id();
+            closedInHandler = logger.Close();
+            reopenedInHandler = logger.Open();
+            reported.store(true);
+        };
+
+    const bool initialized = logger.Initialize(config);
+
+    // Act
+    const bool wasReported = WaitUntil([&] {
+            return reported.load();
+        });
+    logger.LogInfo("entry_after_reopen");
+    const auto contents = WaitForFileText(logFile, "entry_after_reopen");
+
+    // Assert
+    CheckTrue(initialized, "Initialize should succeed");
+    CheckTrue(wasReported, "The failed flush should be reported");
+    if (wasReported)
+    {
+        CheckEquals(static_cast<int>(ASWLog::ErrorKind::FlushFailed), static_cast<int>(reportedKind), "The report should be a FlushFailed");
+        CheckTrue(reportThreadId != std::this_thread::get_id(), "The flush thread should report its own failure");
+        CheckTrue(closedInHandler, "Close should succeed from OnError on the flush thread");
+        CheckTrue(reopenedInHandler, "Open should succeed from OnError on the flush thread");
+    }
+    CheckContains(contents, "entry_after_reopen", "After the reopen, the flush thread should flush again");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_FileLog::Test_Periodic_FlushesAfterTheLastEntry()
+{
+    // Arrange
+    const auto logFile = TestTempDir / "periodic_last_entry.log";
+    auto config = MakeRotationTestConfig(logFile);
+    config.File.Flush = ASWLog::FlushMode::Periodic;
+    config.File.FlushInterval = std::chrono::milliseconds(10);
+
+    ASWLog::TASWFileLog logger;
+    const bool initialized = logger.Initialize(config);
+
+    // Act: nothing more is logged after this entry
+    logger.LogInfo("last_entry");
+    const auto contents = WaitForFileText(logFile, "last_entry");
+
+    // Assert
+    CheckTrue(initialized, "Initialize should succeed");
+    CheckEquals(std::string(": last_entry\n"), contents, "The flush thread should flush the last entry within the interval");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_FileLog::Test_Periodic_ReconfigureAppliesANewInterval()
+{
+    // Arrange: the thread starts out waiting for an interval the test would never live to see
+    const auto logFile = TestTempDir / "periodic_new_interval.log";
+    auto config = MakeRotationTestConfig(logFile);
+    config.File.Flush = ASWLog::FlushMode::Periodic;
+    config.File.FlushInterval = std::chrono::hours(1);
+
+    TWakeCountingFileLog logger;
+    const bool initialized = logger.Initialize(config);
+    const bool isWaiting = WaitUntil([&] {
+            return logger.IntervalReadCountOnWorker.load() > 0;
+        });
+
+    // Act
+    config.File.FlushInterval = std::chrono::milliseconds(10);
+    const bool reconfigured = logger.Reconfigure(config);
+    logger.LogInfo("entry");
+    const auto contents = WaitForFileText(logFile, "entry");
+
+    // Assert
+    CheckTrue(initialized, "Initialize should succeed");
+    CheckTrue(isWaiting, "The flush thread should have started waiting for its first interval");
+    CheckTrue(reconfigured, "Reconfigure should succeed");
+    CheckEquals(std::string(": entry\n"), contents, "The flush thread should use the new interval at once");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_FileLog::Test_Periodic_ReconfigureStartsAndStopsTheThread()
+{
+    // Arrange
+    const auto logFile = TestTempDir / "periodic_reconfigure.log";
+    auto config = MakeRotationTestConfig(logFile);
+    config.File.Flush = ASWLog::FlushMode::Manual;
+    config.File.FlushInterval = std::chrono::milliseconds(10);
+
+    ASWLog::TASWFileLog logger;
+    const bool initialized = logger.Initialize(config);
+
+    // Act: start the thread, then stop it. Whether a stopped thread would still flush can only be seen by waiting
+    // several of its intervals.
+    config.File.Flush = ASWLog::FlushMode::Periodic;
+    const bool startedPeriodic = logger.Reconfigure(config);
+    logger.LogInfo("periodic_entry");
+    const auto contentsInPeriodic = WaitForFileText(logFile, "periodic_entry");
+
+    config.File.Flush = ASWLog::FlushMode::Manual;
+    const bool stoppedPeriodic = logger.Reconfigure(config);
+    logger.LogInfo("manual_entry");
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    const auto contentsInManual = ReadFileText(logFile);
+
+    // Assert
+    CheckTrue(initialized, "Initialize should succeed");
+    CheckTrue(startedPeriodic, "Reconfigure to Periodic should succeed");
+    CheckTrue(stoppedPeriodic, "Reconfigure to Manual should succeed");
+    CheckEquals(std::string(": periodic_entry\n"), contentsInPeriodic, "Reconfigure to Periodic should start the flush thread");
+    CheckEquals(std::string(": periodic_entry\n"), contentsInManual, "Reconfigure to Manual should stop the flush thread");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_FileLog::Test_Periodic_ZeroIntervalFlushesEveryEntry()
+{
+    // Arrange
+    const auto logFile = TestTempDir / "periodic_zero_interval.log";
+    auto config = MakeRotationTestConfig(logFile);
+    config.File.Flush = ASWLog::FlushMode::Periodic;
+    config.File.FlushInterval = std::chrono::milliseconds(0);
+
+    ASWLog::TASWFileLog logger;
+    const bool initialized = logger.Initialize(config);
+
+    // Act
+    logger.LogInfo("entry");
+    const auto contents = ReadFileText(logFile);
+
+    // Assert
+    CheckTrue(initialized, "Initialize should succeed");
+    CheckEquals(std::string(": entry\n"), contents, "With no interval, each entry should be flushed as it is written");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_FileLog::Test_Reconfigure_FlushesEntriesBufferedByPreviousMode()
