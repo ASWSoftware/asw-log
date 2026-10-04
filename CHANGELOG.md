@@ -10,6 +10,26 @@ see [0.26.1](#0261---2026-09-17) for the initial versioned baseline.
 
 ## [Unreleased]
 
+### Added
+
+- `TASWLogConfig::OnError`, which reports a logger's internal failures that
+  used to be silent: the log file couldn't be opened (or its folder
+  created), written, flushed, closed or rotated, retention couldn't delete
+  an old backup, a console logger's stdout or stderr failed, or an
+  unexpected exception (e.g. a throwing formatter) dropped an entry or the
+  startup lines. Each report is a `TASWLogError`: an `ErrorKind`, a message,
+  the path and `std::error_code` if any, and `SuppressedCount`. Without a
+  handler, each report is written to stderr as one line
+  (`TASWLogError::ToString()`). Reports, to `OnError` or to stderr, are
+  limited per logger and kind by the new `ErrorReportInterval` (default 1
+  minute; 0 = every failure), and each says how many of its kind were left
+  out since the previous one. Like `OnLogEntry`, `OnError` is called
+  outside the logger's lock and its exceptions are swallowed; a failure the
+  handler itself causes isn't reported again. A logger derived from
+  `TASWLogBase` reports with `ReportError()` (from a `TASWTextLogBase` hook,
+  `ReportErrorUnlocked()`). A `*Fmt` format error isn't reported: the entry
+  is still written, with the error in its line.
+
 ### Fixed
 
 - After a failed write (e.g. a full disk that later had room again), a file

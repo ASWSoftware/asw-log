@@ -13,6 +13,8 @@ ASWLog is a thread-safe light-weight C++ logging tool for Windows and Linux proj
   while other threads log.
 - Optional application and system memory, OS, drive, time, and command-line diagnostics.
 - Retry handling for temporary file access conflicts and Windows reader-sharing support.
+- Internal failures (e.g. a log file that can't be opened, written or rotated) are reported to a
+  `TASWLogConfig::OnError` handler, or to stderr, instead of silently dropping entries.
 - Wildcard-based cleanup for logs older than a specified age.
 - Extensible: assign your own formatter (`IASWLogFormatter`) to `TASWLogConfig::Line.Formatter` for your own line layout,
   or derive a new text logger from `TASWTextLogBase` and implement only its output.

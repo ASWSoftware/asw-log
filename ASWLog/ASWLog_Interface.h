@@ -56,8 +56,9 @@ struct TASWRuntimeFormat
 
 // Passes a format string that isn't a compile-time constant (e.g. one read from a file) to a *Fmt method, which checks
 // any other format string against its arguments at compile time. This one is checked when the entry is formatted
-// instead: a mismatch logs "[ASWLog format error: <reason>] <format string>" (see TASWFormatString::FormatMessage()).
-// Like C++26's std::runtime_format, it holds a view of 'format', so the string must outlive the *Fmt call.
+// instead: a mismatch logs "[ASWLog format error: <reason>] <format string>" (see TASWFormatString::FormatMessage()),
+// which isn't reported to TASWLogConfig::OnError, since the entry is still written. Like C++26's std::runtime_format,
+// it holds a view of 'format', so the string must outlive the *Fmt call.
 [[nodiscard]] constexpr TASWRuntimeFormat RuntimeFormat(std::string_view format) noexcept
 {
     return TASWRuntimeFormat{ format };
@@ -140,7 +141,8 @@ private:
 //
 // Logging never throws into the application: every method except
 // GetFullVersionStr() is noexcept, and failures are reported by a false
-// result or by dropping the entry.
+// result or by dropping the entry. A logger deriving from TASWLogBase also
+// reports its internal failures to TASWLogConfig::OnError.
 /////////////////////////////////////////////////////////////////////////////
 class IASWLog
 {

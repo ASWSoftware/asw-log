@@ -50,6 +50,7 @@ private: // Test methods
     void Test_FailedReopen_RetriesAndResumesLogging();
     void Test_FailedReopen_ZeroResetDelayRetriesOnNextWrite();
     void Test_FailedSizeRotation_WaitsBeforeRetrying();
+    void Test_FileStream_FlushWorksAfterFailedWrite();
     void Test_Flush_WritesBufferedManualModeEntries();
     void Test_GetInstance_ReturnsSameInstance();
     void Test_InitializeAndLogInfo_WritesText();
@@ -62,6 +63,10 @@ private: // Test methods
     void Test_LogRawOptions();
     void Test_MultiThreadedStress_WritesAllMessagesToDisk();
     void Test_MultiThreadedStress_WritesAllMessagesToDisk_OpenClose();
+    void Test_OnError_ReportsFailedDelete();
+    void Test_OnError_ReportsFailedOpen();
+    void Test_OnError_ReportsFailedRotationAndReopen();
+    void Test_OnError_ReportsFullDisk();
     void Test_OnLogEntry_FiresForQualifyingLevelsOnly();
     void Test_OnLogEntry_ReentrantCallbackDoesNotDeadlock();
     void Test_Reconfigure_FlushesEntriesBufferedByPreviousMode();

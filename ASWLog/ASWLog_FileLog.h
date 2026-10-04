@@ -36,6 +36,7 @@ limitations under the License.
 #include <string_view>
 #include <streambuf>
 #include <string>
+#include <system_error>
 //---------------------------------------------------------------------------
 #include "ASWLog_TextLogBase.h"
 //---------------------------------------------------------------------------
@@ -119,6 +120,8 @@ private:
 private:
     void CloseFileUnlocked(); // Closes the file but, unlike CloseUnlocked(), leaves the logger initialized
     void MaybeFlush(bool isNewLine);
+    // Reports a file failure (see ReportErrorUnlocked()). Never throws.
+    void ReportFileErrorUnlocked(ErrorKind kind, std::string_view message, const std::filesystem::path& path, std::error_code errorCode) noexcept;
     void RotateDailyLogFromEarlierDayUnlocked();
     bool RotateLogFilesUnlocked(std::string_view reasonTag, std::string_view timeLabel);
 

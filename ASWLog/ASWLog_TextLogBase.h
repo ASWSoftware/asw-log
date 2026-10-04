@@ -31,8 +31,11 @@ limitations under the License.
 #include <chrono>
 #include <mutex>
 #include <source_location>
+#include <memory>
 #include <string>
 #include <string_view>
+#include <utility>
+#include <vector>
 //---------------------------------------------------------------------------
 #include "ASWLog_Base.h"
 #include "ASWLog_Formatter.h" // For TASWLineConfig::Formatter
@@ -50,8 +53,9 @@ namespace ASWLog
 // already checked the level and stamped the record.)
 //
 // A derived logger implements the protected hooks for its own output. Each hook whose name ends in "Unlocked" is
-// called with m_Mutex held, so it must not call a public method of this logger (which would lock it again). The
-// derived logger's destructor must call Finalize(), which writes the shutdown line and closes the output.
+// called with m_Mutex held, so it must not call a public method of this logger (which would lock it again), and
+// reports a failure with ReportErrorUnlocked(). The derived logger's destructor must call Finalize(), which writes the
+// shutdown line and closes the output.
 //
 // To change the line layout, assign a formatter to TASWLogConfig::Line.Formatter (see IASWLogFormatter).
 /////////////////////////////////////////////////////////////////////////////
@@ -65,8 +69,16 @@ protected:
     std::atomic<bool> m_IsOpen{ false };
 
 private:
+    // The failures reported while m_Mutex was held (see ReportErrorUnlocked()), each with the config in force then,
+    // waiting to be passed to ReportError() once it is released. Guarded by m_Mutex; m_HasPendingErrors lets a thread
+    // check for them without the lock.
+    std::vector<std::pair<std::shared_ptr<const TASWLogConfig>, TASWLogError> > m_PendingErrors;
+    std::atomic<bool> m_HasPendingErrors{ false };
+
+private:
     void AppendLineEnding(std::string& line) const;
     void DispatchLogCallback(const TASWLogConfig& config, const TASWLogRecord& record, std::string_view formattedLine) const noexcept;
+    void ReportPendingErrors() noexcept;
     void WriteApplicationInfo();
     void WriteDriveInfo();
     void WriteInfoLine(std::string_view message, std::source_location loc = std::source_location::current());
@@ -76,6 +88,30 @@ private:
     void WriteOSInfo();
     void WriteSystemMemoryInfo();
     void WriteTimeInfo();
+
+protected:
+    // Reports the failures found while m_Mutex was held (see ReportErrorUnlocked()). Declare it before the lock_guard
+    // in a method that takes m_Mutex, so that it is destroyed after the lock is released, also when the method returns
+    // early or throws.
+    class TPendingErrorReporter
+    {
+    private:
+        TASWTextLogBase& m_Log;
+
+    public:
+        explicit TPendingErrorReporter(TASWTextLogBase& log) noexcept
+            : m_Log(log)
+        {
+        }
+
+        ~TPendingErrorReporter()
+        {
+            m_Log.ReportPendingErrors();
+        }
+
+        TPendingErrorReporter(const TPendingErrorReporter&) = delete;
+        TPendingErrorReporter& operator=(const TPendingErrorReporter&) = delete;
+    };
 
 protected:
     // Called after each entry passed to Write(), and after Initialize() wrote the startup lines. Does nothing by
@@ -115,6 +151,14 @@ protected:
     // a file logger opens a new file. 'previous' is the config it replaced. Returning false fails Reconfigure(), but the
     // new config is kept. Returns true by default.
     virtual bool ReconfigureUnlocked(const TASWLogConfig& previous);
+
+    // ReportCurrentException() for code holding m_Mutex (see ReportErrorUnlocked()). Never throws.
+    void ReportCurrentExceptionUnlocked(std::string_view action) noexcept;
+
+    // Reports one of this logger's failures from code holding m_Mutex (e.g. a hook): queues it with the current config,
+    // and the method's TPendingErrorReporter passes it to ReportError() after the lock is released. A failure that
+    // can't be queued (out of memory) is dropped. Never throws.
+    void ReportErrorUnlocked(TASWLogError error) noexcept;
 
     // Writes a finished line. 'endsLine' is true if 'line' ends with the line ending (false for a Raw record).
     virtual void WriteLineUnlocked(Level level, std::string_view line, bool endsLine) = 0;

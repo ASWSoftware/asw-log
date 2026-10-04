@@ -24,8 +24,10 @@ limitations under the License.
 // Module header
 #include "Test_ASWLog_Types.h"
 //---------------------------------------------------------------------------
+#include <cstddef>
 #include <optional>
 #include <string>
+#include <system_error>
 //---------------------------------------------------------------------------
 #include "ASWUnitTests_Registry.h"
 //---------------------------------------------------------------------------
@@ -41,12 +43,14 @@ TTest_ASWLog_Types::TTest_ASWLog_Types()
 {
     RegisterTest(&TTest_ASWLog_Types::Test_ColorMode_FromString, "ColorMode_FromString");
     RegisterTest(&TTest_ASWLog_Types::Test_ColorMode_ToString, "ColorMode_ToString");
+    RegisterTest(&TTest_ASWLog_Types::Test_ErrorKind_ToString, "ErrorKind_ToString");
     RegisterTest(&TTest_ASWLog_Types::Test_FlushMode_FromString, "FlushMode_FromString");
     RegisterTest(&TTest_ASWLog_Types::Test_FlushMode_ToString, "FlushMode_ToString");
     RegisterTest(&TTest_ASWLog_Types::Test_Level_FromString, "Level_FromString");
     RegisterTest(&TTest_ASWLog_Types::Test_Level_ToString, "Level_ToString");
     RegisterTest(&TTest_ASWLog_Types::Test_LineEnding_FromString, "LineEnding_FromString");
     RegisterTest(&TTest_ASWLog_Types::Test_LineEnding_ToString, "LineEnding_ToString");
+    RegisterTest(&TTest_ASWLog_Types::Test_LogError_ToString, "LogError_ToString");
 }
 //---------------------------------------------------------------------------
 TTest_ASWLog_Types::~TTest_ASWLog_Types()
@@ -105,6 +109,19 @@ void TTest_ASWLog_Types::Test_ColorMode_ToString()
     CheckEquals(std::string("AUTO"), autoMode, __func__, __LINE__, "Auto should stringify as AUTO");
     CheckEquals(std::string("ALWAYS"), always, __func__, __LINE__, "Always should stringify as ALWAYS");
     CheckEquals(std::string("NEVER"), never, __func__, __LINE__, "Never should stringify as NEVER");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_Types::Test_ErrorKind_ToString()
+{
+    // Arrange / Act / Assert
+    CheckEquals(std::string("OPEN_FAILED"), std::string(ASWLog::ErrorKind_ToString(ASWLog::ErrorKind::OpenFailed)), __func__, __LINE__, "OpenFailed should stringify as OPEN_FAILED");
+    CheckEquals(std::string("WRITE_FAILED"), std::string(ASWLog::ErrorKind_ToString(ASWLog::ErrorKind::WriteFailed)), __func__, __LINE__, "WriteFailed should stringify as WRITE_FAILED");
+    CheckEquals(std::string("FLUSH_FAILED"), std::string(ASWLog::ErrorKind_ToString(ASWLog::ErrorKind::FlushFailed)), __func__, __LINE__, "FlushFailed should stringify as FLUSH_FAILED");
+    CheckEquals(std::string("CLOSE_FAILED"), std::string(ASWLog::ErrorKind_ToString(ASWLog::ErrorKind::CloseFailed)), __func__, __LINE__, "CloseFailed should stringify as CLOSE_FAILED");
+    CheckEquals(std::string("ROTATION_FAILED"), std::string(ASWLog::ErrorKind_ToString(ASWLog::ErrorKind::RotationFailed)), __func__, __LINE__, "RotationFailed should stringify as ROTATION_FAILED");
+    CheckEquals(std::string("DELETE_FAILED"), std::string(ASWLog::ErrorKind_ToString(ASWLog::ErrorKind::DeleteFailed)), __func__, __LINE__, "DeleteFailed should stringify as DELETE_FAILED");
+    CheckEquals(std::string("EXCEPTION"), std::string(ASWLog::ErrorKind_ToString(ASWLog::ErrorKind::Exception)), __func__, __LINE__, "Exception should stringify as EXCEPTION");
+    CheckEquals(static_cast<std::size_t>(ASWLog::ErrorKind::Exception) + 1, ASWLog::ErrorKindCount, __func__, __LINE__, "ErrorKindCount should count every kind (Exception is the last)");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_Types::Test_FlushMode_FromString()
@@ -239,6 +256,30 @@ void TTest_ASWLog_Types::Test_LineEnding_ToString()
     // Act & Assert
     CheckEquals(std::string("LF"), lf, __func__, __LINE__, "LF should stringify as LF");
     CheckEquals(std::string("CRLF"), crlf, __func__, __LINE__, "CRLF should stringify as CRLF");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_Types::Test_LogError_ToString()
+{
+    // Arrange
+    ASWLog::TASWLogError messageOnly;
+    messageOnly.Kind = ASWLog::ErrorKind::Exception;
+    messageOnly.Message = "Dropped an entry: out of memory";
+
+    const auto code = std::make_error_code(std::errc::no_such_file_or_directory);
+    ASWLog::TASWLogError everyPart;
+    everyPart.Kind = ASWLog::ErrorKind::OpenFailed;
+    everyPart.Message = "Couldn't open the log file";
+    everyPart.Path = "logs/app.log";
+    everyPart.Code = code;
+    everyPart.SuppressedCount = 3;
+
+    // Act
+    const auto messageOnlyText = messageOnly.ToString();
+    const auto everyPartText = everyPart.ToString();
+
+    // Assert
+    CheckEquals(std::string("EXCEPTION: Dropped an entry: out of memory"), messageOnlyText, __func__, __LINE__, "The empty parts should be left out");
+    CheckEquals("OPEN_FAILED: Couldn't open the log file 'logs/app.log': " + code.message() + " (3 more not reported)", everyPartText, __func__, __LINE__, "Every part should be in the line");
 }
 //---------------------------------------------------------------------------
 

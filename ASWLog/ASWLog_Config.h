@@ -189,6 +189,21 @@ struct TASWLogConfig
     using LogCallback = std::function<void (const TASWLogRecord& record, std::string_view formattedLine)>;
     LogCallback OnLogEntry; // Optional hook invoked after a successful write (e.g. alerting/crash-reporting). Invoked outside the sink's internal lock; exceptions are swallowed.
     Level OnLogEntryMinimumLevel = Level::Error; // Independent threshold gating OnLogEntry (Off = never); unrelated to InitialMinimumLevel or the Force* APIs.
+
+    // --- Error Reporting Options ---
+    // Receives the logger's internal failures (e.g. the log file can't be opened, written, flushed or rotated), which
+    // would otherwise only show as missing entries. Empty: each report is written to stderr as one line (see
+    // TASWLogError::ToString()). Called outside the logger's lock, on a thread that was using the logger (e.g. logging,
+    // or calling Flush() or Close()), so it may log to another logger; exceptions are swallowed. Failures caused by the
+    // handler itself, on its own thread, aren't reported again, so a handler that logs to the failing logger doesn't
+    // recurse. A multi-log passes it on to its loggers, which report their own failures. A *Fmt format error isn't a
+    // failure: the entry is written with the error in its line (see RuntimeFormat()).
+    using ErrorCallback = std::function<void (const TASWLogError& error)>;
+    ErrorCallback OnError;
+    // Limits the reports, to OnError or to stderr alike: a logger reports each ErrorKind at most once per interval,
+    // and counts the failures it leaves out in its next report of that kind (TASWLogError::SuppressedCount). Measured
+    // on the logger's clock (see TASWLogBase::NowUTC()). 0 = report every failure.
+    std::chrono::milliseconds ErrorReportInterval{ std::chrono::minutes(1) };
 };
 
 } // namespace ASWLog

@@ -79,6 +79,8 @@ void TTest_ASWLog_Config::Test_Defaults_MatchDocumentedValues()
     CheckTrue(config.InitialMinimumLevel == ASWLog::Level::Info, __func__, __LINE__, "InitialMinimumLevel should default to Info");
     CheckTrue(config.OnLogEntry == nullptr, __func__, __LINE__, "OnLogEntry should default to unset");
     CheckTrue(config.OnLogEntryMinimumLevel == ASWLog::Level::Error, __func__, __LINE__, "OnLogEntryMinimumLevel should default to Error");
+    CheckTrue(config.OnError == nullptr, __func__, __LINE__, "OnError should default to unset (reports go to stderr)");
+    CheckTrue(config.ErrorReportInterval == std::chrono::minutes(1), __func__, __LINE__, "ErrorReportInterval should default to 1 minute");
 
     // Assert: Line
     CheckTrue(config.Line.Formatter == nullptr, __func__, __LINE__, "Line.Formatter should default to unset (the built-in layout)");

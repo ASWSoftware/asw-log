@@ -26,9 +26,12 @@ limitations under the License.
 //---------------------------------------------------------------------------
 #include <algorithm>
 #include <cctype>
+#include <format>
 #include <iomanip>
 #include <iostream>
 #include <sstream>
+//---------------------------------------------------------------------------
+#include "ASWLog_Utils.h"
 //---------------------------------------------------------------------------
 
 namespace ASWLog
@@ -123,6 +126,31 @@ std::optional<LineEnding> LineEnding_FromString(std::string_view str) noexcept
         return LineEnding::CRLF;
 
     return std::nullopt; // Return empty optional if the string is not recognized
+}
+
+//---------------------------------------------------------------------------
+
+/////////////////////////////////////////////////////////////////////////////
+// TASWLogError
+/////////////////////////////////////////////////////////////////////////////
+
+//---------------------------------------------------------------------------
+std::string TASWLogError::ToString() const
+{
+    std::string text(ErrorKind_ToString(Kind));
+    text += ": ";
+    text += Message;
+
+    if (!Path.empty())
+        text += std::format(" '{}'", PathToUTF8String(Path));
+
+    if (Code)
+        text += std::format(": {}", Code.message());
+
+    if (SuppressedCount > 0)
+        text += std::format(" ({} more not reported)", SuppressedCount);
+
+    return text;
 }
 
 //---------------------------------------------------------------------------

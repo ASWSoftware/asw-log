@@ -51,6 +51,7 @@ private: // Test methods
     void Test_OnLogEntry_CallbackCanReconfigureTheLogger();
     void Test_Reconfigure_AppliesNewConfigButKeepsLevel();
     void Test_Reconfigure_IsSafeWhileOtherThreadsLog();
+    void Test_ReportErrorUnlocked_ReportsAfterTheLockIsReleased();
     void Test_SetEnabled_FalseWritesNothing();
 
 public:

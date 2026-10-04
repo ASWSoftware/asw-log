@@ -58,6 +58,7 @@ bool TASWTextLogBase::Close() noexcept
 {
     try
     {
+        TPendingErrorReporter errorReporter(*this);
         std::lock_guard<std::mutex> lock(m_Mutex);
         return CloseUnlocked();
     }
@@ -98,6 +99,7 @@ void TASWTextLogBase::Finalize() noexcept
     // Called from the destructors, where an exception would terminate the program
     try
     {
+        TPendingErrorReporter errorReporter(*this);
         std::lock_guard<std::mutex> lock(m_Mutex);
         if (!m_IsInitialized.load(std::memory_order_acquire))
             return;
@@ -118,6 +120,7 @@ void TASWTextLogBase::Finalize() noexcept
     }
     catch (...)
     {
+        ReportCurrentException("Couldn't shut down cleanly");
     }
 }
 
@@ -126,6 +129,7 @@ bool TASWTextLogBase::Flush() noexcept
 {
     try
     {
+        TPendingErrorReporter errorReporter(*this);
         std::lock_guard<std::mutex> lock(m_Mutex);
         return FlushUnlocked();
     }
@@ -140,6 +144,7 @@ bool TASWTextLogBase::Initialize(const TASWLogConfig& config) noexcept
 {
     try
     {
+        TPendingErrorReporter errorReporter(*this);
         std::shared_ptr<const TASWLogConfig> previousConfig; // Released after the lock (see SetConfig())
         std::lock_guard<std::mutex> lock(m_Mutex);
         if (m_IsInitialized.load(std::memory_order_acquire))
@@ -168,6 +173,7 @@ bool TASWTextLogBase::Initialize(const TASWLogConfig& config) noexcept
         }
         catch (...)
         {
+            ReportCurrentExceptionUnlocked("Skipped the startup lines");
         }
 
         AfterEntryUnlocked();
@@ -191,6 +197,7 @@ bool TASWTextLogBase::Open() noexcept
 {
     try
     {
+        TPendingErrorReporter errorReporter(*this);
         std::lock_guard<std::mutex> lock(m_Mutex);
         return OpenUnlocked();
     }
@@ -211,6 +218,7 @@ bool TASWTextLogBase::Reconfigure(const TASWLogConfig& config) noexcept
 {
     try
     {
+        TPendingErrorReporter errorReporter(*this);
         std::shared_ptr<const TASWLogConfig> previousConfig; // Released after the lock (see SetConfig())
         std::lock_guard<std::mutex> lock(m_Mutex);
         if (!m_IsInitialized.load(std::memory_order_acquire))
@@ -229,6 +237,62 @@ bool TASWTextLogBase::Reconfigure(const TASWLogConfig& config) noexcept
 bool TASWTextLogBase::ReconfigureUnlocked(const TASWLogConfig& /*previous*/)
 {
     return true;
+}
+
+//---------------------------------------------------------------------------
+void TASWTextLogBase::ReportCurrentExceptionUnlocked(std::string_view action) noexcept
+{
+    try
+    {
+        ReportErrorUnlocked(MakeExceptionError(action));
+    }
+    catch (...)
+    {
+    }
+}
+
+//---------------------------------------------------------------------------
+void TASWTextLogBase::ReportErrorUnlocked(TASWLogError error) noexcept
+{
+    try
+    {
+        m_PendingErrors.emplace_back(GetConfigSnapshotUnlocked(), std::move(error));
+        m_HasPendingErrors.store(true, std::memory_order_relaxed);
+    }
+    catch (...)
+    {
+    }
+}
+
+//---------------------------------------------------------------------------
+/*
+    TASWTextLogBase::ReportPendingErrors
+
+    Passes the failures queued by ReportErrorUnlocked() to ReportError(), after m_Mutex has been released (see
+    TPendingErrorReporter), so OnError may log again or call the logger. Any thread may report another thread's
+    failures: whichever takes them from the queue first.
+*/
+void TASWTextLogBase::ReportPendingErrors() noexcept
+{
+    // Checked without the lock, so a method that found no failure (the usual case) doesn't take m_Mutex again. A
+    // failure queued by this thread is always seen here.
+    if (!m_HasPendingErrors.load(std::memory_order_relaxed))
+        return;
+
+    decltype(m_PendingErrors) pendingErrors; // Released after the lock (see SetConfig())
+    try
+    {
+        std::lock_guard<std::mutex> lock(m_Mutex);
+        pendingErrors.swap(m_PendingErrors);
+        m_HasPendingErrors.store(false, std::memory_order_relaxed);
+    }
+    catch (...)
+    {
+        return;
+    }
+
+    for (auto& [config, error] : pendingErrors)
+        ReportError(*config, std::move(error));
 }
 
 //---------------------------------------------------------------------------
@@ -353,11 +417,12 @@ void TASWTextLogBase::WriteOSInfo()
     TASWTextLogBase::WriteRecord
 
     Writes one entry passed to Write(), then calls OnLogEntry if it's set and the record's level meets
-    OnLogEntryMinimumLevel. If writing throws (e.g. out of memory, or a formatter that throws), TASWLogBase::Write()
-    drops the entry.
+    OnLogEntryMinimumLevel, then reports the failures the hooks found meanwhile. If writing throws (e.g. out of memory,
+    or a formatter that throws), TASWLogBase::Write() drops and reports the entry.
 */
 void TASWTextLogBase::WriteRecord(const TASWLogRecord& record)
 {
+    TPendingErrorReporter errorReporter(*this);
     std::string writtenLine;
     // Set only if OnLogEntry is called: the callback runs outside the lock, from the config the entry was written with
     std::shared_ptr<const TASWLogConfig> callbackConfig;

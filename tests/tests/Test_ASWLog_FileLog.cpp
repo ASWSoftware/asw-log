@@ -153,6 +153,12 @@ bool CanBlockFiles()
 #endif
 }
 
+// An OnError handler for the tests that cause failures on purpose, so their reports don't go to stderr (the OnError
+// tests check the reports)
+void IgnoreError(const ASWLog::TASWLogError& /*error*/)
+{
+}
+
 // A config for the rotation tests, with no line metadata or startup info, so each line is just its message
 ASWLog::TASWLogConfig MakeRotationTestConfig(const std::filesystem::path& logFile)
 {
@@ -208,6 +214,7 @@ TTest_ASWLog_FileLog::TTest_ASWLog_FileLog()
     RegisterTest(&TTest_ASWLog_FileLog::Test_FailedReopen_RetriesAndResumesLogging, "FailedReopen_RetriesAndResumesLogging");
     RegisterTest(&TTest_ASWLog_FileLog::Test_FailedReopen_ZeroResetDelayRetriesOnNextWrite, "FailedReopen_ZeroResetDelayRetriesOnNextWrite");
     RegisterTest(&TTest_ASWLog_FileLog::Test_FailedSizeRotation_WaitsBeforeRetrying, "FailedSizeRotation_WaitsBeforeRetrying");
+    RegisterTest(&TTest_ASWLog_FileLog::Test_FileStream_FlushWorksAfterFailedWrite, "FileStream_FlushWorksAfterFailedWrite");
     RegisterTest(&TTest_ASWLog_FileLog::Test_Flush_WritesBufferedManualModeEntries, "Flush_WritesBufferedManualModeEntries");
     RegisterTest(&TTest_ASWLog_FileLog::Test_GetInstance_ReturnsSameInstance, "GetInstance_ReturnsSameInstance");
     RegisterTest(&TTest_ASWLog_FileLog::Test_InitializeAndLogInfo_WritesText, "InitializeAndLogInfo_WritesText");
@@ -220,6 +227,10 @@ TTest_ASWLog_FileLog::TTest_ASWLog_FileLog()
     RegisterTest(&TTest_ASWLog_FileLog::Test_LogRawOptions, "LogRawOptions");
     RegisterTest(&TTest_ASWLog_FileLog::Test_MultiThreadedStress_WritesAllMessagesToDisk, "MultiThreadedStress_WritesAllMessagesToDisk");
     RegisterTest(&TTest_ASWLog_FileLog::Test_MultiThreadedStress_WritesAllMessagesToDisk_OpenClose, "MultiThreadedStress_WritesAllMessagesToDisk_OpenClose");
+    RegisterTest(&TTest_ASWLog_FileLog::Test_OnError_ReportsFailedDelete, "OnError_ReportsFailedDelete");
+    RegisterTest(&TTest_ASWLog_FileLog::Test_OnError_ReportsFailedOpen, "OnError_ReportsFailedOpen");
+    RegisterTest(&TTest_ASWLog_FileLog::Test_OnError_ReportsFailedRotationAndReopen, "OnError_ReportsFailedRotationAndReopen");
+    RegisterTest(&TTest_ASWLog_FileLog::Test_OnError_ReportsFullDisk, "OnError_ReportsFullDisk");
     RegisterTest(&TTest_ASWLog_FileLog::Test_OnLogEntry_FiresForQualifyingLevelsOnly, "OnLogEntry_FiresForQualifyingLevelsOnly");
     RegisterTest(&TTest_ASWLog_FileLog::Test_OnLogEntry_ReentrantCallbackDoesNotDeadlock, "OnLogEntry_ReentrantCallbackDoesNotDeadlock");
     RegisterTest(&TTest_ASWLog_FileLog::Test_Reconfigure_FlushesEntriesBufferedByPreviousMode, "Reconfigure_FlushesEntriesBufferedByPreviousMode");
@@ -651,6 +662,7 @@ void TTest_ASWLog_FileLog::Test_FailedReopen_RetriesAndResumesLogging()
     const auto logFile = TestTempDir / "reopen.log";
     auto config = MakeRotationTestConfig(logFile);
     config.File.CircuitBreakerResetDelay = 200ms;
+    config.OnError = IgnoreError;
 
     const auto startTime = std::chrono::sys_days{ 2026y / 1 / 15 } + 10h;
     TFixedClockFileLog logger;
@@ -700,6 +712,7 @@ void TTest_ASWLog_FileLog::Test_FailedReopen_ZeroResetDelayRetriesOnNextWrite()
     const auto logFile = TestTempDir / "reopen_zero.log";
     auto config = MakeRotationTestConfig(logFile);
     config.File.CircuitBreakerResetDelay = 0ms;
+    config.OnError = IgnoreError;
 
     TFixedClockFileLog logger;
     logger.CurrentTime = std::chrono::sys_days{ 2026y / 1 / 15 } + 10h;
@@ -732,6 +745,7 @@ void TTest_ASWLog_FileLog::Test_FailedSizeRotation_WaitsBeforeRetrying()
     config.File.EnableRotation = true;
     config.File.MaxFileSizeBytes = 50;
     config.File.RotationRetryDelay = 200ms;
+    config.OnError = IgnoreError;
 
     const auto startTime = std::chrono::sys_days{ 2026y / 1 / 15 } + 10h;
     TFixedClockFileLog logger;
@@ -773,6 +787,28 @@ void TTest_ASWLog_FileLog::Test_FailedSizeRotation_WaitsBeforeRetrying()
     CheckTrue(backupContents.find("line_three") != std::string::npos, __func__, __LINE__, "A failed rotation should not be retried before File.RotationRetryDelay has passed");
     CheckTrue(currentContents.find("line_four") != std::string::npos, __func__, __LINE__, "The entry after the retry interval should go to the new log file");
     CheckTrue(currentContents.find("line_three") == std::string::npos, __func__, __LINE__, "The new log file should only hold entries after the successful rotation");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_FileLog::Test_FileStream_FlushWorksAfterFailedWrite()
+{
+    // Arrange: a stream left in a failed state, as by a failed write (e.g. a full disk that has room again). The
+    // standard flush() does nothing in that state, so the data would stay in the buffer until the file is closed.
+    const auto file = TestTempDir / "flush_after_failure.log";
+    ASWLog::TASWFileStream stream;
+    const bool opened = stream.Open(file);
+    stream.setstate(std::ios::failbit);
+
+    // Act
+    const bool written = stream.Write("buffered");
+    const bool flushed = stream.Flush();
+    const auto contents = ReadFileText(file); // Read through a separate handle while the stream is still open
+    stream.Close();
+
+    // Assert
+    CheckTrue(opened, __func__, __LINE__, "Open should succeed");
+    CheckTrue(written, __func__, __LINE__, "Write should succeed");
+    CheckTrue(flushed, __func__, __LINE__, "Flush should succeed after an earlier failure");
+    CheckEquals(std::string("buffered"), contents, __func__, __LINE__, "Flush should write the buffered data to the file");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_FileLog::Test_Flush_WritesBufferedManualModeEntries()
@@ -1226,6 +1262,166 @@ void TTest_ASWLog_FileLog::Test_MultiThreadedStress_WritesAllMessagesToDisk_Open
     }
 }
 //---------------------------------------------------------------------------
+void TTest_ASWLog_FileLog::Test_OnError_ReportsFailedDelete()
+{
+#if defined(_WIN32)
+    // Arrange: an expired backup that another program holds open without delete sharing, so retention can't delete it
+    using namespace std::chrono_literals;
+    const auto logFile = TestTempDir / "retention_held.log";
+    const auto heldBackup = TestTempDir / "retention_held.size.2020-01-01_000000_000.bak";
+    std::ofstream(heldBackup) << "old";
+    std::filesystem::last_write_time(heldBackup, std::filesystem::file_time_type::clock::now() - 48h);
+
+    auto config = MakeRotationTestConfig(logFile);
+    config.File.RetentionMaxAge = 24h;
+    std::vector<ASWLog::TASWLogError> reports;
+    config.OnError = [&reports](const ASWLog::TASWLogError& error) {
+            reports.push_back(error);
+        };
+
+    ASWLog::TASWFileLog logger;
+    const bool initialized = logger.Initialize(config);
+    logger.LogInfo("entry");
+
+    // Act
+    std::FILE* otherHandle = _wfsopen(heldBackup.c_str(), L"rb", _SH_DENYNO);
+    const bool rotated = logger.RotateLogFiles("manual");
+    if (otherHandle != nullptr)
+        std::fclose(otherHandle);
+    logger.Close();
+
+    // Assert
+    CheckTrue(initialized, __func__, __LINE__, "Initialize should succeed");
+    CheckTrue(otherHandle != nullptr, __func__, __LINE__, "The test should be able to hold the backup open");
+    CheckTrue(rotated, __func__, __LINE__, "The rotation itself should succeed");
+    CheckEquals(static_cast<std::size_t>(1), reports.size(), __func__, __LINE__, "The backup that couldn't be deleted should be reported once");
+    if (reports.empty())
+        return;
+
+    CheckTrue(reports[0].Kind == ASWLog::ErrorKind::DeleteFailed, __func__, __LINE__, "The failure should be reported as DeleteFailed");
+    CheckTrue(reports[0].Path.filename() == heldBackup.filename(), __func__, __LINE__, "The report should name the backup");
+    CheckTrue(static_cast<bool>(reports[0].Code), __func__, __LINE__, "The report should carry the operating system's error");
+#else
+    Skip(__func__, __LINE__, "POSIX deletes a file that another program holds open");
+#endif
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_FileLog::Test_OnError_ReportsFailedOpen()
+{
+    // Arrange: a "folder" that is a file can't hold the log, on any OS and for any user
+    const auto notAFolder = TestTempDir / "not_a_folder";
+    std::ofstream(notAFolder) << "file";
+
+    auto config = MakeRotationTestConfig(notAFolder / "unopenable.log");
+    std::vector<ASWLog::TASWLogError> reports;
+    config.OnError = [&reports](const ASWLog::TASWLogError& error) {
+            reports.push_back(error);
+        };
+
+    // Act
+    ASWLog::TASWFileLog logger;
+    const bool initialized = logger.Initialize(config);
+
+    // Assert
+    CheckFalse(initialized, __func__, __LINE__, "Initialize should fail");
+    CheckEquals(static_cast<std::size_t>(1), reports.size(), __func__, __LINE__, "The failed open should be reported once");
+    if (reports.empty())
+        return;
+
+    CheckTrue(reports[0].Kind == ASWLog::ErrorKind::OpenFailed, __func__, __LINE__, "The failure should be reported as OpenFailed");
+    CheckTrue(reports[0].Path == config.File.ResolvePath().parent_path(), __func__, __LINE__, "The report should name the folder that couldn't be created");
+    CheckTrue(static_cast<bool>(reports[0].Code), __func__, __LINE__, "The report should carry the operating system's error");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_FileLog::Test_OnError_ReportsFailedRotationAndReopen()
+{
+    // Arrange
+    if (!CanBlockFiles())
+        Skip(__func__, __LINE__, "File permissions don't stop the root user, so the failure can't be simulated");
+
+    using namespace std::chrono_literals;
+    const auto logFile = TestTempDir / "reported.log";
+    auto config = MakeRotationTestConfig(logFile);
+    config.File.CircuitBreakerResetDelay = 0ms; // Each entry tries to reopen the file
+    std::vector<ASWLog::TASWLogError> reports;
+    config.OnError = [&reports](const ASWLog::TASWLogError& error) {
+            reports.push_back(error);
+        };
+
+    const auto startTime = std::chrono::sys_days{ 2026y / 1 / 15 } + 10h;
+    TFixedClockFileLog logger;
+    logger.CurrentTime = startTime;
+    const bool initialized = logger.Initialize(config);
+
+    // Act
+    {
+        // The rotation's rename fails, and so does reopening the log afterward and for each entry
+        TFileBlocker blocker(logFile, true);
+        logger.RotateLogFiles("manual");
+        logger.LogInfo("dropped_1"); // Within ErrorReportInterval (1 minute): not reported
+        logger.LogInfo("dropped_2");
+        logger.CurrentTime = startTime + 1min;
+        logger.LogInfo("dropped_3"); // Reported, with the two left out
+    }
+    logger.Close();
+
+    // Assert
+    CheckTrue(initialized, __func__, __LINE__, "Initialize should succeed");
+    CheckEquals(static_cast<std::size_t>(3), reports.size(), __func__, __LINE__, "The rotation and two of the failed opens should be reported");
+    if (reports.size() != 3)
+        return;
+
+    CheckTrue(reports[0].Kind == ASWLog::ErrorKind::RotationFailed, __func__, __LINE__, "The failed rename should be reported as RotationFailed");
+    CheckTrue(reports[0].Path == config.File.ResolvePath(), __func__, __LINE__, "The rotation report should name the log file");
+    CheckTrue(static_cast<bool>(reports[0].Code), __func__, __LINE__, "The rotation report should carry the operating system's error");
+    CheckTrue(reports[1].Kind == ASWLog::ErrorKind::OpenFailed, __func__, __LINE__, "The failed reopen should be reported as OpenFailed");
+    CheckTrue(reports[1].Path == config.File.ResolvePath(), __func__, __LINE__, "The open report should name the log file");
+    CheckTrue(static_cast<bool>(reports[1].Code), __func__, __LINE__, "The open report should carry the operating system's error");
+    CheckEquals(static_cast<std::size_t>(0), reports[1].SuppressedCount, __func__, __LINE__, "Nothing was left out before the first open report");
+    CheckTrue(reports[2].Kind == ASWLog::ErrorKind::OpenFailed, __func__, __LINE__, "The failed open after the interval should be reported");
+    CheckEquals(static_cast<std::size_t>(2), reports[2].SuppressedCount, __func__, __LINE__, "The report should count the failed opens left out");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_FileLog::Test_OnError_ReportsFullDisk()
+{
+#if defined(__linux__)
+    // Arrange: every write to /dev/full fails with "No space left on device"
+    if (!std::filesystem::exists("/dev/full"))
+        Skip(__func__, __LINE__, "/dev/full doesn't exist");
+
+    auto config = MakeRotationTestConfig("/dev/full"); // Absolute, so it replaces the folder
+    config.ErrorReportInterval = std::chrono::milliseconds(0);
+    std::vector<ASWLog::TASWLogError> reports;
+    config.OnError = [&reports](const ASWLog::TASWLogError& error) {
+            reports.push_back(error);
+        };
+
+    // Act
+    ASWLog::TASWFileLog logger;
+    const bool initialized = logger.Initialize(config);
+    logger.LogInfo("buffered, then flushed"); // FlushMode::EveryWrite: the flush fails
+    logger.LogInfo(std::string(256 * 1024, 'x')); // Larger than the stdio buffer: the write itself fails
+    logger.Close();
+
+    // Assert
+    const auto isReported = [&reports](ASWLog::ErrorKind kind) {
+            for (const auto& error : reports)
+            {
+                if (error.Kind == kind && error.Code == std::errc::no_space_on_device && error.Path == "/dev/full")
+                    return true;
+            }
+
+            return false;
+        };
+
+    CheckTrue(initialized, __func__, __LINE__, "Initialize should succeed: /dev/full can be opened");
+    CheckTrue(isReported(ASWLog::ErrorKind::FlushFailed), __func__, __LINE__, "The failed flush should be reported, with ENOSPC");
+    CheckTrue(isReported(ASWLog::ErrorKind::WriteFailed), __func__, __LINE__, "The failed write should be reported, with ENOSPC");
+#else
+    Skip(__func__, __LINE__, "Needs Linux's /dev/full");
+#endif
+}
+//---------------------------------------------------------------------------
 void TTest_ASWLog_FileLog::Test_OnLogEntry_FiresForQualifyingLevelsOnly()
 {
     // Arrange
@@ -1403,6 +1599,7 @@ void TTest_ASWLog_FileLog::Test_Reconfigure_UnopenableFileFailsButLoggerStaysIni
 
     auto config = MakeRotationTestConfig(logFile);
     config.File.CircuitBreakerResetDelay = 0ms;
+    config.OnError = IgnoreError;
 
     auto unopenableConfig = config;
     unopenableConfig.File.FilePath = notAFolder / "unopenable.log";

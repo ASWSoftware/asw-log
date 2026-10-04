@@ -37,6 +37,7 @@ limitations under the License.
 #include <sstream>
 #include <system_error>
 #include <thread>
+#include <utility>
 
 #if defined(_WIN32)
 #include <share.h>
@@ -65,6 +66,65 @@ constexpr int MaxBackupRenameAttempts = 10;
 // How many "_N" suffixes are tried when a backup name is taken, before rotation gives up.
 constexpr int MaxBackupNameSuffix = 1000;
 
+// Deletes the old files in 'logDir' that match 'pattern', as described at TASWFileLog::DeleteOldLogs(). Calls
+// onFailure(message, path, errorCode) for each file it couldn't delete, and with 'logDir' if it couldn't list the
+// folder; a file it can't read, or one deleted meanwhile by someone else, is skipped silently.
+template<typename OnFailure>
+std::size_t DeleteOldFiles(
+    const std::filesystem::path& logDir, std::string_view pattern, std::chrono::hours maxAge, OnFailure&& onFailure)
+{
+    // Never throws (unless onFailure does): uses the std::error_code overloads, skipping an entry it can't read and
+    // stopping if the folder can't be listed. File names are matched as UTF-8, since the ANSI code page conversion of
+    // path::string() can throw.
+
+    // An empty pattern would match every file; a caller who means that passes "*"
+    if (pattern.empty())
+        return 0;
+
+    std::error_code errorCode;
+    if (!std::filesystem::is_directory(logDir, errorCode))
+    {
+        if (errorCode)
+            onFailure("Couldn't list the log folder to delete old backups", logDir, errorCode);
+
+        return 0;
+    }
+
+    // Never clean up a root folder, such as "C:\", "\\server\share\" or "/"
+    if (IsRootFolder(logDir))
+        return 0;
+
+    const auto cutoff = std::filesystem::file_time_type::clock::now() - maxAge;
+    std::size_t deletedCount = 0;
+
+    std::filesystem::directory_iterator entries(logDir, errorCode);
+    for (const std::filesystem::directory_iterator end; !errorCode && entries != end; entries.increment(errorCode))
+    {
+        const auto& entry = *entries;
+
+        std::error_code entryError;
+        if (!entry.is_regular_file(entryError))
+            continue;
+
+        if (!MatchesWildcard(PathToUTF8String(entry.path().filename()), pattern))
+            continue;
+
+        const auto lastWrite = entry.last_write_time(entryError);
+        if (!entryError && lastWrite < cutoff)
+        {
+            if (std::filesystem::remove(entry.path(), entryError) && !entryError)
+                ++deletedCount;
+            else if (entryError)
+                onFailure("Couldn't delete an old backup", entry.path(), entryError);
+        }
+    }
+
+    if (errorCode)
+        onFailure("Couldn't list the log folder to delete old backups", logDir, errorCode);
+
+    return deletedCount;
+}
+
 // Returns the first unused backup path for 'logPath': "<stem>.<reasonTag>.<timeLabel>.bak", or with "_1", "_2", ...
 // appended to the time label if that is taken. Returns an empty path if every name is taken or the file system
 // can't be checked, so an existing backup is never replaced.
@@ -89,6 +149,13 @@ std::filesystem::path FindFreeBackupPath(
     }
 
     return {};
+}
+
+// The error a C library function reported in errno. Call it right after the function failed, before anything else
+// can change errno.
+std::error_code GetErrnoCode() noexcept
+{
+    return std::error_code(errno, std::generic_category());
 }
 
 // Returns the size of an open file, read through its handle, or 0 if that fails. Unlike the size read through the
@@ -318,10 +385,11 @@ void TASWFileLog::AfterEntryUnlocked()
 //---------------------------------------------------------------------------
 void TASWFileLog::CloseFileUnlocked()
 {
-    if (m_FileStream.IsOpen())
+    // Close() flushes the file first
+    if (m_FileStream.IsOpen() && !m_FileStream.Close())
     {
-        m_FileStream.Flush();
-        m_FileStream.Close();
+        const auto errorCode = GetErrnoCode();
+        ReportFileErrorUnlocked(ErrorKind::CloseFailed, "Couldn't close the log file", GetConfigUnlocked().File.ResolvePath(), errorCode);
     }
 
     m_IsOpen.store(false, std::memory_order_release);
@@ -339,45 +407,8 @@ bool TASWFileLog::CloseUnlocked()
 std::size_t TASWFileLog::DeleteOldLogs(
     const std::filesystem::path& logDir, std::string_view pattern, std::chrono::hours maxAge)
 {
-    // Never throws: uses the std::error_code overloads, skipping an entry it can't read and stopping if the folder can't
-    // be listed. File names are matched as UTF-8, since the ANSI code page conversion of path::string() can throw.
-
-    // An empty pattern would match every file; a caller who means that passes "*"
-    if (pattern.empty())
-        return 0;
-
-    std::error_code errorCode;
-    if (!std::filesystem::is_directory(logDir, errorCode))
-        return 0;
-
-    // Never clean up a root folder, such as "C:\", "\\server\share\" or "/"
-    if (IsRootFolder(logDir))
-        return 0;
-
-    const auto cutoff = std::filesystem::file_time_type::clock::now() - maxAge;
-    std::size_t deletedCount = 0;
-
-    std::filesystem::directory_iterator entries(logDir, errorCode);
-    for (const std::filesystem::directory_iterator end; !errorCode && entries != end; entries.increment(errorCode))
-    {
-        const auto& entry = *entries;
-
-        std::error_code entryError;
-        if (!entry.is_regular_file(entryError))
-            continue;
-
-        if (!MatchesWildcard(PathToUTF8String(entry.path().filename()), pattern))
-            continue;
-
-        const auto lastWrite = entry.last_write_time(entryError);
-        if (!entryError && lastWrite < cutoff)
-        {
-            if (std::filesystem::remove(entry.path(), entryError) && !entryError)
-                ++deletedCount;
-        }
-    }
-
-    return deletedCount;
+    return DeleteOldFiles(logDir, pattern, maxAge, [](std::string_view, const std::filesystem::path&, std::error_code) {
+        });
 }
 
 //---------------------------------------------------------------------------
@@ -411,9 +442,15 @@ bool TASWFileLog::FlushUnlocked()
     if (!m_FileStream.IsOpen())
         return false;
 
-    m_FileStream.Flush();
+    const bool isFlushed = m_FileStream.Flush();
+    if (!isFlushed)
+    {
+        const auto errorCode = GetErrnoCode();
+        ReportFileErrorUnlocked(ErrorKind::FlushFailed, "Couldn't flush the log file", GetConfigUnlocked().File.ResolvePath(), errorCode);
+    }
+
     m_LastFlushTime = std::chrono::steady_clock::now();
-    return m_FileStream.good();
+    return isFlushed;
 }
 
 //---------------------------------------------------------------------------
@@ -472,12 +509,11 @@ bool TASWFileLog::OpenUnlocked()
     }
 
     const auto effectivePath = GetConfigUnlocked().File.ResolvePath();
+    std::error_code folderError;
     if (!effectivePath.parent_path().empty())
-    {
-        std::error_code errorCode;
-        std::filesystem::create_directories(effectivePath.parent_path(), errorCode);
-    }
+        std::filesystem::create_directories(effectivePath.parent_path(), folderError);
 
+    std::error_code openError;
     const auto retryCount = std::max<int>(1, GetConfigUnlocked().File.OpenRetryCount);
     for (int attempt = 0; attempt < retryCount; ++attempt)
     {
@@ -486,6 +522,7 @@ bool TASWFileLog::OpenUnlocked()
         if (m_FileStream.IsOpen())
             break;
 
+        openError = GetErrnoCode();
         if (attempt + 1 < retryCount && GetConfigUnlocked().File.OpenRetryDelay.count() > 0)
             std::this_thread::sleep_for(GetConfigUnlocked().File.OpenRetryDelay);
     }
@@ -494,6 +531,13 @@ bool TASWFileLog::OpenUnlocked()
     {
         m_IsOpen.store(false, std::memory_order_release);
         m_LastOpenFailure = NowUTC();
+
+        // A folder that couldn't be created explains the failed open better than the open's own error
+        if (folderError)
+            ReportFileErrorUnlocked(ErrorKind::OpenFailed, "Couldn't create the log file's folder", effectivePath.parent_path(), folderError);
+        else
+            ReportFileErrorUnlocked(ErrorKind::OpenFailed, "Couldn't open the log file", effectivePath, openError);
+
         return false;
     }
 
@@ -578,8 +622,27 @@ bool TASWFileLog::ReconfigureUnlocked(const TASWLogConfig& previous)
 }
 
 //---------------------------------------------------------------------------
+void TASWFileLog::ReportFileErrorUnlocked(
+    ErrorKind kind, std::string_view message, const std::filesystem::path& path, std::error_code errorCode) noexcept
+{
+    try
+    {
+        TASWLogError error;
+        error.Kind = kind;
+        error.Message = message;
+        error.Path = path;
+        error.Code = errorCode;
+        ReportErrorUnlocked(std::move(error));
+    }
+    catch (...)
+    {
+    }
+}
+
+//---------------------------------------------------------------------------
 bool TASWFileLog::RotateLogFiles(std::string_view reasonTag)
 {
+    TPendingErrorReporter errorReporter(*this);
     std::lock_guard<std::mutex> lock(m_Mutex);
     return RotateLogFilesUnlocked(reasonTag, ToBackupTimeLabel(NowUTC()));
 }
@@ -628,10 +691,7 @@ bool TASWFileLog::RotateLogFilesUnlocked(std::string_view reasonTag, std::string
 {
     const bool wasOpen = m_FileStream.IsOpen();
     if (wasOpen)
-    {
-        m_FileStream.Close();
-        m_IsOpen.store(false, std::memory_order_release);
-    }
+        CloseFileUnlocked();
 
     const auto logPath = GetConfigUnlocked().File.ResolvePath();
 
@@ -656,6 +716,7 @@ bool TASWFileLog::RotateLogFilesUnlocked(std::string_view reasonTag, std::string
 
     if (errorCode)
     {
+        ReportFileErrorUnlocked(ErrorKind::RotationFailed, "Couldn't rename the log file to a backup", logPath, errorCode);
         m_LastRotationFailure = NowUTC();
         if (wasOpen)
             OpenUnlocked();
@@ -664,8 +725,11 @@ bool TASWFileLog::RotateLogFilesUnlocked(std::string_view reasonTag, std::string
 
     if (GetConfigUnlocked().File.RetentionMaxAge.count() > 0)
     {
-        DeleteOldLogs(GetConfigUnlocked().File.ResolveFolder(),
-            std::format("{}.*.bak", PathToUTF8String(GetConfigUnlocked().File.ResolvePath().stem())), GetConfigUnlocked().File.RetentionMaxAge);
+        DeleteOldFiles(GetConfigUnlocked().File.ResolveFolder(),
+            std::format("{}.*.bak", PathToUTF8String(GetConfigUnlocked().File.ResolvePath().stem())), GetConfigUnlocked().File.RetentionMaxAge,
+            [this](std::string_view message, const std::filesystem::path& path, std::error_code deleteError) {
+                ReportFileErrorUnlocked(ErrorKind::DeleteFailed, message, path, deleteError);
+            });
     }
 
     if (wasOpen)
@@ -677,7 +741,12 @@ bool TASWFileLog::RotateLogFilesUnlocked(std::string_view reasonTag, std::string
 //---------------------------------------------------------------------------
 void TASWFileLog::WriteLineUnlocked(Level /*level*/, std::string_view line, bool endsLine)
 {
-    m_FileStream.Write(line);
+    if (!m_FileStream.Write(line))
+    {
+        const auto errorCode = GetErrnoCode();
+        ReportFileErrorUnlocked(ErrorKind::WriteFailed, "Couldn't write to the log file", GetConfigUnlocked().File.ResolvePath(), errorCode);
+    }
+
     MaybeFlush(endsLine);
 }
 

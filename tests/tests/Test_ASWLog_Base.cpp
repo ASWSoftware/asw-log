@@ -25,7 +25,11 @@ limitations under the License.
 #include "Test_ASWLog_Base.h"
 //---------------------------------------------------------------------------
 #include <chrono>
+#include <cstdio>
+#include <filesystem>
 #include <format>
+#include <fstream>
+#include <iterator>
 #include <memory>
 #include <source_location>
 #include <stdexcept>
@@ -33,6 +37,14 @@ limitations under the License.
 #include <string_view>
 #include <type_traits>
 #include <utility>
+#include <vector>
+
+#if defined(_WIN32)
+#include <io.h>
+#include <share.h>
+#else
+#include <unistd.h>
+#endif
 //---------------------------------------------------------------------------
 #include "ASWUnitTests_Registry.h"
 //---------------------------------------------------------------------------
@@ -175,6 +187,76 @@ public:
     {
         return m_IsInitialized.load(std::memory_order_acquire);
     }
+
+    // Reports a failure through TASWLogBase::ReportError(), as a derived logger would
+    void ReportTestError(ASWLog::ErrorKind kind, std::string message = "test failure") noexcept
+    {
+        ASWLog::TASWLogError error;
+        error.Kind = kind;
+        error.Message = std::move(message);
+        ReportError(std::move(error));
+    }
+};
+
+// While alive, sends what is written to stderr to 'file' instead, by pointing stderr's file descriptor at it. Inactive
+// if stderr has no file descriptor (e.g. in a GUI application without a console).
+class TStdErrRedirect
+{
+private:
+    int m_SavedDescriptor = -1;
+
+public:
+    explicit TStdErrRedirect(const std::filesystem::path& file)
+    {
+        std::fflush(stderr);
+#if defined(_WIN32)
+        std::FILE* target = _wfsopen(file.c_str(), L"wb", _SH_DENYNO);
+        if (target == nullptr)
+            return;
+
+        m_SavedDescriptor = _dup(_fileno(stderr));
+        if (m_SavedDescriptor >= 0 && _dup2(_fileno(target), _fileno(stderr)) != 0)
+        {
+            _close(m_SavedDescriptor);
+            m_SavedDescriptor = -1;
+        }
+#else
+        std::FILE* target = std::fopen(file.c_str(), "wb");
+        if (target == nullptr)
+            return;
+
+        m_SavedDescriptor = dup(fileno(stderr));
+        if (m_SavedDescriptor >= 0 && dup2(fileno(target), fileno(stderr)) < 0)
+        {
+            close(m_SavedDescriptor);
+            m_SavedDescriptor = -1;
+        }
+#endif
+        std::fclose(target);
+    }
+
+    ~TStdErrRedirect()
+    {
+        if (m_SavedDescriptor < 0)
+            return;
+
+        std::fflush(stderr);
+#if defined(_WIN32)
+        _dup2(m_SavedDescriptor, _fileno(stderr));
+        _close(m_SavedDescriptor);
+#else
+        dup2(m_SavedDescriptor, fileno(stderr));
+        close(m_SavedDescriptor);
+#endif
+    }
+
+    TStdErrRedirect(const TStdErrRedirect&) = delete;
+    TStdErrRedirect& operator=(const TStdErrRedirect&) = delete;
+
+    bool IsActive() const noexcept
+    {
+        return m_SavedDescriptor >= 0;
+    }
 };
 
 } // namespace
@@ -198,6 +280,10 @@ TTest_ASWLog_Base::TTest_ASWLog_Base()
     RegisterTest(&TTest_ASWLog_Base::Test_LogFormatMethods_SkipFormattingWhenNotWritten, "LogFormatMethods_SkipFormattingWhenNotWritten");
     RegisterTest(&TTest_ASWLog_Base::Test_LogLevelConvenienceMethods, "LogLevelConvenienceMethods");
     RegisterTest(&TTest_ASWLog_Base::Test_LogMethods_PassRecordsToWrite, "LogMethods_PassRecordsToWrite");
+    RegisterTest(&TTest_ASWLog_Base::Test_ReportError_FailureInHandlerIsNotReportedAgain, "ReportError_FailureInHandlerIsNotReportedAgain");
+    RegisterTest(&TTest_ASWLog_Base::Test_ReportError_ThrottlesEachKindSeparately, "ReportError_ThrottlesEachKindSeparately");
+    RegisterTest(&TTest_ASWLog_Base::Test_ReportError_ThrowingHandlerDoesNotEscape, "ReportError_ThrowingHandlerDoesNotEscape");
+    RegisterTest(&TTest_ASWLog_Base::Test_ReportError_WritesToStdErrWithoutHandler, "ReportError_WritesToStdErrWithoutHandler");
     RegisterTest(&TTest_ASWLog_Base::Test_SetGetMinimumLevel_RoundTrips, "SetGetMinimumLevel_RoundTrips");
     RegisterTest(&TTest_ASWLog_Base::Test_ShouldLog_ReflectsEnabledAndLevel, "ShouldLog_ReflectsEnabledAndLevel");
     RegisterTest(&TTest_ASWLog_Base::Test_Write_AppliesEnabledOffAndLevelChecks, "Write_AppliesEnabledOffAndLevelChecks");
@@ -583,6 +669,146 @@ void TTest_ASWLog_Base::Test_LogMethods_PassRecordsToWrite()
     CheckEquals(9, logger.WriteRecordCount, testName, __LINE__, "Each call should pass exactly one record to WriteRecord()");
 }
 //---------------------------------------------------------------------------
+void TTest_ASWLog_Base::Test_ReportError_FailureInHandlerIsNotReportedAgain()
+{
+    // Arrange: a handler that fails the same way again, like one that logs to the logger whose output failed. Without
+    // the guard, each report would start another, until the stack overflowed.
+    TTestLogger logger;
+    std::vector<ASWLog::ErrorKind> reportedKinds;
+    ASWLog::TASWLogConfig config;
+    config.ErrorReportInterval = std::chrono::milliseconds(0);
+    config.OnError = [&logger, &reportedKinds](const ASWLog::TASWLogError& error) {
+            reportedKinds.push_back(error.Kind);
+            if (reportedKinds.size() < 10)
+                logger.ReportTestError(ASWLog::ErrorKind::WriteFailed, "failure inside the handler");
+        };
+    logger.Initialize(config);
+
+    // Act
+    logger.ReportTestError(ASWLog::ErrorKind::OpenFailed);
+    logger.ReportTestError(ASWLog::ErrorKind::FlushFailed);
+
+    // Assert
+    CheckTrue(reportedKinds == std::vector<ASWLog::ErrorKind>{ ASWLog::ErrorKind::OpenFailed, ASWLog::ErrorKind::FlushFailed }, __func__, __LINE__,
+        "Only the failures outside the handler should be reported, and the next failure after it should be reported again");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_Base::Test_ReportError_ThrottlesEachKindSeparately()
+{
+    // Arrange
+    using namespace std::chrono_literals;
+    const auto startTime = std::chrono::sys_days{ 2026y / 1 / 15 } + 10h;
+    TTestLogger logger;
+    logger.FixedNow = startTime;
+
+    std::vector<ASWLog::TASWLogError> reports;
+    ASWLog::TASWLogConfig config;
+    config.OnError = [&reports](const ASWLog::TASWLogError& error) {
+            reports.push_back(error);
+        };
+    logger.Initialize(config); // Default ErrorReportInterval: 1 minute
+
+    // Act
+    logger.ReportTestError(ASWLog::ErrorKind::OpenFailed, "first");
+    logger.ReportTestError(ASWLog::ErrorKind::OpenFailed, "suppressed 1");
+    logger.ReportTestError(ASWLog::ErrorKind::WriteFailed, "other kind"); // Another kind is reported at once
+    logger.ReportTestError(ASWLog::ErrorKind::OpenFailed, "suppressed 2");
+    logger.FixedNow = startTime + 59s;
+    logger.ReportTestError(ASWLog::ErrorKind::OpenFailed, "suppressed 3");
+    logger.FixedNow = startTime + 60s;
+    logger.ReportTestError(ASWLog::ErrorKind::OpenFailed, "after the interval");
+    const auto throttledCount = reports.size();
+
+    config.ErrorReportInterval = 0ms;
+    logger.Reconfigure(config);
+    logger.ReportTestError(ASWLog::ErrorKind::OpenFailed, "unthrottled 1");
+    logger.ReportTestError(ASWLog::ErrorKind::OpenFailed, "unthrottled 2");
+
+    // Assert
+    CheckEquals(static_cast<std::size_t>(3), throttledCount, __func__, __LINE__, "Each kind should be reported at most once per ErrorReportInterval");
+    CheckEquals(static_cast<std::size_t>(5), reports.size(), __func__, __LINE__, "An ErrorReportInterval of 0 should report every failure");
+    if (reports.size() != 5)
+        return;
+
+    CheckEquals(std::string("first"), reports[0].Message, __func__, __LINE__, "The first failure should be reported");
+    CheckEquals(static_cast<std::size_t>(0), reports[0].SuppressedCount, __func__, __LINE__, "Nothing was left out before the first report");
+    CheckEquals(std::string("other kind"), reports[1].Message, __func__, __LINE__, "Another kind should have its own interval");
+    CheckEquals(std::string("after the interval"), reports[2].Message, __func__, __LINE__, "The kind should be reported again once the interval has passed");
+    CheckEquals(static_cast<std::size_t>(3), reports[2].SuppressedCount, __func__, __LINE__, "The report should count the failures left out since the previous one");
+    CheckEquals(std::string("unthrottled 2"), reports[4].Message, __func__, __LINE__, "With an interval of 0, every failure should be reported");
+    CheckEquals(static_cast<std::size_t>(0), reports[4].SuppressedCount, __func__, __LINE__, "With an interval of 0, nothing should be left out");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_Base::Test_ReportError_ThrowingHandlerDoesNotEscape()
+{
+    // Arrange
+    TTestLogger logger;
+    int handlerCalls = 0;
+    ASWLog::TASWLogConfig config;
+    config.ErrorReportInterval = std::chrono::milliseconds(0);
+    config.OnError = [&handlerCalls](const ASWLog::TASWLogError& /*error*/) {
+            ++handlerCalls;
+            throw std::runtime_error("handler failed");
+        };
+    logger.Initialize(config);
+    logger.ThrowsOnWrite = true;
+    bool threw = false;
+
+    // Act: ReportError() is noexcept, so an escaping exception would end the test run with std::terminate
+    try
+    {
+        logger.ReportTestError(ASWLog::ErrorKind::OpenFailed);
+        logger.LogError("dropped"); // Reported from TASWLogBase::Write()
+    }
+    catch (...)
+    {
+        threw = true;
+    }
+
+    // Assert
+    CheckFalse(threw, __func__, __LINE__, "An exception from OnError should not escape");
+    CheckEquals(2, handlerCalls, __func__, __LINE__, "A handler that threw should still be called for the next failure");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_Base::Test_ReportError_WritesToStdErrWithoutHandler()
+{
+    // Arrange
+    const auto stdErrFile = std::filesystem::temp_directory_path() / "aswlog_base_stderr.txt";
+    TTestLogger logger; // Default config: no OnError
+
+    // Act
+    bool isRedirected = false;
+    {
+        TStdErrRedirect redirect(stdErrFile);
+        isRedirected = redirect.IsActive();
+        if (isRedirected)
+        {
+            logger.ReportTestError(ASWLog::ErrorKind::OpenFailed, "Couldn't open the log file");
+            logger.ReportTestError(ASWLog::ErrorKind::OpenFailed, "throttled"); // Within the default interval
+        }
+    }
+
+    if (!isRedirected)
+    {
+        std::error_code removeError;
+        std::filesystem::remove(stdErrFile, removeError);
+        Skip(__func__, __LINE__, "stderr has no file descriptor to redirect (e.g. a GUI application)");
+    }
+
+    std::string written;
+    {
+        std::ifstream stream(stdErrFile, std::ios::binary);
+        written.assign(std::istreambuf_iterator<char>(stream), std::istreambuf_iterator<char>());
+    }
+    std::error_code removeError;
+    std::filesystem::remove(stdErrFile, removeError);
+    std::erase(written, '\r'); // In case stderr is in text mode on Windows
+
+    // Assert
+    CheckEquals(std::string("ASWLog TTestLogger: OPEN_FAILED: Couldn't open the log file\n"), written, __func__, __LINE__,
+        "Without OnError, a failure should be written to stderr as one line naming the logger, once per interval");
+}
+//---------------------------------------------------------------------------
 void TTest_ASWLog_Base::Test_SetGetMinimumLevel_RoundTrips()
 {
     // Arrange
@@ -709,6 +935,13 @@ void TTest_ASWLog_Base::Test_Write_ThrowingWriteRecordDropsEntry()
     // Arrange: a custom logger whose WriteRecord() throws. Without the catch in TASWLogBase::Write(), the exception
     // would leave a noexcept function and call std::terminate, ending the test run.
     TTestLogger logger;
+    std::vector<ASWLog::TASWLogError> reports;
+    ASWLog::TASWLogConfig config;
+    config.ErrorReportInterval = std::chrono::milliseconds(0);
+    config.OnError = [&reports](const ASWLog::TASWLogError& error) {
+            reports.push_back(error);
+        };
+    logger.Initialize(config);
     logger.ThrowsOnWrite = true;
 
     // Act
@@ -720,6 +953,12 @@ void TTest_ASWLog_Base::Test_Write_ThrowingWriteRecordDropsEntry()
     // Assert
     CheckEquals(1, logger.WriteRecordCount, __func__, __LINE__, "Only the entry written after the failures should be recorded");
     CheckEquals(std::string("written"), logger.LastMessage, __func__, __LINE__, "The logger should keep working after WriteRecord() threw");
+    CheckEquals(static_cast<std::size_t>(2), reports.size(), __func__, __LINE__, "Each dropped entry should be reported");
+    if (reports.empty())
+        return;
+
+    CheckTrue(reports[0].Kind == ASWLog::ErrorKind::Exception, __func__, __LINE__, "A dropped entry should be reported as an Exception");
+    CheckEquals(std::string("Dropped an entry: write failed"), reports[0].Message, __func__, __LINE__, "The report should give the exception's what()");
 }
 //---------------------------------------------------------------------------
 
