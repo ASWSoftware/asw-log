@@ -26,6 +26,7 @@ limitations under the License.
 //---------------------------------------------------------------------------
 // System includes here
 #include <algorithm>
+#include <cerrno>
 #include <cstdlib>
 #include <filesystem>
 #include <format>
@@ -251,9 +252,15 @@ bool TASWFileStream::Close()
 }
 
 //---------------------------------------------------------------------------
-void TASWFileStream::Flush()
+bool TASWFileStream::Flush()
 {
-    flush();
+    // Go through the buffer - flush() does nothing while the stream is in a failed state, e.g. after a failed write,
+    // which would keep every later entry in the buffer until the file is closed
+    if (m_Buffer.pubsync() == 0)
+        return true;
+
+    setstate(std::ios::failbit);
+    return false;
 }
 
 //---------------------------------------------------------------------------

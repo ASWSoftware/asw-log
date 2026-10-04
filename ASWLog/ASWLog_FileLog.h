@@ -92,7 +92,7 @@ public:
     bool Open(const std::filesystem::path& path);
     bool Close();
     bool IsOpen() const noexcept;
-    void Flush();
+    bool Flush();
     std::uintmax_t GetSize() const noexcept; // See TASWFileStreamBuf::GetSize()
     bool Write(std::string_view data);
 };

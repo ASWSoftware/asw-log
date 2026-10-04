@@ -10,6 +10,14 @@ see [0.26.1](#0261---2026-09-17) for the initial versioned baseline.
 
 ## [Unreleased]
 
+### Fixed
+
+- After a failed write (e.g. a full disk that later had room again), a file
+  logger's flushes did nothing until the file was reopened, so entries
+  stayed in the file's buffer and `Flush()` kept returning false. Each flush
+  now reaches the file and `Flush()` returns its own result.
+  `TASWFileStream::Flush()` now returns whether it succeeded.
+
 ## [0.65.0] - 2026-10-03
 
 ### Added
