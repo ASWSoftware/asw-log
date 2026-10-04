@@ -117,6 +117,7 @@ void TTest_ASWLog_Types::Test_ErrorKind_ToString()
     CheckEquals(std::string("OPEN_FAILED"), std::string(ASWLog::ErrorKind_ToString(ASWLog::ErrorKind::OpenFailed)), __func__, __LINE__, "OpenFailed should stringify as OPEN_FAILED");
     CheckEquals(std::string("WRITE_FAILED"), std::string(ASWLog::ErrorKind_ToString(ASWLog::ErrorKind::WriteFailed)), __func__, __LINE__, "WriteFailed should stringify as WRITE_FAILED");
     CheckEquals(std::string("FLUSH_FAILED"), std::string(ASWLog::ErrorKind_ToString(ASWLog::ErrorKind::FlushFailed)), __func__, __LINE__, "FlushFailed should stringify as FLUSH_FAILED");
+    CheckEquals(std::string("SYNC_FAILED"), std::string(ASWLog::ErrorKind_ToString(ASWLog::ErrorKind::SyncFailed)), __func__, __LINE__, "SyncFailed should stringify as SYNC_FAILED");
     CheckEquals(std::string("CLOSE_FAILED"), std::string(ASWLog::ErrorKind_ToString(ASWLog::ErrorKind::CloseFailed)), __func__, __LINE__, "CloseFailed should stringify as CLOSE_FAILED");
     CheckEquals(std::string("ROTATION_FAILED"), std::string(ASWLog::ErrorKind_ToString(ASWLog::ErrorKind::RotationFailed)), __func__, __LINE__, "RotationFailed should stringify as ROTATION_FAILED");
     CheckEquals(std::string("DELETE_FAILED"), std::string(ASWLog::ErrorKind_ToString(ASWLog::ErrorKind::DeleteFailed)), __func__, __LINE__, "DeleteFailed should stringify as DELETE_FAILED");

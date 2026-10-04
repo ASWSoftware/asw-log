@@ -56,6 +56,8 @@ private: // Test methods
     void Test_FailedReopen_ZeroResetDelayRetriesOnNextWrite();
     void Test_FailedSizeRotation_WaitsBeforeRetrying();
     void Test_FileStream_FlushWorksAfterFailedWrite();
+    void Test_FlushImmediatelyAtLevel_FlushesEntriesAtOrAboveTheLevel();
+    void Test_FlushImmediatelyAtLevel_OffLeavesFlushingToFlushMode();
     void Test_Flush_WritesBufferedManualModeEntries();
     void Test_GetInstance_ReturnsSameInstance();
     void Test_InitializeAndLogInfo_WritesText();
@@ -77,6 +79,7 @@ private: // Test methods
     void Test_OnError_ReportsFailedDelete();
     void Test_OnError_ReportsFailedOpen();
     void Test_OnError_ReportsFailedRotationAndReopen();
+    void Test_OnError_ReportsFailedSync();
     void Test_OnError_ReportsFullDisk();
     void Test_OnLogEntry_FiresForQualifyingLevelsOnly();
     void Test_OnLogEntry_ReentrantCallbackDoesNotDeadlock();
@@ -90,6 +93,7 @@ private: // Test methods
     void Test_SizeRotation_AutoOpenCloseCountsOtherWriters();
     void Test_SizeRotation_CountsExistingFileSize();
     void Test_SizeRotation_RotatesWhenLimitReached();
+    void Test_SyncToDiskAtLevel_FlushesAndSyncsEntriesAtOrAboveTheLevel();
     void Test_Write_EarlierRecordDoesNotRollLogBack();
 
 public:

@@ -268,6 +268,8 @@ TTest_ASWLog_FileLog::TTest_ASWLog_FileLog()
     RegisterTest(&TTest_ASWLog_FileLog::Test_FailedReopen_ZeroResetDelayRetriesOnNextWrite, "FailedReopen_ZeroResetDelayRetriesOnNextWrite");
     RegisterTest(&TTest_ASWLog_FileLog::Test_FailedSizeRotation_WaitsBeforeRetrying, "FailedSizeRotation_WaitsBeforeRetrying");
     RegisterTest(&TTest_ASWLog_FileLog::Test_FileStream_FlushWorksAfterFailedWrite, "FileStream_FlushWorksAfterFailedWrite");
+    RegisterTest(&TTest_ASWLog_FileLog::Test_FlushImmediatelyAtLevel_FlushesEntriesAtOrAboveTheLevel, "FlushImmediatelyAtLevel_FlushesEntriesAtOrAboveTheLevel");
+    RegisterTest(&TTest_ASWLog_FileLog::Test_FlushImmediatelyAtLevel_OffLeavesFlushingToFlushMode, "FlushImmediatelyAtLevel_OffLeavesFlushingToFlushMode");
     RegisterTest(&TTest_ASWLog_FileLog::Test_Flush_WritesBufferedManualModeEntries, "Flush_WritesBufferedManualModeEntries");
     RegisterTest(&TTest_ASWLog_FileLog::Test_GetInstance_ReturnsSameInstance, "GetInstance_ReturnsSameInstance");
     RegisterTest(&TTest_ASWLog_FileLog::Test_InitializeAndLogInfo_WritesText, "InitializeAndLogInfo_WritesText");
@@ -289,6 +291,7 @@ TTest_ASWLog_FileLog::TTest_ASWLog_FileLog()
     RegisterTest(&TTest_ASWLog_FileLog::Test_OnError_ReportsFailedDelete, "OnError_ReportsFailedDelete");
     RegisterTest(&TTest_ASWLog_FileLog::Test_OnError_ReportsFailedOpen, "OnError_ReportsFailedOpen");
     RegisterTest(&TTest_ASWLog_FileLog::Test_OnError_ReportsFailedRotationAndReopen, "OnError_ReportsFailedRotationAndReopen");
+    RegisterTest(&TTest_ASWLog_FileLog::Test_OnError_ReportsFailedSync, "OnError_ReportsFailedSync");
     RegisterTest(&TTest_ASWLog_FileLog::Test_OnError_ReportsFullDisk, "OnError_ReportsFullDisk");
     RegisterTest(&TTest_ASWLog_FileLog::Test_OnLogEntry_FiresForQualifyingLevelsOnly, "OnLogEntry_FiresForQualifyingLevelsOnly");
     RegisterTest(&TTest_ASWLog_FileLog::Test_OnLogEntry_ReentrantCallbackDoesNotDeadlock, "OnLogEntry_ReentrantCallbackDoesNotDeadlock");
@@ -302,6 +305,7 @@ TTest_ASWLog_FileLog::TTest_ASWLog_FileLog()
     RegisterTest(&TTest_ASWLog_FileLog::Test_SizeRotation_AutoOpenCloseCountsOtherWriters, "SizeRotation_AutoOpenCloseCountsOtherWriters");
     RegisterTest(&TTest_ASWLog_FileLog::Test_SizeRotation_CountsExistingFileSize, "SizeRotation_CountsExistingFileSize");
     RegisterTest(&TTest_ASWLog_FileLog::Test_SizeRotation_RotatesWhenLimitReached, "SizeRotation_RotatesWhenLimitReached");
+    RegisterTest(&TTest_ASWLog_FileLog::Test_SyncToDiskAtLevel_FlushesAndSyncsEntriesAtOrAboveTheLevel, "SyncToDiskAtLevel_FlushesAndSyncsEntriesAtOrAboveTheLevel");
     RegisterTest(&TTest_ASWLog_FileLog::Test_Write_EarlierRecordDoesNotRollLogBack, "Write_EarlierRecordDoesNotRollLogBack");
 }
 //---------------------------------------------------------------------------
@@ -1030,6 +1034,62 @@ void TTest_ASWLog_FileLog::Test_FileStream_FlushWorksAfterFailedWrite()
     CheckTrue(written, __func__, __LINE__, "Write should succeed");
     CheckTrue(flushed, __func__, __LINE__, "Flush should succeed after an earlier failure");
     CheckEquals(std::string("buffered"), contents, __func__, __LINE__, "Flush should write the buffered data to the file");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_FileLog::Test_FlushImmediatelyAtLevel_FlushesEntriesAtOrAboveTheLevel()
+{
+    // Arrange: FlushMode::Manual keeps the entries below the level in the file's buffer
+    const auto logFile = TestTempDir / "flush_at_level.log";
+    auto config = MakeRotationTestConfig(logFile);
+    config.File.Flush = ASWLog::FlushMode::Manual;
+    config.File.FlushImmediatelyAtLevel = ASWLog::Level::Warn;
+
+    ASWLog::TASWFileLog logger;
+    const bool initialized = logger.Initialize(config);
+
+    // Act: read through a separate handle while the file is open
+    logger.LogInfo("info_entry");
+    const auto contentsAfterInfo = ReadFileText(logFile);
+    logger.LogWarn("warn_entry");
+    const auto contentsAfterWarn = ReadFileText(logFile);
+    logger.LogDebug("debug_entry");
+    logger.LogRaw(ASWLog::Level::Critical, "raw_critical_entry");
+    const auto contentsAfterRaw = ReadFileText(logFile);
+    logger.LogForce(ASWLog::Level::Trace, "forced_trace_entry");
+    const auto contentsAfterForcedTrace = ReadFileText(logFile);
+
+    // Assert
+    CheckTrue(initialized, __func__, __LINE__, "Initialize should succeed");
+    CheckEquals(std::string(), contentsAfterInfo, __func__, __LINE__, "An entry below the level should stay buffered");
+    CheckEquals(std::string(": info_entry\n: warn_entry\n"), contentsAfterWarn, __func__, __LINE__,
+        "An entry at the level should be flushed with the entries buffered before it");
+    CheckEquals(std::string(": info_entry\n: warn_entry\n: debug_entry\nraw_critical_entry"), contentsAfterRaw, __func__, __LINE__,
+        "A raw entry above the level should be flushed too");
+    CheckEquals(contentsAfterRaw, contentsAfterForcedTrace, __func__, __LINE__, "A forced entry below the level should stay buffered");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_FileLog::Test_FlushImmediatelyAtLevel_OffLeavesFlushingToFlushMode()
+{
+    // Arrange
+    const auto logFile = TestTempDir / "flush_at_level_off.log";
+    auto config = MakeRotationTestConfig(logFile);
+    config.File.Flush = ASWLog::FlushMode::Manual;
+    config.File.FlushImmediatelyAtLevel = ASWLog::Level::Off;
+
+    ASWLog::TASWFileLog logger;
+    const bool initialized = logger.Initialize(config);
+
+    // Act
+    logger.LogCritical("critical_entry");
+    logger.LogForce(ASWLog::Level::Critical, "forced_critical_entry");
+    const auto contentsBeforeFlush = ReadFileText(logFile);
+    logger.Flush();
+    const auto contentsAfterFlush = ReadFileText(logFile);
+
+    // Assert
+    CheckTrue(initialized, __func__, __LINE__, "Initialize should succeed");
+    CheckEquals(std::string(), contentsBeforeFlush, __func__, __LINE__, "With Level::Off, even a Critical entry should stay buffered");
+    CheckEquals(std::string(": critical_entry\n: forced_critical_entry\n"), contentsAfterFlush, __func__, __LINE__, "Flush() should write the buffered entries");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_FileLog::Test_Flush_WritesBufferedManualModeEntries()
@@ -1806,6 +1866,45 @@ void TTest_ASWLog_FileLog::Test_OnError_ReportsFailedRotationAndReopen()
     CheckEquals(static_cast<std::size_t>(2), reports[2].SuppressedCount, __func__, __LINE__, "The report should count the failed opens left out");
 }
 //---------------------------------------------------------------------------
+void TTest_ASWLog_FileLog::Test_OnError_ReportsFailedSync()
+{
+    // Arrange: the null device takes every write, but can't be synced to disk (FlushFileBuffers fails with
+    // ERROR_INVALID_FUNCTION on Windows, fsync with EINVAL on Linux)
+#if defined(_WIN32)
+    auto config = MakeRotationTestConfig("NUL"); // A device name in any folder
+#else
+    if (!std::filesystem::exists("/dev/null"))
+        Skip(__func__, __LINE__, "/dev/null doesn't exist");
+
+    auto config = MakeRotationTestConfig("/dev/null"); // Absolute, so it replaces the folder
+#endif
+    config.File.SyncToDiskAtLevel = ASWLog::Level::Error;
+    config.ErrorReportInterval = std::chrono::milliseconds(0);
+    std::vector<ASWLog::TASWLogError> reports;
+    config.OnError = [&reports](const ASWLog::TASWLogError& error) {
+            reports.push_back(error);
+        };
+
+    // Act
+    ASWLog::TASWFileLog logger;
+    const bool initialized = logger.Initialize(config);
+    logger.LogWarn("flushed, not synced"); // Below the level, and FlushMode::EveryWrite flushes it
+    const auto reportsAfterWarn = reports.size();
+    logger.LogError("flushed and synced");
+    logger.Close();
+
+    // Assert
+    CheckTrue(initialized, __func__, __LINE__, "Initialize should succeed: the null device can be opened");
+    CheckEquals(static_cast<std::size_t>(0), reportsAfterWarn, __func__, __LINE__, "An entry below the level shouldn't be synced");
+    CheckEquals(static_cast<std::size_t>(1), reports.size(), __func__, __LINE__, "The failed sync should be reported once");
+    if (reports.size() == 1)
+    {
+        CheckTrue(reports[0].Kind == ASWLog::ErrorKind::SyncFailed, __func__, __LINE__, "The report should be SyncFailed");
+        CheckTrue(reports[0].Path == config.File.ResolvePath(), __func__, __LINE__, "The report should name the log file");
+        CheckTrue(static_cast<bool>(reports[0].Code), __func__, __LINE__, "The report should carry the operating system's error");
+    }
+}
+//---------------------------------------------------------------------------
 void TTest_ASWLog_FileLog::Test_OnError_ReportsFullDisk()
 {
 #if defined(__linux__)
@@ -2321,6 +2420,38 @@ void TTest_ASWLog_FileLog::Test_SizeRotation_RotatesWhenLimitReached()
         const bool foundOnce = first != std::string::npos && allContents.find(marker, first + 1) == std::string::npos;
         CheckTrue(foundOnce, __func__, __LINE__, "Each line should be in exactly one of the log and its backups: " + marker);
     }
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_FileLog::Test_SyncToDiskAtLevel_FlushesAndSyncsEntriesAtOrAboveTheLevel()
+{
+    // Arrange: only SyncToDiskAtLevel makes the logger flush (whether the data reached the disk itself can't be seen
+    // from here, but a failed sync would be reported)
+    const auto logFile = TestTempDir / "sync_at_level.log";
+    auto config = MakeRotationTestConfig(logFile);
+    config.File.Flush = ASWLog::FlushMode::Manual;
+    config.File.FlushImmediatelyAtLevel = ASWLog::Level::Off;
+    config.File.SyncToDiskAtLevel = ASWLog::Level::Warn;
+    config.ErrorReportInterval = std::chrono::milliseconds(0);
+    std::vector<ASWLog::TASWLogError> reports;
+    config.OnError = [&reports](const ASWLog::TASWLogError& error) {
+            reports.push_back(error);
+        };
+
+    ASWLog::TASWFileLog logger;
+    const bool initialized = logger.Initialize(config);
+
+    // Act: read through a separate handle while the file is open
+    logger.LogInfo("info_entry");
+    const auto contentsAfterInfo = ReadFileText(logFile);
+    logger.LogRaw(ASWLog::Level::Warn, "raw_warn_entry");
+    const auto contentsAfterWarn = ReadFileText(logFile);
+
+    // Assert
+    CheckTrue(initialized, __func__, __LINE__, "Initialize should succeed");
+    CheckEquals(std::string(), contentsAfterInfo, __func__, __LINE__, "An entry below the level should stay buffered");
+    CheckEquals(std::string(": info_entry\nraw_warn_entry"), contentsAfterWarn, __func__, __LINE__,
+        "An entry at the level should be flushed with the entries buffered before it");
+    CheckEquals(static_cast<std::size_t>(0), reports.size(), __func__, __LINE__, "Syncing a log file should succeed");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_FileLog::Test_Write_EarlierRecordDoesNotRollLogBack()

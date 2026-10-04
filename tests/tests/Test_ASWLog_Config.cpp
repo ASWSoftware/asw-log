@@ -114,6 +114,8 @@ void TTest_ASWLog_Config::Test_Defaults_MatchDocumentedValues()
     CheckFalse(config.File.AutoOpenClosePerWrite, __func__, __LINE__, "File.AutoOpenClosePerWrite should default to false");
     CheckTrue(config.File.Flush == ASWLog::FlushMode::EveryWrite, __func__, __LINE__, "File.Flush should default to EveryWrite");
     CheckTrue(config.File.FlushInterval == std::chrono::milliseconds(1000), __func__, __LINE__, "File.FlushInterval should default to 1000 ms");
+    CheckTrue(config.File.FlushImmediatelyAtLevel == ASWLog::Level::Error, __func__, __LINE__, "File.FlushImmediatelyAtLevel should default to Error");
+    CheckTrue(config.File.SyncToDiskAtLevel == ASWLog::Level::Off, __func__, __LINE__, "File.SyncToDiskAtLevel should default to Off");
     CheckEquals(5, config.File.OpenRetryCount, __func__, __LINE__, "File.OpenRetryCount should default to 5");
     CheckTrue(config.File.OpenRetryDelay == std::chrono::milliseconds(50), __func__, __LINE__, "File.OpenRetryDelay should default to 50 ms");
     CheckTrue(config.File.CircuitBreakerResetDelay == std::chrono::milliseconds(500), __func__, __LINE__,

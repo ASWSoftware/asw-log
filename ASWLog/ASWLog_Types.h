@@ -100,6 +100,10 @@ enum class ErrorKind
     // The output's buffer couldn't be written out (e.g. the disk is full).
     FlushFailed,
 
+    // The log file couldn't be synced to disk (see TASWFileConfig::SyncToDiskAtLevel), so entries may be lost if the
+    // system stops (e.g. a power loss).
+    SyncFailed,
+
     // The log file couldn't be closed cleanly; entries still in its buffer may be lost.
     CloseFailed,
 
@@ -114,7 +118,7 @@ enum class ErrorKind
 };
 
 // Number of error kinds, e.g. for a table indexed by kind. Update this when a kind is added or removed.
-constexpr std::size_t ErrorKindCount = 7;
+constexpr std::size_t ErrorKindCount = 8;
 
 [[nodiscard]] constexpr std::string_view ErrorKind_ToString(ErrorKind errorKind) noexcept
 {
@@ -128,6 +132,9 @@ constexpr std::size_t ErrorKindCount = 7;
 
         case ErrorKind::FlushFailed:
             return "FLUSH_FAILED";
+
+        case ErrorKind::SyncFailed:
+            return "SYNC_FAILED";
 
         case ErrorKind::CloseFailed:
             return "CLOSE_FAILED";

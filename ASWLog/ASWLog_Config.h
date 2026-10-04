@@ -77,6 +77,13 @@ struct TASWFileConfig
 
     FlushMode Flush = FlushMode::EveryWrite;
     std::chrono::milliseconds FlushInterval{ 1000 }; // Used by FlushMode::Periodic
+    // An entry at or above this level (raw ones too) is flushed as soon as it is written, whatever Flush says, so it
+    // is in the file if the application crashes right after. Level::Off = only Flush decides.
+    Level FlushImmediatelyAtLevel = Level::Error;
+    // An entry at or above this level is flushed and then synced to disk (FlushFileBuffers on Windows, fsync on POSIX),
+    // so it survives a system crash or power loss too. A sync often takes milliseconds, so keep this level for rare
+    // entries. Level::Off = never synced.
+    Level SyncToDiskAtLevel = Level::Off;
 
     // Retry log entry options
     int OpenRetryCount = 5;

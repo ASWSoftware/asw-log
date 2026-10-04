@@ -41,6 +41,7 @@ limitations under the License.
 #include <vector>
 
 #if defined(_WIN32)
+#include <io.h>
 #include <share.h>
 #include <sys/stat.h>
 #include <windows.h>
@@ -281,6 +282,30 @@ bool TASWFileStreamBuf::Open(const std::filesystem::path& path)
 }
 
 //---------------------------------------------------------------------------
+bool TASWFileStreamBuf::SyncToDisk(std::error_code& errorCode)
+{
+    if (m_File == nullptr)
+    {
+        errorCode = std::make_error_code(std::errc::bad_file_descriptor);
+        return false;
+    }
+
+#if defined(_WIN32)
+    const auto handle = reinterpret_cast<HANDLE>(_get_osfhandle(_fileno(m_File)));
+    if (handle != INVALID_HANDLE_VALUE && FlushFileBuffers(handle))
+        return true;
+
+    errorCode = std::error_code(static_cast<int>(GetLastError()), std::system_category());
+#else
+    if (fsync(fileno(m_File)) == 0)
+        return true;
+
+    errorCode = GetErrnoCode();
+#endif
+    return false;
+}
+
+//---------------------------------------------------------------------------
 bool TASWFileStreamBuf::Write(std::string_view data)
 {
     if (m_File == nullptr)
@@ -384,6 +409,12 @@ bool TASWFileStream::Open(const std::filesystem::path& path)
     if (!result)
         setstate(std::ios::failbit);
     return result;
+}
+
+//---------------------------------------------------------------------------
+bool TASWFileStream::SyncToDisk(std::error_code& errorCode)
+{
+    return m_Buffer.SyncToDisk(errorCode);
 }
 
 //---------------------------------------------------------------------------
@@ -608,10 +639,18 @@ bool TASWFileLog::InitializeUnlocked()
 }
 
 //---------------------------------------------------------------------------
-void TASWFileLog::MaybeFlush(bool isNewLine)
+void TASWFileLog::MaybeFlush(Level level, bool isNewLine)
 {
-    const auto flushMode = GetConfigUnlocked().File.Flush;
-    if (flushMode == FlushMode::EveryWrite || (flushMode == FlushMode::OnNewLine && isNewLine))
+    // No entry is written at Level::Off, so a level option set to Off never matches
+    const auto& fileConfig = GetConfigUnlocked().File;
+    if (level >= fileConfig.SyncToDiskAtLevel)
+    {
+        SyncToDiskUnlocked(); // Flushes first
+        return;
+    }
+
+    const auto flushMode = fileConfig.Flush;
+    if (flushMode == FlushMode::EveryWrite || (flushMode == FlushMode::OnNewLine && isNewLine) || level >= fileConfig.FlushImmediatelyAtLevel)
     {
         FlushUnlocked();
         return;
@@ -620,7 +659,7 @@ void TASWFileLog::MaybeFlush(bool isNewLine)
     if (flushMode == FlushMode::Periodic)
     {
         const auto now = std::chrono::steady_clock::now();
-        if (now - m_LastFlushTime >= GetConfigUnlocked().File.FlushInterval)
+        if (now - m_LastFlushTime >= fileConfig.FlushInterval)
             FlushUnlocked();
     }
 }
@@ -900,7 +939,22 @@ bool TASWFileLog::RotateLogFilesUnlocked(std::string_view reasonTag, std::string
 }
 
 //---------------------------------------------------------------------------
-void TASWFileLog::WriteLineUnlocked(Level /*level*/, std::string_view line, bool endsLine)
+/*
+    TASWFileLog::SyncToDiskUnlocked
+
+    Flushes the file and syncs it to disk (see TASWFileConfig::SyncToDiskAtLevel). Kept out of MaybeFlush() so that
+    the per-line check stays small enough to be inlined.
+*/
+void TASWFileLog::SyncToDiskUnlocked()
+{
+    // A failed flush has been reported already, and left nothing new to sync
+    std::error_code errorCode;
+    if (FlushUnlocked() && !m_FileStream.SyncToDisk(errorCode))
+        ReportFileErrorUnlocked(ErrorKind::SyncFailed, "Couldn't sync the log file to disk", GetConfigUnlocked().File.ResolvePath(), errorCode);
+}
+
+//---------------------------------------------------------------------------
+void TASWFileLog::WriteLineUnlocked(Level level, std::string_view line, bool endsLine)
 {
     if (!m_FileStream.Write(line))
     {
@@ -908,7 +962,7 @@ void TASWFileLog::WriteLineUnlocked(Level /*level*/, std::string_view line, bool
         ReportFileErrorUnlocked(ErrorKind::WriteFailed, "Couldn't write to the log file", GetConfigUnlocked().File.ResolvePath(), errorCode);
     }
 
-    MaybeFlush(endsLine);
+    MaybeFlush(level, endsLine);
 }
 
 //---------------------------------------------------------------------------

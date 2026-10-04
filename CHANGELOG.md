@@ -49,6 +49,21 @@ see [0.26.1](#0261---2026-09-17) for the initial versioned baseline.
   a backup it renames out of the `<stem>.<reason>.<time>.bak` form is left
   to the application. A logger derived from `TASWTextLogBase` can run its own
   work after the lock with `DeferUnlocked()`.
+- `File.FlushImmediatelyAtLevel` (default `Level::Error`): a file logger
+  flushes an entry at or above this level as soon as it is written, whatever
+  `File.Flush` says, so with `Manual`, `Periodic` or `OnNewLine` flushing,
+  Error and Critical entries (raw ones too) are in the file if the
+  application crashes right after. `Level::Off` leaves flushing to
+  `File.Flush` alone, as before. Nothing changes with the default
+  `FlushMode::EveryWrite`.
+- `File.SyncToDiskAtLevel` (default `Level::Off`): a file logger flushes an
+  entry at or above this level and then syncs the file to disk
+  (`FlushFileBuffers` on Windows, `fsync` on POSIX), so the entry survives a
+  system crash or power loss too. A sync often takes milliseconds, so keep it
+  for rare entries. A failed sync is reported to `OnError` as the new
+  `ErrorKind::SyncFailed` (`ErrorKindCount` is now 8; the kinds after
+  `FlushFailed` moved up by one). `TASWFileStream::SyncToDisk()` does the
+  sync for a custom logger.
 
 ### Fixed
 
