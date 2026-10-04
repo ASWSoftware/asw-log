@@ -10,16 +10,19 @@ see [0.26.1](#0261---2026-09-17) for the initial versioned baseline.
 
 ## [Unreleased]
 
+## [0.66.0] - 2026-10-04
+
 ### Added
 
 - `TASWLogConfig::OnError`, which reports a logger's internal failures that
   used to be silent: the log file couldn't be opened (or its folder
-  created), written, flushed, closed or rotated, retention couldn't delete
-  an old backup, a console logger's stdout or stderr failed, or an
-  unexpected exception (e.g. a throwing formatter) dropped an entry or the
-  startup lines. Each report is a `TASWLogError`: an `ErrorKind`, a message,
-  the path and `std::error_code` if any, and `SuppressedCount`. Without a
-  handler, each report is written to stderr as one line
+  created), written, flushed, synced to disk, closed or rotated, backup
+  cleanup couldn't delete an old backup (or list its folder), a console
+  logger's stdout or stderr failed, or an unexpected exception (e.g. a
+  throwing formatter) dropped an entry or the startup lines. Each report is
+  a `TASWLogError`: an `ErrorKind`, a message, the path and
+  `std::error_code` if any, and `SuppressedCount`. Without a handler, each
+  report is written to stderr as one line
   (`TASWLogError::ToString()`). Reports, to `OnError` or to stderr, are
   limited per logger and kind by the new `ErrorReportInterval` (default 1
   minute; 0 = every failure), and each says how many of its kind were left
@@ -60,10 +63,9 @@ see [0.26.1](#0261---2026-09-17) for the initial versioned baseline.
   entry at or above this level and then syncs the file to disk
   (`FlushFileBuffers` on Windows, `fsync` on POSIX), so the entry survives a
   system crash or power loss too. A sync often takes milliseconds, so keep it
-  for rare entries. A failed sync is reported to `OnError` as the new
-  `ErrorKind::SyncFailed` (`ErrorKindCount` is now 8; the kinds after
-  `FlushFailed` moved up by one). `TASWFileStream::SyncToDisk()` does the
-  sync for a custom logger.
+  for rare entries. A failed sync is reported to `OnError` as
+  `ErrorKind::SyncFailed`. `TASWFileStream::SyncToDisk()` does the sync for
+  a custom logger.
 
 ### Fixed
 
@@ -540,7 +542,8 @@ Everything already present in the logger at this point (`TASWFileLog`,
 and CMake example projects, unit tests, `Deploy.bat`, etc.) is treated as the
 baseline and is not itemized commit-by-commit.
 
-[Unreleased]: https://github.com/ASWSoftware/asw-log/compare/v0.65.0...HEAD
+[Unreleased]: https://github.com/ASWSoftware/asw-log/compare/v0.66.0...HEAD
+[0.66.0]: https://github.com/ASWSoftware/asw-log/compare/v0.65.0...v0.66.0
 [0.65.0]: https://github.com/ASWSoftware/asw-log/compare/v0.45.0...v0.65.0
 [0.45.0]: https://github.com/ASWSoftware/asw-log/compare/v0.43.0...v0.45.0
 [0.43.0]: https://github.com/ASWSoftware/asw-log/compare/v0.26.4...v0.43.0

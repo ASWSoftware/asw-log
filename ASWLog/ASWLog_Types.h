@@ -110,7 +110,7 @@ enum class ErrorKind
     // The log file couldn't be renamed to a backup (e.g. another program holds it), so it grows on.
     RotationFailed,
 
-    // Retention couldn't delete an old backup, or list the folder that holds them.
+    // Backup cleanup couldn't delete an old backup, or list the folder that holds them.
     DeleteFailed,
 
     // An unexpected exception (e.g. out of memory, or a formatter that throws) dropped an entry or the startup lines.
