@@ -16,6 +16,7 @@ ASWLog is a thread-safe light-weight C++ logging tool for Windows and Linux proj
 - `example/rad370/` contains the RAD Studio 13.1 project and Windows build scripts.
 - `README.md` contains repo details.
 - `CHANGELOG.md` records notable changes per release (see Changelog below).
+- `CONTRIBUTING.md` contains the guidelines for contributors (issues, branches, commit history, pull requests, and bug reports); it defers to this file for coding rules, so keep the two consistent.
 - `.uncrustify.cfg` and `.githooks/` define the repository formatting workflow.
 
 ## Accuracy-First Engineering

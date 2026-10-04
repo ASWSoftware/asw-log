@@ -148,3 +148,8 @@ To use uncrustify (for coding standards (pretty formatting) for this repo):
 ```
 git config --local core.hooksPath .githooks/
 ```
+
+# Contributing
+
+Contributions are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for how to propose a change, build and test it, and
+report a bug.
