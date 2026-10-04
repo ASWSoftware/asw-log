@@ -10,6 +10,77 @@ see [0.26.1](#0261---2026-09-17) for the initial versioned baseline.
 
 ## [Unreleased]
 
+### Added
+
+- `TASWLogConfig::OnError`, which reports a logger's internal failures that
+  used to be silent: the log file couldn't be opened (or its folder
+  created), written, flushed, closed or rotated, retention couldn't delete
+  an old backup, a console logger's stdout or stderr failed, or an
+  unexpected exception (e.g. a throwing formatter) dropped an entry or the
+  startup lines. Each report is a `TASWLogError`: an `ErrorKind`, a message,
+  the path and `std::error_code` if any, and `SuppressedCount`. Without a
+  handler, each report is written to stderr as one line
+  (`TASWLogError::ToString()`). Reports, to `OnError` or to stderr, are
+  limited per logger and kind by the new `ErrorReportInterval` (default 1
+  minute; 0 = every failure), and each says how many of its kind were left
+  out since the previous one. Like `OnLogEntry`, `OnError` is called
+  outside the logger's lock and its exceptions are swallowed; a failure the
+  handler itself causes isn't reported again. A logger derived from
+  `TASWLogBase` reports with `ReportError()` (from a `TASWTextLogBase` hook,
+  `ReportErrorUnlocked()`). A `*Fmt` format error isn't reported: the entry
+  is still written, with the error in its line.
+- `File.MaxBackupFiles` and `File.MaxBackupTotalBytes` (0 = unlimited, the
+  default) limit a file logger's backups. After each successful rotation,
+  together with `File.RetentionMaxAge`, the oldest backups are deleted until
+  at most `MaxBackupFiles` are left and they take at most
+  `MaxBackupTotalBytes`; the size limit is strict and deletes even the backup
+  just made if it alone is larger, so set it above `MaxFileSizeBytes`.
+  Backups are ordered by their last write time, when their newest entry was
+  written, so a daily backup counts as newer than the size backups of the
+  same day. A backup that can't be deleted is reported to `OnError`.
+- `File.OnBackupCreated`, called once for each backup that rotation makes,
+  with a `TASWBackupInfo` (the log's path, the backup's path, and the
+  reason: "size", "daily", or the tag given to `RotateLogFiles()`), e.g. to
+  compress, upload or move the backup. Like `OnError`, it is called outside
+  the logger's lock, on the thread whose call rotated the log, so hand slow
+  work to another thread; exceptions are swallowed. The backup cleanup
+  (`RetentionMaxAge`, `MaxBackupFiles`, `MaxBackupTotalBytes`) now runs
+  after it, also outside the lock, so the callback always finds its backup;
+  a backup it renames out of the `<stem>.<reason>.<time>.bak` form is left
+  to the application. A logger derived from `TASWTextLogBase` can run its own
+  work after the lock with `DeferUnlocked()`.
+- `File.FlushImmediatelyAtLevel` (default `Level::Error`): a file logger
+  flushes an entry at or above this level as soon as it is written, whatever
+  `File.Flush` says, so with `Manual`, `Periodic` or `OnNewLine` flushing,
+  Error and Critical entries (raw ones too) are in the file if the
+  application crashes right after. `Level::Off` leaves flushing to
+  `File.Flush` alone, as before. Nothing changes with the default
+  `FlushMode::EveryWrite`.
+- `File.SyncToDiskAtLevel` (default `Level::Off`): a file logger flushes an
+  entry at or above this level and then syncs the file to disk
+  (`FlushFileBuffers` on Windows, `fsync` on POSIX), so the entry survives a
+  system crash or power loss too. A sync often takes milliseconds, so keep it
+  for rare entries. A failed sync is reported to `OnError` as the new
+  `ErrorKind::SyncFailed` (`ErrorKindCount` is now 8; the kinds after
+  `FlushFailed` moved up by one). `TASWFileStream::SyncToDisk()` does the
+  sync for a custom logger.
+
+### Fixed
+
+- `File.RetentionMaxAge` deleting another log's old backups when the two
+  logs share a folder and one name starts with the other's (e.g. `app.log`
+  and `app.audit.log`), and any other old file named `<stem>.<anything>.bak`.
+  Backup cleanup now only deletes this log's backups, named as rotation
+  names them: `<stem>.<reason>.<time>.bak`. A backup made by
+  `RotateLogFiles()` with a reason tag that contains `.` isn't recognized,
+  so it is kept. Retention now also works for a log in a root folder.
+
+- After a failed write (e.g. a full disk that later had room again), a file
+  logger's flushes did nothing until the file was reopened, so entries
+  stayed in the file's buffer and `Flush()` kept returning false. Each flush
+  now reaches the file and `Flush()` returns its own result.
+  `TASWFileStream::Flush()` now returns whether it succeeded.
+
 ## [0.65.0] - 2026-10-03
 
 ### Added

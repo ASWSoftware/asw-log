@@ -4,7 +4,7 @@ Author: Anthony S. West - ASW Software
 
 See header for info.
 
-Copyright 2026 Anthony S. West
+Copyright 2026 ASW Software
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -167,9 +167,17 @@ protected:
     }
 
 public:
-    bool Initialize(const ASWLog::TASWLogConfig& /*config*/) noexcept override
+    bool Initialize(const ASWLog::TASWLogConfig& config) noexcept override
     {
-        return true;
+        try
+        {
+            [[maybe_unused]] const auto previousConfig = SetConfig(config); // For its OnError
+            return true;
+        }
+        catch (...)
+        {
+            return false;
+        }
     }
 
     bool Reconfigure(const ASWLog::TASWLogConfig& /*config*/) noexcept override
@@ -660,6 +668,14 @@ void TTest_ASWLog_MultiLog::Test_Log_ThrowingSinkDoesNotStopOtherSinks()
     const auto file = TestTempDir / "after_throwing_sink.log";
 
     TThrowingLogger throwingSink;
+    int reportCount = 0;
+    ASWLog::TASWLogConfig throwingSinkConfig;
+    throwingSinkConfig.ErrorReportInterval = std::chrono::milliseconds(0);
+    throwingSinkConfig.OnError = [&reportCount](const ASWLog::TASWLogError& /*error*/) {
+            ++reportCount;
+        };
+    throwingSink.Initialize(throwingSinkConfig);
+
     ASWLog::TASWFileLog fileSink;
     CheckTrue(fileSink.Initialize(MakeFileConfig(TestTempDir, file, ASWLog::Level::Trace)), __func__, __LINE__, "fileSink should initialize");
 
@@ -690,6 +706,7 @@ void TTest_ASWLog_MultiLog::Test_Log_ThrowingSinkDoesNotStopOtherSinks()
     CheckTrue(contents.find("raw_message") != std::string::npos, __func__, __LINE__, "LogRaw should still reach the other sinks");
     CheckTrue(contents.find("force_message") != std::string::npos, __func__, __LINE__, "LogForce should still reach the other sinks");
     CheckTrue(contents.find("force_raw_message") != std::string::npos, __func__, __LINE__, "LogForceRaw should still reach the other sinks");
+    CheckEquals(4, reportCount, __func__, __LINE__, "The failing sink should report each entry it dropped, through its own OnError");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_MultiLog::Test_LogFmt_FormatsOnceForAllSinks()

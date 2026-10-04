@@ -4,7 +4,7 @@ Author: Anthony S. West - ASW Software
 
 See header for info.
 
-Copyright 2026 Anthony S. West
+Copyright 2026 ASW Software
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -25,9 +25,12 @@ limitations under the License.
 #include "ASWLog_Base.h"
 //---------------------------------------------------------------------------
 // System includes here
+#include <cstdio>
+#include <exception>
 #include <iomanip>
 #include <iostream>
 #include <sstream>
+#include <utility>
 //---------------------------------------------------------------------------
 #include "ASWLog_Utils.h" // For GetCurrentOSProcessId(), GetCurrentOSThreadId()
 //---------------------------------------------------------------------------
@@ -35,11 +38,122 @@ limitations under the License.
 namespace ASWLog
 {
 
+namespace
+{
+
+// True while this thread is in TASWLogBase::ReportError()'s call to OnError (or its write to stderr)
+thread_local bool IsReportingError = false;
+
+// Sets IsReportingError while alive
+class TReportingErrorScope
+{
+public:
+    TReportingErrorScope() noexcept
+    {
+        IsReportingError = true;
+    }
+
+    ~TReportingErrorScope()
+    {
+        IsReportingError = false;
+    }
+
+    TReportingErrorScope(const TReportingErrorScope&) = delete;
+    TReportingErrorScope& operator=(const TReportingErrorScope&) = delete;
+};
+
+} // namespace
+
 //---------------------------------------------------------------------------
 
 /////////////////////////////////////////////////////////////////////////////
 // TASWLogBase
 /////////////////////////////////////////////////////////////////////////////
+
+//---------------------------------------------------------------------------
+TASWLogError TASWLogBase::MakeExceptionError(std::string_view action)
+{
+    TASWLogError error;
+    error.Kind = ErrorKind::Exception;
+
+    try
+    {
+        if (const auto exception = std::current_exception())
+            std::rethrow_exception(exception);
+
+        error.Message = action;
+    }
+    catch (const std::exception& exception)
+    {
+        error.Message = std::format("{}: {}", action, exception.what());
+    }
+    catch (...)
+    {
+        error.Message = std::format("{}: unknown exception", action);
+    }
+
+    return error;
+}
+
+//---------------------------------------------------------------------------
+void TASWLogBase::ReportCurrentException(std::string_view action) noexcept
+{
+    try
+    {
+        ReportError(MakeExceptionError(action));
+    }
+    catch (...)
+    {
+    }
+}
+
+//---------------------------------------------------------------------------
+void TASWLogBase::ReportError(const TASWLogConfig& config, TASWLogError error) noexcept
+{
+    // E.g. a handler that logs to this failing logger, which would otherwise report again, and again
+    if (IsReportingError)
+        return;
+
+    const auto kindIndex = static_cast<std::size_t>(error.Kind);
+    if (kindIndex >= m_ErrorReportStates.size())
+        return;
+
+    try
+    {
+        {
+            std::lock_guard<std::mutex> lock(m_ErrorReportMutex);
+            auto& state = m_ErrorReportStates[kindIndex];
+            const auto now = NowUTC();
+
+            // Like the retry delays, a clock that went backwards doesn't hold a report back
+            if (state.HasReported && now >= state.LastReport && now - state.LastReport < config.ErrorReportInterval)
+            {
+                ++state.SuppressedCount;
+                return;
+            }
+
+            error.SuppressedCount = state.SuppressedCount;
+            state.LastReport = now;
+            state.SuppressedCount = 0;
+            state.HasReported = true;
+        }
+
+        TReportingErrorScope reportingScope;
+        if (config.OnError != nullptr)
+            config.OnError(error);
+        else
+            WriteErrorToStdErr(error);
+    }
+    catch (...)
+    {
+    }
+}
+
+//---------------------------------------------------------------------------
+void TASWLogBase::ReportError(TASWLogError error) noexcept
+{
+    ReportError(*GetConfig(), std::move(error));
+}
 
 //---------------------------------------------------------------------------
 std::shared_ptr<const TASWLogConfig> TASWLogBase::SetConfig(const TASWLogConfig& config)
@@ -85,7 +199,22 @@ void TASWLogBase::Write(const TASWLogRecord& record) noexcept
     }
     catch (...)
     {
+        ReportCurrentException("Dropped an entry");
     }
+}
+
+//---------------------------------------------------------------------------
+/*
+    TASWLogBase::WriteErrorToStdErr
+
+    Reports a failure when TASWLogConfig::OnError isn't set. Uses the C stream, which stays usable at exit, when the
+    singleton loggers are finalized.
+*/
+void TASWLogBase::WriteErrorToStdErr(const TASWLogError& error) const
+{
+    const auto line = std::format("ASWLog {}: {}\n", GetLoggerClassName(), error.ToString());
+    std::fwrite(line.data(), 1, line.size(), stderr);
+    std::fflush(stderr);
 }
 
 //---------------------------------------------------------------------------

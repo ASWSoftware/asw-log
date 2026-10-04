@@ -2,7 +2,7 @@
 Test_ASWLog_Base.h
 Author: Anthony S. West - ASW Software
 
-Copyright 2026 Anthony S. West
+Copyright 2026 ASW Software
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -45,6 +45,10 @@ private: // Test methods
     void Test_LogFormatMethods_SkipFormattingWhenNotWritten();
     void Test_LogLevelConvenienceMethods();
     void Test_LogMethods_PassRecordsToWrite();
+    void Test_ReportError_FailureInHandlerIsNotReportedAgain();
+    void Test_ReportError_ThrottlesEachKindSeparately();
+    void Test_ReportError_ThrowingHandlerDoesNotEscape();
+    void Test_ReportError_WritesToStdErrWithoutHandler();
     void Test_SetGetMinimumLevel_RoundTrips();
     void Test_ShouldLog_ReflectsEnabledAndLevel();
     void Test_Write_AppliesEnabledOffAndLevelChecks();

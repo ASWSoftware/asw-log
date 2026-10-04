@@ -4,7 +4,7 @@ Author: Anthony S. West - ASW Software
 
 See header for info.
 
-Copyright 2026 Anthony S. West
+Copyright 2026 ASW Software
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -25,12 +25,16 @@ limitations under the License.
 #include "Test_ASWLog_FileLog.h"
 //---------------------------------------------------------------------------
 #include <chrono>
+#include <cstddef>
 #include <cstdint>
 #include <cstdio>
 #include <filesystem>
+#include <format>
 #include <fstream>
 #include <iterator>
+#include <stdexcept>
 #include <string>
+#include <string_view>
 #include <system_error>
 #include <thread>
 #include <vector>
@@ -70,6 +74,27 @@ protected:
     std::chrono::system_clock::time_point NowUTC() const noexcept override
     {
         return CurrentTime;
+    }
+};
+
+// A TASWFileLog that can tell whether its lock is held, e.g. inside a callback
+class TLockCheckFileLog : public ASWLog::TASWFileLog
+{
+public:
+    // True if m_Mutex isn't held, checked from another thread (try_lock on a mutex the calling thread holds is
+    // undefined)
+    bool IsMutexFree()
+    {
+        bool isFree = false;
+        std::thread checker([this, &isFree] {
+            if (m_Mutex.try_lock())
+            {
+                isFree = true;
+                m_Mutex.unlock();
+            }
+                    });
+        checker.join();
+        return isFree;
     }
 };
 
@@ -153,6 +178,35 @@ bool CanBlockFiles()
 #endif
 }
 
+// How many files in TestTempDir have names starting with 'prefix'
+std::size_t CountFilesStartingWith(std::string_view prefix)
+{
+    std::size_t count = 0;
+    for (const auto& entry : std::filesystem::directory_iterator(TestTempDir))
+    {
+        if (entry.path().filename().string().starts_with(prefix))
+            ++count;
+    }
+
+    return count;
+}
+
+// Creates 'file' with 'size' bytes, last written 'age' ago, e.g. a backup left by an earlier rotation
+void CreateAgedFile(const std::filesystem::path& file, std::size_t size, std::chrono::hours age)
+{
+    {
+        std::ofstream stream(file, std::ios::binary);
+        stream << std::string(size, 'x');
+    }
+    std::filesystem::last_write_time(file, std::filesystem::file_time_type::clock::now() - age);
+}
+
+// An OnError handler for the tests that cause failures on purpose, so their reports don't go to stderr (the OnError
+// tests check the reports)
+void IgnoreError(const ASWLog::TASWLogError& /*error*/)
+{
+}
+
 // A config for the rotation tests, with no line metadata or startup info, so each line is just its message
 ASWLog::TASWLogConfig MakeRotationTestConfig(const std::filesystem::path& logFile)
 {
@@ -195,6 +249,11 @@ TTest_ASWLog_FileLog::TTest_ASWLog_FileLog()
     : inherited("ASWLog_FileLog_Tests")
 {
     RegisterTest(&TTest_ASWLog_FileLog::Test_AutoOpenClose_StaysInitializedBetweenWrites, "AutoOpenClose_StaysInitializedBetweenWrites");
+    RegisterTest(&TTest_ASWLog_FileLog::Test_BackupLimits_ApplyOnlyToThisLogsBackups, "BackupLimits_ApplyOnlyToThisLogsBackups");
+    RegisterTest(&TTest_ASWLog_FileLog::Test_BackupLimits_MaxBackupFilesKeepsNewestByLastWrite, "BackupLimits_MaxBackupFilesKeepsNewestByLastWrite");
+    RegisterTest(&TTest_ASWLog_FileLog::Test_BackupLimits_MaxBackupTotalBytesDeletesOldestFirst, "BackupLimits_MaxBackupTotalBytesDeletesOldestFirst");
+    RegisterTest(&TTest_ASWLog_FileLog::Test_BackupLimits_MaxBackupTotalBytesIsStrict, "BackupLimits_MaxBackupTotalBytesIsStrict");
+    RegisterTest(&TTest_ASWLog_FileLog::Test_BackupLimits_ZeroKeepsEveryBackup, "BackupLimits_ZeroKeepsEveryBackup");
     RegisterTest(&TTest_ASWLog_FileLog::Test_ChildProcess_DoesNotInheritLogFile, "ChildProcess_DoesNotInheritLogFile");
     RegisterTest(&TTest_ASWLog_FileLog::Test_DailyRolling_KeepsExistingBackupForSameDate, "DailyRolling_KeepsExistingBackupForSameDate");
     RegisterTest(&TTest_ASWLog_FileLog::Test_DailyRolling_KeepsLeftoverLogFromSameDay, "DailyRolling_KeepsLeftoverLogFromSameDay");
@@ -208,6 +267,9 @@ TTest_ASWLog_FileLog::TTest_ASWLog_FileLog()
     RegisterTest(&TTest_ASWLog_FileLog::Test_FailedReopen_RetriesAndResumesLogging, "FailedReopen_RetriesAndResumesLogging");
     RegisterTest(&TTest_ASWLog_FileLog::Test_FailedReopen_ZeroResetDelayRetriesOnNextWrite, "FailedReopen_ZeroResetDelayRetriesOnNextWrite");
     RegisterTest(&TTest_ASWLog_FileLog::Test_FailedSizeRotation_WaitsBeforeRetrying, "FailedSizeRotation_WaitsBeforeRetrying");
+    RegisterTest(&TTest_ASWLog_FileLog::Test_FileStream_FlushWorksAfterFailedWrite, "FileStream_FlushWorksAfterFailedWrite");
+    RegisterTest(&TTest_ASWLog_FileLog::Test_FlushImmediatelyAtLevel_FlushesEntriesAtOrAboveTheLevel, "FlushImmediatelyAtLevel_FlushesEntriesAtOrAboveTheLevel");
+    RegisterTest(&TTest_ASWLog_FileLog::Test_FlushImmediatelyAtLevel_OffLeavesFlushingToFlushMode, "FlushImmediatelyAtLevel_OffLeavesFlushingToFlushMode");
     RegisterTest(&TTest_ASWLog_FileLog::Test_Flush_WritesBufferedManualModeEntries, "Flush_WritesBufferedManualModeEntries");
     RegisterTest(&TTest_ASWLog_FileLog::Test_GetInstance_ReturnsSameInstance, "GetInstance_ReturnsSameInstance");
     RegisterTest(&TTest_ASWLog_FileLog::Test_InitializeAndLogInfo_WritesText, "InitializeAndLogInfo_WritesText");
@@ -220,6 +282,17 @@ TTest_ASWLog_FileLog::TTest_ASWLog_FileLog()
     RegisterTest(&TTest_ASWLog_FileLog::Test_LogRawOptions, "LogRawOptions");
     RegisterTest(&TTest_ASWLog_FileLog::Test_MultiThreadedStress_WritesAllMessagesToDisk, "MultiThreadedStress_WritesAllMessagesToDisk");
     RegisterTest(&TTest_ASWLog_FileLog::Test_MultiThreadedStress_WritesAllMessagesToDisk_OpenClose, "MultiThreadedStress_WritesAllMessagesToDisk_OpenClose");
+    RegisterTest(&TTest_ASWLog_FileLog::Test_OnBackupCreated_IsNotCalledWhenRotationFails, "OnBackupCreated_IsNotCalledWhenRotationFails");
+    RegisterTest(&TTest_ASWLog_FileLog::Test_OnBackupCreated_LeavesARenamedBackupToTheApp, "OnBackupCreated_LeavesARenamedBackupToTheApp");
+    RegisterTest(&TTest_ASWLog_FileLog::Test_OnBackupCreated_ReportsDailyBackupAtInitialize, "OnBackupCreated_ReportsDailyBackupAtInitialize");
+    RegisterTest(&TTest_ASWLog_FileLog::Test_OnBackupCreated_ReportsEachBackup, "OnBackupCreated_ReportsEachBackup");
+    RegisterTest(&TTest_ASWLog_FileLog::Test_OnBackupCreated_RunsOutsideTheLockBeforeCleanup, "OnBackupCreated_RunsOutsideTheLockBeforeCleanup");
+    RegisterTest(&TTest_ASWLog_FileLog::Test_OnBackupCreated_ThrowingCallbackStillCleansUp, "OnBackupCreated_ThrowingCallbackStillCleansUp");
+    RegisterTest(&TTest_ASWLog_FileLog::Test_OnError_ReportsFailedDelete, "OnError_ReportsFailedDelete");
+    RegisterTest(&TTest_ASWLog_FileLog::Test_OnError_ReportsFailedOpen, "OnError_ReportsFailedOpen");
+    RegisterTest(&TTest_ASWLog_FileLog::Test_OnError_ReportsFailedRotationAndReopen, "OnError_ReportsFailedRotationAndReopen");
+    RegisterTest(&TTest_ASWLog_FileLog::Test_OnError_ReportsFailedSync, "OnError_ReportsFailedSync");
+    RegisterTest(&TTest_ASWLog_FileLog::Test_OnError_ReportsFullDisk, "OnError_ReportsFullDisk");
     RegisterTest(&TTest_ASWLog_FileLog::Test_OnLogEntry_FiresForQualifyingLevelsOnly, "OnLogEntry_FiresForQualifyingLevelsOnly");
     RegisterTest(&TTest_ASWLog_FileLog::Test_OnLogEntry_ReentrantCallbackDoesNotDeadlock, "OnLogEntry_ReentrantCallbackDoesNotDeadlock");
     RegisterTest(&TTest_ASWLog_FileLog::Test_Reconfigure_FlushesEntriesBufferedByPreviousMode, "Reconfigure_FlushesEntriesBufferedByPreviousMode");
@@ -232,6 +305,7 @@ TTest_ASWLog_FileLog::TTest_ASWLog_FileLog()
     RegisterTest(&TTest_ASWLog_FileLog::Test_SizeRotation_AutoOpenCloseCountsOtherWriters, "SizeRotation_AutoOpenCloseCountsOtherWriters");
     RegisterTest(&TTest_ASWLog_FileLog::Test_SizeRotation_CountsExistingFileSize, "SizeRotation_CountsExistingFileSize");
     RegisterTest(&TTest_ASWLog_FileLog::Test_SizeRotation_RotatesWhenLimitReached, "SizeRotation_RotatesWhenLimitReached");
+    RegisterTest(&TTest_ASWLog_FileLog::Test_SyncToDiskAtLevel_FlushesAndSyncsEntriesAtOrAboveTheLevel, "SyncToDiskAtLevel_FlushesAndSyncsEntriesAtOrAboveTheLevel");
     RegisterTest(&TTest_ASWLog_FileLog::Test_Write_EarlierRecordDoesNotRollLogBack, "Write_EarlierRecordDoesNotRollLogBack");
 }
 //---------------------------------------------------------------------------
@@ -301,6 +375,168 @@ void TTest_ASWLog_FileLog::Test_AutoOpenClose_StaysInitializedBetweenWrites()
     CheckTrue(entryPos != std::string::npos, __func__, __LINE__, "The entry should be written");
     CheckTrue(shutdownPos != std::string::npos && shutdownPos > entryPos, __func__, __LINE__,
         "The destructor should write the shutdown line after the last entry: " + contents);
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_FileLog::Test_BackupLimits_ApplyOnlyToThisLogsBackups()
+{
+    // Arrange: every file is old enough for File.RetentionMaxAge, and File.MaxBackupFiles keeps only the new backup
+    using namespace std::chrono_literals;
+    const std::vector<std::string> ownBackups{
+        "app.size.2026-01-01_000000_000.bak",
+        "app.daily.2026-01-02.bak", // Also the form of every backup before 0.43
+        "app.manual.2026-01-03_000000_000_1.bak",
+        "app.daily.2026-01-04_2.bak",
+    };
+    const std::vector<std::string> otherFiles{
+        "app.audit.size.2026-01-01_000000_000.bak", // A backup of app.audit.log
+        "application.size.2026-01-01_000000_000.bak",
+        "app.notes.bak",
+        "app.size.not-a-date.bak",
+        "app.pre.upgrade.2026-01-01.bak", // A reason with a '.' isn't recognized
+        "app.size.2026-01-01_000000_000.bak.old",
+    };
+    for (const auto& name : ownBackups)
+        CreateAgedFile(TestTempDir / name, 10, 48h);
+    for (const auto& name : otherFiles)
+        CreateAgedFile(TestTempDir / name, 10, 48h);
+
+    auto config = MakeRotationTestConfig(TestTempDir / "app.log");
+    config.File.RetentionMaxAge = 24h;
+    config.File.MaxBackupFiles = 1;
+    ASWLog::TASWFileLog logger;
+    const bool initialized = logger.Initialize(config);
+    logger.LogInfo("current");
+
+    // Act
+    const bool rotated = logger.RotateLogFiles("manual");
+    logger.Close();
+
+    // Assert
+    CheckTrue(initialized, __func__, __LINE__, "Initialize should succeed");
+    CheckTrue(rotated, __func__, __LINE__, "RotateLogFiles should succeed");
+    for (const auto& name : ownBackups)
+        CheckFalse(std::filesystem::exists(TestTempDir / name), __func__, __LINE__, "This log's old backup should be deleted: " + name);
+    for (const auto& name : otherFiles)
+        CheckTrue(std::filesystem::exists(TestTempDir / name), __func__, __LINE__, "A file that isn't this log's backup should be kept: " + name);
+    CheckEquals(static_cast<std::size_t>(1), CountFilesStartingWith("app.manual."), __func__, __LINE__, "The new backup should be kept");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_FileLog::Test_BackupLimits_MaxBackupFilesKeepsNewestByLastWrite()
+{
+    // Arrange: last write times in a different order than the names. The daily backup holds the end of its day, so it
+    // is newer than that day's size backups although its name sorts before theirs.
+    using namespace std::chrono_literals;
+    const auto daily = TestTempDir / "count.daily.2026-01-01.bak"; // 1 hour old
+    const auto sizeTwo = TestTempDir / "count.size.2026-01-02_000000_000.bak"; // 2 hours
+    const auto sizeThree = TestTempDir / "count.size.2026-01-03_000000_000_1.bak"; // 3 hours
+    const auto sizeLatestName = TestTempDir / "count.size.2026-01-05_000000_000.bak"; // 4 hours
+    CreateAgedFile(daily, 10, 1h);
+    CreateAgedFile(sizeTwo, 10, 2h);
+    CreateAgedFile(sizeThree, 10, 3h);
+    CreateAgedFile(sizeLatestName, 10, 4h);
+
+    auto config = MakeRotationTestConfig(TestTempDir / "count.log");
+    config.File.MaxBackupFiles = 3;
+    ASWLog::TASWFileLog logger;
+    const bool initialized = logger.Initialize(config);
+    logger.LogInfo("current");
+
+    // Act: the new backup is the newest, so the 2 next newest are kept with it
+    const bool rotated = logger.RotateLogFiles("manual");
+    logger.Close();
+
+    // Assert
+    CheckTrue(initialized, __func__, __LINE__, "Initialize should succeed");
+    CheckTrue(rotated, __func__, __LINE__, "RotateLogFiles should succeed");
+    CheckEquals(static_cast<std::size_t>(1), CountFilesStartingWith("count.manual."), __func__, __LINE__, "The new backup should be kept");
+    CheckTrue(std::filesystem::exists(daily), __func__, __LINE__, "The backup last written 1 hour ago should be kept");
+    CheckTrue(std::filesystem::exists(sizeTwo), __func__, __LINE__, "The backup last written 2 hours ago should be kept");
+    CheckFalse(std::filesystem::exists(sizeThree), __func__, __LINE__, "The backup last written 3 hours ago is beyond the limit");
+    CheckFalse(std::filesystem::exists(sizeLatestName), __func__, __LINE__, "The oldest backup should be deleted, whatever its name says");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_FileLog::Test_BackupLimits_MaxBackupTotalBytesDeletesOldestFirst()
+{
+    // Arrange
+    using namespace std::chrono_literals;
+    const auto first = TestTempDir / "bytes.size.2026-01-04_000000_000.bak";
+    const auto second = TestTempDir / "bytes.size.2026-01-03_000000_000.bak";
+    const auto third = TestTempDir / "bytes.size.2026-01-02_000000_000.bak";
+    const auto smallOldest = TestTempDir / "bytes.size.2026-01-01_000000_000.bak";
+    CreateAgedFile(first, 100, 1h);
+    CreateAgedFile(second, 100, 2h);
+    CreateAgedFile(third, 100, 3h);
+    CreateAgedFile(smallOldest, 10, 4h);
+
+    // The new backup holds ": current\n" (10 bytes): it and the 2 newest fit (210 bytes), the third doesn't (310)
+    auto config = MakeRotationTestConfig(TestTempDir / "bytes.log");
+    config.File.MaxBackupTotalBytes = 260;
+    ASWLog::TASWFileLog logger;
+    const bool initialized = logger.Initialize(config);
+    logger.LogInfo("current");
+
+    // Act
+    const bool rotated = logger.RotateLogFiles("manual");
+    logger.Close();
+
+    // Assert
+    CheckTrue(initialized, __func__, __LINE__, "Initialize should succeed");
+    CheckTrue(rotated, __func__, __LINE__, "RotateLogFiles should succeed");
+    CheckEquals(static_cast<std::size_t>(1), CountFilesStartingWith("bytes.manual."), __func__, __LINE__, "The new backup should be kept");
+    CheckTrue(std::filesystem::exists(first), __func__, __LINE__, "The newest old backup should be kept");
+    CheckTrue(std::filesystem::exists(second), __func__, __LINE__, "The second newest old backup should be kept");
+    CheckFalse(std::filesystem::exists(third), __func__, __LINE__, "The backup that doesn't fit should be deleted");
+    CheckFalse(std::filesystem::exists(smallOldest), __func__, __LINE__, "An older backup should be deleted too, even though it would fit");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_FileLog::Test_BackupLimits_MaxBackupTotalBytesIsStrict()
+{
+    // Arrange: a limit smaller than the backup that rotation makes
+    using namespace std::chrono_literals;
+    const auto older = TestTempDir / "strict.size.2026-01-01_000000_000.bak";
+    CreateAgedFile(older, 10, 1h);
+
+    auto config = MakeRotationTestConfig(TestTempDir / "strict.log");
+    config.File.MaxBackupTotalBytes = 1;
+    ASWLog::TASWFileLog logger;
+    const bool initialized = logger.Initialize(config);
+    logger.LogInfo("current");
+
+    // Act
+    const bool rotated = logger.RotateLogFiles("manual");
+    logger.LogInfo("after");
+    logger.Close();
+
+    // Assert
+    CheckTrue(initialized, __func__, __LINE__, "Initialize should succeed");
+    CheckTrue(rotated, __func__, __LINE__, "RotateLogFiles should succeed");
+    CheckEquals(static_cast<std::size_t>(0), CountFilesStartingWith("strict.manual."), __func__, __LINE__, "Even the new backup should be deleted when it alone exceeds the limit");
+    CheckFalse(std::filesystem::exists(older), __func__, __LINE__, "The older backup should be deleted");
+    CheckEquals(std::string(": after\n"), ReadFileText(TestTempDir / "strict.log"), __func__, __LINE__, "Logging should go on in the new log file");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_FileLog::Test_BackupLimits_ZeroKeepsEveryBackup()
+{
+    // Arrange: File.RetentionMaxAge is set, so the cleanup runs, but none of the backups has expired
+    using namespace std::chrono_literals;
+    for (int hours = 1; hours <= 3; ++hours)
+        CreateAgedFile(TestTempDir / std::format("zero.size.2026-01-0{}_000000_000.bak", hours), 1000, std::chrono::hours(hours));
+
+    auto config = MakeRotationTestConfig(TestTempDir / "zero.log");
+    config.File.RetentionMaxAge = 24h; // File.MaxBackupFiles and File.MaxBackupTotalBytes stay 0 (unlimited)
+    ASWLog::TASWFileLog logger;
+    const bool initialized = logger.Initialize(config);
+    logger.LogInfo("current");
+
+    // Act
+    const bool rotated = logger.RotateLogFiles("manual");
+    logger.Close();
+
+    // Assert
+    CheckTrue(initialized, __func__, __LINE__, "Initialize should succeed");
+    CheckTrue(rotated, __func__, __LINE__, "RotateLogFiles should succeed");
+    CheckEquals(static_cast<std::size_t>(3), CountFilesStartingWith("zero.size."), __func__, __LINE__, "Limits of 0 should keep every backup");
+    CheckEquals(static_cast<std::size_t>(1), CountFilesStartingWith("zero.manual."), __func__, __LINE__, "The new backup should be kept");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_FileLog::Test_ChildProcess_DoesNotInheritLogFile()
@@ -651,6 +887,7 @@ void TTest_ASWLog_FileLog::Test_FailedReopen_RetriesAndResumesLogging()
     const auto logFile = TestTempDir / "reopen.log";
     auto config = MakeRotationTestConfig(logFile);
     config.File.CircuitBreakerResetDelay = 200ms;
+    config.OnError = IgnoreError;
 
     const auto startTime = std::chrono::sys_days{ 2026y / 1 / 15 } + 10h;
     TFixedClockFileLog logger;
@@ -700,6 +937,7 @@ void TTest_ASWLog_FileLog::Test_FailedReopen_ZeroResetDelayRetriesOnNextWrite()
     const auto logFile = TestTempDir / "reopen_zero.log";
     auto config = MakeRotationTestConfig(logFile);
     config.File.CircuitBreakerResetDelay = 0ms;
+    config.OnError = IgnoreError;
 
     TFixedClockFileLog logger;
     logger.CurrentTime = std::chrono::sys_days{ 2026y / 1 / 15 } + 10h;
@@ -732,6 +970,7 @@ void TTest_ASWLog_FileLog::Test_FailedSizeRotation_WaitsBeforeRetrying()
     config.File.EnableRotation = true;
     config.File.MaxFileSizeBytes = 50;
     config.File.RotationRetryDelay = 200ms;
+    config.OnError = IgnoreError;
 
     const auto startTime = std::chrono::sys_days{ 2026y / 1 / 15 } + 10h;
     TFixedClockFileLog logger;
@@ -773,6 +1012,84 @@ void TTest_ASWLog_FileLog::Test_FailedSizeRotation_WaitsBeforeRetrying()
     CheckTrue(backupContents.find("line_three") != std::string::npos, __func__, __LINE__, "A failed rotation should not be retried before File.RotationRetryDelay has passed");
     CheckTrue(currentContents.find("line_four") != std::string::npos, __func__, __LINE__, "The entry after the retry interval should go to the new log file");
     CheckTrue(currentContents.find("line_three") == std::string::npos, __func__, __LINE__, "The new log file should only hold entries after the successful rotation");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_FileLog::Test_FileStream_FlushWorksAfterFailedWrite()
+{
+    // Arrange: a stream left in a failed state, as by a failed write (e.g. a full disk that has room again). The
+    // standard flush() does nothing in that state, so the data would stay in the buffer until the file is closed.
+    const auto file = TestTempDir / "flush_after_failure.log";
+    ASWLog::TASWFileStream stream;
+    const bool opened = stream.Open(file);
+    stream.setstate(std::ios::failbit);
+
+    // Act
+    const bool written = stream.Write("buffered");
+    const bool flushed = stream.Flush();
+    const auto contents = ReadFileText(file); // Read through a separate handle while the stream is still open
+    stream.Close();
+
+    // Assert
+    CheckTrue(opened, __func__, __LINE__, "Open should succeed");
+    CheckTrue(written, __func__, __LINE__, "Write should succeed");
+    CheckTrue(flushed, __func__, __LINE__, "Flush should succeed after an earlier failure");
+    CheckEquals(std::string("buffered"), contents, __func__, __LINE__, "Flush should write the buffered data to the file");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_FileLog::Test_FlushImmediatelyAtLevel_FlushesEntriesAtOrAboveTheLevel()
+{
+    // Arrange: FlushMode::Manual keeps the entries below the level in the file's buffer
+    const auto logFile = TestTempDir / "flush_at_level.log";
+    auto config = MakeRotationTestConfig(logFile);
+    config.File.Flush = ASWLog::FlushMode::Manual;
+    config.File.FlushImmediatelyAtLevel = ASWLog::Level::Warn;
+
+    ASWLog::TASWFileLog logger;
+    const bool initialized = logger.Initialize(config);
+
+    // Act: read through a separate handle while the file is open
+    logger.LogInfo("info_entry");
+    const auto contentsAfterInfo = ReadFileText(logFile);
+    logger.LogWarn("warn_entry");
+    const auto contentsAfterWarn = ReadFileText(logFile);
+    logger.LogDebug("debug_entry");
+    logger.LogRaw(ASWLog::Level::Critical, "raw_critical_entry");
+    const auto contentsAfterRaw = ReadFileText(logFile);
+    logger.LogForce(ASWLog::Level::Trace, "forced_trace_entry");
+    const auto contentsAfterForcedTrace = ReadFileText(logFile);
+
+    // Assert
+    CheckTrue(initialized, __func__, __LINE__, "Initialize should succeed");
+    CheckEquals(std::string(), contentsAfterInfo, __func__, __LINE__, "An entry below the level should stay buffered");
+    CheckEquals(std::string(": info_entry\n: warn_entry\n"), contentsAfterWarn, __func__, __LINE__,
+        "An entry at the level should be flushed with the entries buffered before it");
+    CheckEquals(std::string(": info_entry\n: warn_entry\n: debug_entry\nraw_critical_entry"), contentsAfterRaw, __func__, __LINE__,
+        "A raw entry above the level should be flushed too");
+    CheckEquals(contentsAfterRaw, contentsAfterForcedTrace, __func__, __LINE__, "A forced entry below the level should stay buffered");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_FileLog::Test_FlushImmediatelyAtLevel_OffLeavesFlushingToFlushMode()
+{
+    // Arrange
+    const auto logFile = TestTempDir / "flush_at_level_off.log";
+    auto config = MakeRotationTestConfig(logFile);
+    config.File.Flush = ASWLog::FlushMode::Manual;
+    config.File.FlushImmediatelyAtLevel = ASWLog::Level::Off;
+
+    ASWLog::TASWFileLog logger;
+    const bool initialized = logger.Initialize(config);
+
+    // Act
+    logger.LogCritical("critical_entry");
+    logger.LogForce(ASWLog::Level::Critical, "forced_critical_entry");
+    const auto contentsBeforeFlush = ReadFileText(logFile);
+    logger.Flush();
+    const auto contentsAfterFlush = ReadFileText(logFile);
+
+    // Assert
+    CheckTrue(initialized, __func__, __LINE__, "Initialize should succeed");
+    CheckEquals(std::string(), contentsBeforeFlush, __func__, __LINE__, "With Level::Off, even a Critical entry should stay buffered");
+    CheckEquals(std::string(": critical_entry\n: forced_critical_entry\n"), contentsAfterFlush, __func__, __LINE__, "Flush() should write the buffered entries");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_FileLog::Test_Flush_WritesBufferedManualModeEntries()
@@ -1226,6 +1543,408 @@ void TTest_ASWLog_FileLog::Test_MultiThreadedStress_WritesAllMessagesToDisk_Open
     }
 }
 //---------------------------------------------------------------------------
+void TTest_ASWLog_FileLog::Test_OnBackupCreated_IsNotCalledWhenRotationFails()
+{
+    // Arrange
+    if (!CanBlockFiles())
+        Skip(__func__, __LINE__, "File permissions don't stop the root user, so the failure can't be simulated");
+
+    const auto logFile = TestTempDir / "not_rotated.log";
+    auto config = MakeRotationTestConfig(logFile);
+    config.OnError = IgnoreError;
+    int callCount = 0;
+    config.File.OnBackupCreated = [&callCount](const ASWLog::TASWBackupInfo& /*backup*/) {
+            ++callCount;
+        };
+
+    ASWLog::TASWFileLog logger;
+    const bool initialized = logger.Initialize(config);
+    logger.LogInfo("entry");
+
+    // Act
+    bool rotated = true;
+    {
+        TFileBlocker blocker(logFile, false);
+        rotated = logger.RotateLogFiles("manual");
+    }
+    logger.Close();
+
+    // Assert
+    CheckTrue(initialized, __func__, __LINE__, "Initialize should succeed");
+    CheckFalse(rotated, __func__, __LINE__, "RotateLogFiles should fail while the file is held");
+    CheckEquals(0, callCount, __func__, __LINE__, "No backup was made, so OnBackupCreated should not be called");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_FileLog::Test_OnBackupCreated_LeavesARenamedBackupToTheApp()
+{
+    // Arrange: the callback "compresses" the backup to a name outside the backup form, and the size limit is too small
+    // for any backup
+    const auto logFile = TestTempDir / "compressed.log";
+    auto config = MakeRotationTestConfig(logFile);
+    config.File.MaxBackupTotalBytes = 1;
+    std::filesystem::path compressedPath;
+    config.File.OnBackupCreated = [&compressedPath](const ASWLog::TASWBackupInfo& backup) {
+            compressedPath = backup.BackupPath;
+            compressedPath += ".gz";
+            std::filesystem::rename(backup.BackupPath, compressedPath);
+        };
+
+    ASWLog::TASWFileLog logger;
+    const bool initialized = logger.Initialize(config);
+    logger.LogInfo("entry");
+
+    // Act
+    const bool rotated = logger.RotateLogFiles("manual");
+    logger.Close();
+
+    // Assert
+    CheckTrue(initialized, __func__, __LINE__, "Initialize should succeed");
+    CheckTrue(rotated, __func__, __LINE__, "RotateLogFiles should succeed");
+    CheckFalse(compressedPath.empty(), __func__, __LINE__, "OnBackupCreated should be called");
+    CheckTrue(std::filesystem::exists(compressedPath), __func__, __LINE__, "The cleanup should leave a file renamed out of the backup form to the application");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_FileLog::Test_OnBackupCreated_ReportsDailyBackupAtInitialize()
+{
+    // Arrange: a log last written on 2026-01-14 (30 hours before the logger starts at 10:00 UTC on 2026-01-15)
+    using namespace std::chrono_literals;
+    const auto logFile = TestTempDir / "daily_event.log";
+    CreateAgedFile(logFile, 10, 30h);
+
+    auto config = MakeRotationTestConfig(logFile);
+    config.File.EnableDailyRolling = true;
+    std::vector<ASWLog::TASWBackupInfo> backups;
+    config.File.OnBackupCreated = [&backups](const ASWLog::TASWBackupInfo& backup) {
+            backups.push_back(backup);
+        };
+
+    TFixedClockFileLog logger;
+    logger.CurrentTime = std::chrono::sys_days{ 2026y / 1 / 15 } + 10h;
+
+    // Act
+    const bool initialized = logger.Initialize(config);
+    logger.Close();
+
+    // Assert
+    CheckTrue(initialized, __func__, __LINE__, "Initialize should succeed");
+    CheckEquals(static_cast<std::size_t>(1), backups.size(), __func__, __LINE__, "The rollover in Initialize() should report its backup");
+    if (backups.empty())
+        return;
+
+    CheckEquals(std::string("daily"), backups[0].Reason, __func__, __LINE__, "The reason should be \"daily\"");
+    CheckTrue(backups[0].BackupPath.filename() == "daily_event.daily.2026-01-14.bak", __func__, __LINE__, "The backup should be named for the day it holds");
+    CheckTrue(backups[0].LogPath == config.File.ResolvePath(), __func__, __LINE__, "LogPath should be the log file");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_FileLog::Test_OnBackupCreated_ReportsEachBackup()
+{
+    // Arrange
+    const auto logFile = TestTempDir / "event.log";
+    auto config = MakeRotationTestConfig(logFile);
+    config.File.EnableRotation = true;
+    config.File.MaxFileSizeBytes = 50;
+
+    std::vector<ASWLog::TASWBackupInfo> backups;
+    std::vector<bool> backupExisted;
+    config.File.OnBackupCreated = [&backups, &backupExisted](const ASWLog::TASWBackupInfo& backup) {
+            backups.push_back(backup);
+            backupExisted.push_back(std::filesystem::exists(backup.BackupPath));
+        };
+
+    ASWLog::TASWFileLog logger;
+    const bool initialized = logger.Initialize(config);
+
+    // Act
+    logger.LogInfo("line_one_long_enough_to_reach_the_size_limit_alone");
+    logger.LogInfo("line_two"); // Rotates for size first
+    const bool rotated = logger.RotateLogFiles("before-upgrade");
+    logger.Close();
+
+    // Assert
+    CheckTrue(initialized, __func__, __LINE__, "Initialize should succeed");
+    CheckTrue(rotated, __func__, __LINE__, "RotateLogFiles should succeed");
+    CheckEquals(static_cast<std::size_t>(2), backups.size(), __func__, __LINE__, "Each rotation should report its backup once");
+    if (backups.size() != 2)
+        return;
+
+    CheckEquals(std::string("size"), backups[0].Reason, __func__, __LINE__, "The size rotation's reason should be \"size\"");
+    CheckEquals(std::string("before-upgrade"), backups[1].Reason, __func__, __LINE__, "A manual rotation's reason should be its tag");
+    CheckTrue(backups[0].LogPath == config.File.ResolvePath(), __func__, __LINE__, "LogPath should be the log file");
+    CheckTrue(backups[1].BackupPath.filename().string().starts_with("event.before-upgrade."), __func__, __LINE__, "BackupPath should be the manual backup");
+    CheckTrue(backupExisted == std::vector<bool>{ true, true }, __func__, __LINE__, "The backup should exist during the call");
+    CheckTrue(ReadFileText(backups[0].BackupPath).find("line_one") != std::string::npos, __func__, __LINE__, "The size backup should hold the entries before the rotation");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_FileLog::Test_OnBackupCreated_RunsOutsideTheLockBeforeCleanup()
+{
+    // Arrange: a size limit too small for any backup, so the cleanup deletes the new one right after the callback
+    const auto logFile = TestTempDir / "before_cleanup.log";
+    auto config = MakeRotationTestConfig(logFile);
+    config.File.MaxBackupTotalBytes = 1;
+
+    TLockCheckFileLog logger;
+    std::filesystem::path backupPath;
+    bool existedInCallback = false;
+    bool wasMutexFree = false;
+    config.File.OnBackupCreated = [&](const ASWLog::TASWBackupInfo& backup) {
+            backupPath = backup.BackupPath;
+            existedInCallback = std::filesystem::exists(backup.BackupPath);
+            wasMutexFree = logger.IsMutexFree();
+            logger.LogInfo("logged_from_the_callback"); // Would deadlock if the lock were held
+        };
+    const bool initialized = logger.Initialize(config);
+    logger.LogInfo("entry");
+
+    // Act
+    const bool rotated = logger.RotateLogFiles("manual");
+    logger.Close();
+
+    // Assert
+    CheckTrue(initialized, __func__, __LINE__, "Initialize should succeed");
+    CheckTrue(rotated, __func__, __LINE__, "RotateLogFiles should succeed");
+    CheckTrue(wasMutexFree, __func__, __LINE__, "OnBackupCreated should be called after the logger's lock is released");
+    CheckTrue(existedInCallback, __func__, __LINE__, "The backup should still exist during the callback");
+    CheckFalse(backupPath.empty() || std::filesystem::exists(backupPath), __func__, __LINE__, "The cleanup should run after the callback");
+    CheckTrue(ReadFileText(logFile).find("logged_from_the_callback") != std::string::npos, __func__, __LINE__, "The callback should be able to log");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_FileLog::Test_OnBackupCreated_ThrowingCallbackStillCleansUp()
+{
+    // Arrange
+    const auto logFile = TestTempDir / "throwing_event.log";
+    auto config = MakeRotationTestConfig(logFile);
+    config.File.MaxBackupTotalBytes = 1;
+    std::filesystem::path backupPath;
+    config.File.OnBackupCreated = [&backupPath](const ASWLog::TASWBackupInfo& backup) {
+            backupPath = backup.BackupPath;
+            throw std::runtime_error("callback failed");
+        };
+
+    ASWLog::TASWFileLog logger;
+    const bool initialized = logger.Initialize(config);
+    logger.LogInfo("entry");
+
+    // Act
+    bool threw = false;
+    bool rotated = false;
+    try
+    {
+        rotated = logger.RotateLogFiles("manual");
+    }
+    catch (...)
+    {
+        threw = true;
+    }
+    logger.LogInfo("after");
+    logger.Close();
+
+    // Assert
+    CheckTrue(initialized, __func__, __LINE__, "Initialize should succeed");
+    CheckFalse(threw, __func__, __LINE__, "An exception from OnBackupCreated should not escape");
+    CheckTrue(rotated, __func__, __LINE__, "RotateLogFiles should succeed");
+    CheckFalse(backupPath.empty() || std::filesystem::exists(backupPath), __func__, __LINE__, "The cleanup should still run after the callback threw");
+    CheckEquals(std::string(": after\n"), ReadFileText(logFile), __func__, __LINE__, "Logging should go on");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_FileLog::Test_OnError_ReportsFailedDelete()
+{
+#if defined(_WIN32)
+    // Arrange: an expired backup that another program holds open without delete sharing, so retention can't delete it
+    using namespace std::chrono_literals;
+    const auto logFile = TestTempDir / "retention_held.log";
+    const auto heldBackup = TestTempDir / "retention_held.size.2020-01-01_000000_000.bak";
+    std::ofstream(heldBackup) << "old";
+    std::filesystem::last_write_time(heldBackup, std::filesystem::file_time_type::clock::now() - 48h);
+
+    auto config = MakeRotationTestConfig(logFile);
+    config.File.RetentionMaxAge = 24h;
+    std::vector<ASWLog::TASWLogError> reports;
+    config.OnError = [&reports](const ASWLog::TASWLogError& error) {
+            reports.push_back(error);
+        };
+
+    ASWLog::TASWFileLog logger;
+    const bool initialized = logger.Initialize(config);
+    logger.LogInfo("entry");
+
+    // Act
+    std::FILE* otherHandle = _wfsopen(heldBackup.c_str(), L"rb", _SH_DENYNO);
+    const bool rotated = logger.RotateLogFiles("manual");
+    if (otherHandle != nullptr)
+        std::fclose(otherHandle);
+    logger.Close();
+
+    // Assert
+    CheckTrue(initialized, __func__, __LINE__, "Initialize should succeed");
+    CheckTrue(otherHandle != nullptr, __func__, __LINE__, "The test should be able to hold the backup open");
+    CheckTrue(rotated, __func__, __LINE__, "The rotation itself should succeed");
+    CheckEquals(static_cast<std::size_t>(1), reports.size(), __func__, __LINE__, "The backup that couldn't be deleted should be reported once");
+    if (reports.empty())
+        return;
+
+    CheckTrue(reports[0].Kind == ASWLog::ErrorKind::DeleteFailed, __func__, __LINE__, "The failure should be reported as DeleteFailed");
+    CheckTrue(reports[0].Path.filename() == heldBackup.filename(), __func__, __LINE__, "The report should name the backup");
+    CheckTrue(static_cast<bool>(reports[0].Code), __func__, __LINE__, "The report should carry the operating system's error");
+#else
+    Skip(__func__, __LINE__, "POSIX deletes a file that another program holds open");
+#endif
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_FileLog::Test_OnError_ReportsFailedOpen()
+{
+    // Arrange: a "folder" that is a file can't hold the log, on any OS and for any user
+    const auto notAFolder = TestTempDir / "not_a_folder";
+    std::ofstream(notAFolder) << "file";
+
+    auto config = MakeRotationTestConfig(notAFolder / "unopenable.log");
+    std::vector<ASWLog::TASWLogError> reports;
+    config.OnError = [&reports](const ASWLog::TASWLogError& error) {
+            reports.push_back(error);
+        };
+
+    // Act
+    ASWLog::TASWFileLog logger;
+    const bool initialized = logger.Initialize(config);
+
+    // Assert
+    CheckFalse(initialized, __func__, __LINE__, "Initialize should fail");
+    CheckEquals(static_cast<std::size_t>(1), reports.size(), __func__, __LINE__, "The failed open should be reported once");
+    if (reports.empty())
+        return;
+
+    CheckTrue(reports[0].Kind == ASWLog::ErrorKind::OpenFailed, __func__, __LINE__, "The failure should be reported as OpenFailed");
+    CheckTrue(reports[0].Path == config.File.ResolvePath().parent_path(), __func__, __LINE__, "The report should name the folder that couldn't be created");
+    CheckTrue(static_cast<bool>(reports[0].Code), __func__, __LINE__, "The report should carry the operating system's error");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_FileLog::Test_OnError_ReportsFailedRotationAndReopen()
+{
+    // Arrange
+    if (!CanBlockFiles())
+        Skip(__func__, __LINE__, "File permissions don't stop the root user, so the failure can't be simulated");
+
+    using namespace std::chrono_literals;
+    const auto logFile = TestTempDir / "reported.log";
+    auto config = MakeRotationTestConfig(logFile);
+    config.File.CircuitBreakerResetDelay = 0ms; // Each entry tries to reopen the file
+    std::vector<ASWLog::TASWLogError> reports;
+    config.OnError = [&reports](const ASWLog::TASWLogError& error) {
+            reports.push_back(error);
+        };
+
+    const auto startTime = std::chrono::sys_days{ 2026y / 1 / 15 } + 10h;
+    TFixedClockFileLog logger;
+    logger.CurrentTime = startTime;
+    const bool initialized = logger.Initialize(config);
+
+    // Act
+    {
+        // The rotation's rename fails, and so does reopening the log afterward and for each entry
+        TFileBlocker blocker(logFile, true);
+        logger.RotateLogFiles("manual");
+        logger.LogInfo("dropped_1"); // Within ErrorReportInterval (1 minute): not reported
+        logger.LogInfo("dropped_2");
+        logger.CurrentTime = startTime + 1min;
+        logger.LogInfo("dropped_3"); // Reported, with the two left out
+    }
+    logger.Close();
+
+    // Assert
+    CheckTrue(initialized, __func__, __LINE__, "Initialize should succeed");
+    CheckEquals(static_cast<std::size_t>(3), reports.size(), __func__, __LINE__, "The rotation and two of the failed opens should be reported");
+    if (reports.size() != 3)
+        return;
+
+    CheckTrue(reports[0].Kind == ASWLog::ErrorKind::RotationFailed, __func__, __LINE__, "The failed rename should be reported as RotationFailed");
+    CheckTrue(reports[0].Path == config.File.ResolvePath(), __func__, __LINE__, "The rotation report should name the log file");
+    CheckTrue(static_cast<bool>(reports[0].Code), __func__, __LINE__, "The rotation report should carry the operating system's error");
+    CheckTrue(reports[1].Kind == ASWLog::ErrorKind::OpenFailed, __func__, __LINE__, "The failed reopen should be reported as OpenFailed");
+    CheckTrue(reports[1].Path == config.File.ResolvePath(), __func__, __LINE__, "The open report should name the log file");
+    CheckTrue(static_cast<bool>(reports[1].Code), __func__, __LINE__, "The open report should carry the operating system's error");
+    CheckEquals(static_cast<std::size_t>(0), reports[1].SuppressedCount, __func__, __LINE__, "Nothing was left out before the first open report");
+    CheckTrue(reports[2].Kind == ASWLog::ErrorKind::OpenFailed, __func__, __LINE__, "The failed open after the interval should be reported");
+    CheckEquals(static_cast<std::size_t>(2), reports[2].SuppressedCount, __func__, __LINE__, "The report should count the failed opens left out");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_FileLog::Test_OnError_ReportsFailedSync()
+{
+    // Arrange: the null device takes every write, but can't be synced to disk (FlushFileBuffers fails with
+    // ERROR_INVALID_FUNCTION on Windows, fsync with EINVAL on Linux)
+#if defined(_WIN32)
+    auto config = MakeRotationTestConfig("NUL"); // A device name in any folder
+#else
+    if (!std::filesystem::exists("/dev/null"))
+        Skip(__func__, __LINE__, "/dev/null doesn't exist");
+
+    auto config = MakeRotationTestConfig("/dev/null"); // Absolute, so it replaces the folder
+#endif
+    config.File.SyncToDiskAtLevel = ASWLog::Level::Error;
+    config.ErrorReportInterval = std::chrono::milliseconds(0);
+    std::vector<ASWLog::TASWLogError> reports;
+    config.OnError = [&reports](const ASWLog::TASWLogError& error) {
+            reports.push_back(error);
+        };
+
+    // Act
+    ASWLog::TASWFileLog logger;
+    const bool initialized = logger.Initialize(config);
+    logger.LogWarn("flushed, not synced"); // Below the level, and FlushMode::EveryWrite flushes it
+    const auto reportsAfterWarn = reports.size();
+    logger.LogError("flushed and synced");
+    logger.Close();
+
+    // Assert
+    CheckTrue(initialized, __func__, __LINE__, "Initialize should succeed: the null device can be opened");
+    CheckEquals(static_cast<std::size_t>(0), reportsAfterWarn, __func__, __LINE__, "An entry below the level shouldn't be synced");
+    CheckEquals(static_cast<std::size_t>(1), reports.size(), __func__, __LINE__, "The failed sync should be reported once");
+    if (reports.size() == 1)
+    {
+        CheckTrue(reports[0].Kind == ASWLog::ErrorKind::SyncFailed, __func__, __LINE__, "The report should be SyncFailed");
+        CheckTrue(reports[0].Path == config.File.ResolvePath(), __func__, __LINE__, "The report should name the log file");
+        CheckTrue(static_cast<bool>(reports[0].Code), __func__, __LINE__, "The report should carry the operating system's error");
+    }
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_FileLog::Test_OnError_ReportsFullDisk()
+{
+#if defined(__linux__)
+    // Arrange: every write to /dev/full fails with "No space left on device"
+    if (!std::filesystem::exists("/dev/full"))
+        Skip(__func__, __LINE__, "/dev/full doesn't exist");
+
+    auto config = MakeRotationTestConfig("/dev/full"); // Absolute, so it replaces the folder
+    config.ErrorReportInterval = std::chrono::milliseconds(0);
+    std::vector<ASWLog::TASWLogError> reports;
+    config.OnError = [&reports](const ASWLog::TASWLogError& error) {
+            reports.push_back(error);
+        };
+
+    // Act
+    ASWLog::TASWFileLog logger;
+    const bool initialized = logger.Initialize(config);
+    logger.LogInfo("buffered, then flushed"); // FlushMode::EveryWrite: the flush fails
+    logger.LogInfo(std::string(256 * 1024, 'x')); // Larger than the stdio buffer: the write itself fails
+    logger.Close();
+
+    // Assert
+    const auto isReported = [&reports](ASWLog::ErrorKind kind) {
+            for (const auto& error : reports)
+            {
+                if (error.Kind == kind && error.Code == std::errc::no_space_on_device && error.Path == "/dev/full")
+                    return true;
+            }
+
+            return false;
+        };
+
+    CheckTrue(initialized, __func__, __LINE__, "Initialize should succeed: /dev/full can be opened");
+    CheckTrue(isReported(ASWLog::ErrorKind::FlushFailed), __func__, __LINE__, "The failed flush should be reported, with ENOSPC");
+    CheckTrue(isReported(ASWLog::ErrorKind::WriteFailed), __func__, __LINE__, "The failed write should be reported, with ENOSPC");
+#else
+    Skip(__func__, __LINE__, "Needs Linux's /dev/full");
+#endif
+}
+//---------------------------------------------------------------------------
 void TTest_ASWLog_FileLog::Test_OnLogEntry_FiresForQualifyingLevelsOnly()
 {
     // Arrange
@@ -1403,6 +2122,7 @@ void TTest_ASWLog_FileLog::Test_Reconfigure_UnopenableFileFailsButLoggerStaysIni
 
     auto config = MakeRotationTestConfig(logFile);
     config.File.CircuitBreakerResetDelay = 0ms;
+    config.OnError = IgnoreError;
 
     auto unopenableConfig = config;
     unopenableConfig.File.FilePath = notAFolder / "unopenable.log";
@@ -1700,6 +2420,38 @@ void TTest_ASWLog_FileLog::Test_SizeRotation_RotatesWhenLimitReached()
         const bool foundOnce = first != std::string::npos && allContents.find(marker, first + 1) == std::string::npos;
         CheckTrue(foundOnce, __func__, __LINE__, "Each line should be in exactly one of the log and its backups: " + marker);
     }
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_FileLog::Test_SyncToDiskAtLevel_FlushesAndSyncsEntriesAtOrAboveTheLevel()
+{
+    // Arrange: only SyncToDiskAtLevel makes the logger flush (whether the data reached the disk itself can't be seen
+    // from here, but a failed sync would be reported)
+    const auto logFile = TestTempDir / "sync_at_level.log";
+    auto config = MakeRotationTestConfig(logFile);
+    config.File.Flush = ASWLog::FlushMode::Manual;
+    config.File.FlushImmediatelyAtLevel = ASWLog::Level::Off;
+    config.File.SyncToDiskAtLevel = ASWLog::Level::Warn;
+    config.ErrorReportInterval = std::chrono::milliseconds(0);
+    std::vector<ASWLog::TASWLogError> reports;
+    config.OnError = [&reports](const ASWLog::TASWLogError& error) {
+            reports.push_back(error);
+        };
+
+    ASWLog::TASWFileLog logger;
+    const bool initialized = logger.Initialize(config);
+
+    // Act: read through a separate handle while the file is open
+    logger.LogInfo("info_entry");
+    const auto contentsAfterInfo = ReadFileText(logFile);
+    logger.LogRaw(ASWLog::Level::Warn, "raw_warn_entry");
+    const auto contentsAfterWarn = ReadFileText(logFile);
+
+    // Assert
+    CheckTrue(initialized, __func__, __LINE__, "Initialize should succeed");
+    CheckEquals(std::string(), contentsAfterInfo, __func__, __LINE__, "An entry below the level should stay buffered");
+    CheckEquals(std::string(": info_entry\nraw_warn_entry"), contentsAfterWarn, __func__, __LINE__,
+        "An entry at the level should be flushed with the entries buffered before it");
+    CheckEquals(static_cast<std::size_t>(0), reports.size(), __func__, __LINE__, "Syncing a log file should succeed");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_FileLog::Test_Write_EarlierRecordDoesNotRollLogBack()

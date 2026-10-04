@@ -4,7 +4,7 @@ Author: Anthony S. West - ASW Software
 
 See header for info.
 
-Copyright 2026 Anthony S. West
+Copyright 2026 ASW Software
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -79,6 +79,8 @@ void TTest_ASWLog_Config::Test_Defaults_MatchDocumentedValues()
     CheckTrue(config.InitialMinimumLevel == ASWLog::Level::Info, __func__, __LINE__, "InitialMinimumLevel should default to Info");
     CheckTrue(config.OnLogEntry == nullptr, __func__, __LINE__, "OnLogEntry should default to unset");
     CheckTrue(config.OnLogEntryMinimumLevel == ASWLog::Level::Error, __func__, __LINE__, "OnLogEntryMinimumLevel should default to Error");
+    CheckTrue(config.OnError == nullptr, __func__, __LINE__, "OnError should default to unset (reports go to stderr)");
+    CheckTrue(config.ErrorReportInterval == std::chrono::minutes(1), __func__, __LINE__, "ErrorReportInterval should default to 1 minute");
 
     // Assert: Line
     CheckTrue(config.Line.Formatter == nullptr, __func__, __LINE__, "Line.Formatter should default to unset (the built-in layout)");
@@ -112,6 +114,8 @@ void TTest_ASWLog_Config::Test_Defaults_MatchDocumentedValues()
     CheckFalse(config.File.AutoOpenClosePerWrite, __func__, __LINE__, "File.AutoOpenClosePerWrite should default to false");
     CheckTrue(config.File.Flush == ASWLog::FlushMode::EveryWrite, __func__, __LINE__, "File.Flush should default to EveryWrite");
     CheckTrue(config.File.FlushInterval == std::chrono::milliseconds(1000), __func__, __LINE__, "File.FlushInterval should default to 1000 ms");
+    CheckTrue(config.File.FlushImmediatelyAtLevel == ASWLog::Level::Error, __func__, __LINE__, "File.FlushImmediatelyAtLevel should default to Error");
+    CheckTrue(config.File.SyncToDiskAtLevel == ASWLog::Level::Off, __func__, __LINE__, "File.SyncToDiskAtLevel should default to Off");
     CheckEquals(5, config.File.OpenRetryCount, __func__, __LINE__, "File.OpenRetryCount should default to 5");
     CheckTrue(config.File.OpenRetryDelay == std::chrono::milliseconds(50), __func__, __LINE__, "File.OpenRetryDelay should default to 50 ms");
     CheckTrue(config.File.CircuitBreakerResetDelay == std::chrono::milliseconds(500), __func__, __LINE__,
@@ -122,6 +126,9 @@ void TTest_ASWLog_Config::Test_Defaults_MatchDocumentedValues()
         "File.RotationRetryDelay should default to 500 ms");
     CheckFalse(config.File.EnableDailyRolling, __func__, __LINE__, "File.EnableDailyRolling should default to false");
     CheckTrue(config.File.RetentionMaxAge == std::chrono::hours(0), __func__, __LINE__, "File.RetentionMaxAge should default to 0 (disabled)");
+    CheckTrue(config.File.OnBackupCreated == nullptr, __func__, __LINE__, "File.OnBackupCreated should default to unset");
+    CheckEquals(static_cast<std::size_t>(0), config.File.MaxBackupFiles, __func__, __LINE__, "File.MaxBackupFiles should default to 0 (unlimited)");
+    CheckEquals(static_cast<std::uintmax_t>(0), config.File.MaxBackupTotalBytes, __func__, __LINE__, "File.MaxBackupTotalBytes should default to 0 (unlimited)");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_Config::Test_ResolveFolder_CustomFolder()

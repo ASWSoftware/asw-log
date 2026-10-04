@@ -2,7 +2,7 @@
 Test_ASWLog_TextLogBase.h
 Author: Anthony S. West - ASW Software
 
-Copyright 2026 Anthony S. West
+Copyright 2026 ASW Software
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -51,6 +51,7 @@ private: // Test methods
     void Test_OnLogEntry_CallbackCanReconfigureTheLogger();
     void Test_Reconfigure_AppliesNewConfigButKeepsLevel();
     void Test_Reconfigure_IsSafeWhileOtherThreadsLog();
+    void Test_ReportErrorUnlocked_ReportsAfterTheLockIsReleased();
     void Test_SetEnabled_FalseWritesNothing();
 
 public:

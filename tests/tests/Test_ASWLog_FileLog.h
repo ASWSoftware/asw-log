@@ -2,7 +2,7 @@
 Test_ASWLog_FileLog.h
 Author: Anthony S. West - ASW Software
 
-Copyright 2026 Anthony S. West
+Copyright 2026 ASW Software
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -37,6 +37,11 @@ private:
 
 private: // Test methods
     void Test_AutoOpenClose_StaysInitializedBetweenWrites();
+    void Test_BackupLimits_ApplyOnlyToThisLogsBackups();
+    void Test_BackupLimits_MaxBackupFilesKeepsNewestByLastWrite();
+    void Test_BackupLimits_MaxBackupTotalBytesDeletesOldestFirst();
+    void Test_BackupLimits_MaxBackupTotalBytesIsStrict();
+    void Test_BackupLimits_ZeroKeepsEveryBackup();
     void Test_ChildProcess_DoesNotInheritLogFile();
     void Test_DailyRolling_KeepsExistingBackupForSameDate();
     void Test_DailyRolling_KeepsLeftoverLogFromSameDay();
@@ -50,6 +55,9 @@ private: // Test methods
     void Test_FailedReopen_RetriesAndResumesLogging();
     void Test_FailedReopen_ZeroResetDelayRetriesOnNextWrite();
     void Test_FailedSizeRotation_WaitsBeforeRetrying();
+    void Test_FileStream_FlushWorksAfterFailedWrite();
+    void Test_FlushImmediatelyAtLevel_FlushesEntriesAtOrAboveTheLevel();
+    void Test_FlushImmediatelyAtLevel_OffLeavesFlushingToFlushMode();
     void Test_Flush_WritesBufferedManualModeEntries();
     void Test_GetInstance_ReturnsSameInstance();
     void Test_InitializeAndLogInfo_WritesText();
@@ -62,6 +70,17 @@ private: // Test methods
     void Test_LogRawOptions();
     void Test_MultiThreadedStress_WritesAllMessagesToDisk();
     void Test_MultiThreadedStress_WritesAllMessagesToDisk_OpenClose();
+    void Test_OnBackupCreated_IsNotCalledWhenRotationFails();
+    void Test_OnBackupCreated_LeavesARenamedBackupToTheApp();
+    void Test_OnBackupCreated_ReportsDailyBackupAtInitialize();
+    void Test_OnBackupCreated_ReportsEachBackup();
+    void Test_OnBackupCreated_RunsOutsideTheLockBeforeCleanup();
+    void Test_OnBackupCreated_ThrowingCallbackStillCleansUp();
+    void Test_OnError_ReportsFailedDelete();
+    void Test_OnError_ReportsFailedOpen();
+    void Test_OnError_ReportsFailedRotationAndReopen();
+    void Test_OnError_ReportsFailedSync();
+    void Test_OnError_ReportsFullDisk();
     void Test_OnLogEntry_FiresForQualifyingLevelsOnly();
     void Test_OnLogEntry_ReentrantCallbackDoesNotDeadlock();
     void Test_Reconfigure_FlushesEntriesBufferedByPreviousMode();
@@ -74,6 +93,7 @@ private: // Test methods
     void Test_SizeRotation_AutoOpenCloseCountsOtherWriters();
     void Test_SizeRotation_CountsExistingFileSize();
     void Test_SizeRotation_RotatesWhenLimitReached();
+    void Test_SyncToDiskAtLevel_FlushesAndSyncsEntriesAtOrAboveTheLevel();
     void Test_Write_EarlierRecordDoesNotRollLogBack();
 
 public:

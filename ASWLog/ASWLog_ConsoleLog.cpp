@@ -4,7 +4,7 @@ Author: Anthony S. West - ASW Software
 
 See header for info.
 
-Copyright 2026 Anthony S. West
+Copyright 2026 ASW Software
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -247,6 +247,7 @@ void TASWConsoleLog::WriteLineUnlocked(Level level, std::string_view line, bool 
     const bool toStdErr = level >= Level::Warn;
     auto& stream = toStdErr ? std::cerr : std::cout;
     const auto color = ShouldColorStream(toStdErr) ? LevelColorUnlocked(level) : std::string_view{};
+    const bool wasGood = stream.good();
 
     if (!color.empty())
         stream << color << line << AnsiReset;
@@ -254,6 +255,16 @@ void TASWConsoleLog::WriteLineUnlocked(Level level, std::string_view line, bool 
         stream << line;
 
     stream.flush();
+
+    // A failed stream stays failed (the application owns its state, so it isn't cleared here): only the write that
+    // failed it is reported, not every line after it
+    if (wasGood && !stream.good())
+    {
+        TASWLogError error;
+        error.Kind = ErrorKind::WriteFailed;
+        error.Message = toStdErr ? "Couldn't write to stderr" : "Couldn't write to stdout";
+        ReportErrorUnlocked(std::move(error));
+    }
 }
 
 //---------------------------------------------------------------------------
