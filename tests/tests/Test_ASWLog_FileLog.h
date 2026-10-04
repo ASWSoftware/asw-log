@@ -37,6 +37,11 @@ private:
 
 private: // Test methods
     void Test_AutoOpenClose_StaysInitializedBetweenWrites();
+    void Test_BackupLimits_ApplyOnlyToThisLogsBackups();
+    void Test_BackupLimits_MaxBackupFilesKeepsNewestByLastWrite();
+    void Test_BackupLimits_MaxBackupTotalBytesDeletesOldestFirst();
+    void Test_BackupLimits_MaxBackupTotalBytesIsStrict();
+    void Test_BackupLimits_ZeroKeepsEveryBackup();
     void Test_ChildProcess_DoesNotInheritLogFile();
     void Test_DailyRolling_KeepsExistingBackupForSameDate();
     void Test_DailyRolling_KeepsLeftoverLogFromSameDay();

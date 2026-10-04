@@ -29,8 +29,25 @@ see [0.26.1](#0261---2026-09-17) for the initial versioned baseline.
   `TASWLogBase` reports with `ReportError()` (from a `TASWTextLogBase` hook,
   `ReportErrorUnlocked()`). A `*Fmt` format error isn't reported: the entry
   is still written, with the error in its line.
+- `File.MaxBackupFiles` and `File.MaxBackupTotalBytes` (0 = unlimited, the
+  default) limit a file logger's backups. After each successful rotation,
+  together with `File.RetentionMaxAge`, the oldest backups are deleted until
+  at most `MaxBackupFiles` are left and they take at most
+  `MaxBackupTotalBytes`; the size limit is strict and deletes even the backup
+  just made if it alone is larger, so set it above `MaxFileSizeBytes`.
+  Backups are ordered by their last write time, when their newest entry was
+  written, so a daily backup counts as newer than the size backups of the
+  same day. A backup that can't be deleted is reported to `OnError`.
 
 ### Fixed
+
+- `File.RetentionMaxAge` deleting another log's old backups when the two
+  logs share a folder and one name starts with the other's (e.g. `app.log`
+  and `app.audit.log`), and any other old file named `<stem>.<anything>.bak`.
+  Backup cleanup now only deletes this log's backups, named as rotation
+  names them: `<stem>.<reason>.<time>.bak`. A backup made by
+  `RotateLogFiles()` with a reason tag that contains `.` isn't recognized,
+  so it is kept. Retention now also works for a log in a root folder.
 
 - After a failed write (e.g. a full disk that later had room again), a file
   logger's flushes did nothing until the file was reopened, so entries

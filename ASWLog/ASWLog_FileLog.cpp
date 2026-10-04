@@ -38,6 +38,7 @@ limitations under the License.
 #include <system_error>
 #include <thread>
 #include <utility>
+#include <vector>
 
 #if defined(_WIN32)
 #include <share.h>
@@ -66,63 +67,20 @@ constexpr int MaxBackupRenameAttempts = 10;
 // How many "_N" suffixes are tried when a backup name is taken, before rotation gives up.
 constexpr int MaxBackupNameSuffix = 1000;
 
-// Deletes the old files in 'logDir' that match 'pattern', as described at TASWFileLog::DeleteOldLogs(). Calls
-// onFailure(message, path, errorCode) for each file it couldn't delete, and with 'logDir' if it couldn't list the
-// folder; a file it can't read, or one deleted meanwhile by someone else, is skipped silently.
-template<typename OnFailure>
-std::size_t DeleteOldFiles(
-    const std::filesystem::path& logDir, std::string_view pattern, std::chrono::hours maxAge, OnFailure&& onFailure)
+// One of a log's backups, as listed by ListBackups()
+struct TBackupFile
 {
-    // Never throws (unless onFailure does): uses the std::error_code overloads, skipping an entry it can't read and
-    // stopping if the folder can't be listed. File names are matched as UTF-8, since the ANSI code page conversion of
-    // path::string() can throw.
+    std::filesystem::path Path;
+    std::filesystem::file_time_type LastWrite;
+    std::uintmax_t Size = 0;
+};
 
-    // An empty pattern would match every file; a caller who means that passes "*"
-    if (pattern.empty())
-        return 0;
-
-    std::error_code errorCode;
-    if (!std::filesystem::is_directory(logDir, errorCode))
-    {
-        if (errorCode)
-            onFailure("Couldn't list the log folder to delete old backups", logDir, errorCode);
-
-        return 0;
-    }
-
-    // Never clean up a root folder, such as "C:\", "\\server\share\" or "/"
-    if (IsRootFolder(logDir))
-        return 0;
-
-    const auto cutoff = std::filesystem::file_time_type::clock::now() - maxAge;
-    std::size_t deletedCount = 0;
-
-    std::filesystem::directory_iterator entries(logDir, errorCode);
-    for (const std::filesystem::directory_iterator end; !errorCode && entries != end; entries.increment(errorCode))
-    {
-        const auto& entry = *entries;
-
-        std::error_code entryError;
-        if (!entry.is_regular_file(entryError))
-            continue;
-
-        if (!MatchesWildcard(PathToUTF8String(entry.path().filename()), pattern))
-            continue;
-
-        const auto lastWrite = entry.last_write_time(entryError);
-        if (!entryError && lastWrite < cutoff)
-        {
-            if (std::filesystem::remove(entry.path(), entryError) && !entryError)
-                ++deletedCount;
-            else if (entryError)
-                onFailure("Couldn't delete an old backup", entry.path(), entryError);
-        }
-    }
-
-    if (errorCode)
-        onFailure("Couldn't list the log folder to delete old backups", logDir, errorCode);
-
-    return deletedCount;
+// True if 'text' isn't empty and holds only the digits 0-9.
+bool AreDigits(std::string_view text) noexcept
+{
+    return !text.empty() && std::all_of(text.begin(), text.end(), [](char character) {
+                return character >= '0' && character <= '9';
+            });
 }
 
 // Returns the first unused backup path for 'logPath': "<stem>.<reasonTag>.<timeLabel>.bak", or with "_1", "_2", ...
@@ -175,12 +133,88 @@ std::uintmax_t GetOpenFileSize(std::FILE* file)
     return 0;
 }
 
+bool IsBackupTimeLabel(std::string_view label) noexcept; // See below
+
+// True if 'fileName' is a backup of the log whose file name stem is 'stem', named as rotation names it:
+// "<stem>.<reason>.<time label>.bak", where the reason has no '.' (see IsBackupTimeLabel()). So a backup of another
+// log whose stem starts the same way (e.g. "app.audit.size.<time label>.bak" for the stem "app") doesn't match.
+bool IsBackupName(std::string_view fileName, std::string_view stem) noexcept
+{
+    constexpr std::string_view Extension = ".bak";
+    if (fileName.size() <= stem.size() + 1 + Extension.size() || !fileName.starts_with(stem) ||
+        fileName[stem.size()] != '.' || !fileName.ends_with(Extension))
+    {
+        return false;
+    }
+
+    const auto reasonAndLabel = fileName.substr(stem.size() + 1, fileName.size() - stem.size() - 1 - Extension.size());
+    const auto reasonEnd = reasonAndLabel.find('.');
+    return reasonEnd != std::string_view::npos && IsBackupTimeLabel(reasonAndLabel.substr(reasonEnd + 1));
+}
+
+// True for the time label of a backup's name: "YYYY-MM-DD" (a daily backup, or any backup made before 0.43) or
+// "YYYY-MM-DD_HHMMSS_mmm", either one optionally followed by "_N" (see FindFreeBackupPath()).
+bool IsBackupTimeLabel(std::string_view label) noexcept
+{
+    if (label.size() < 10 || !AreDigits(label.substr(0, 4)) || label[4] != '-' || !AreDigits(label.substr(5, 2)) ||
+        label[7] != '-' || !AreDigits(label.substr(8, 2)))
+    {
+        return false;
+    }
+
+    auto rest = label.substr(10);
+    if (rest.size() >= 11 && rest[0] == '_' && AreDigits(rest.substr(1, 6)) && rest[7] == '_' && AreDigits(rest.substr(8, 3)))
+        rest.remove_prefix(11);
+
+    return rest.empty() || (rest[0] == '_' && AreDigits(rest.substr(1)));
+}
+
 // True if an operation that last failed at 'lastFailure' may be tried again at 'now', 'retryDelay' later. Also true if
 // the clock went backwards, so that a clock change can't postpone the retry.
 bool IsRetryDue(std::chrono::system_clock::time_point lastFailure, std::chrono::system_clock::time_point now,
     std::chrono::milliseconds retryDelay)
 {
     return now < lastFailure || now - lastFailure >= retryDelay;
+}
+
+// Lists the backups of the log file 'logPath' (see IsBackupName()), newest first: by last write time, which is when a
+// backup's newest entry was written (renaming the log keeps it), then by name. Skips a file it can't read, e.g. one
+// another process deleted meanwhile. If the folder can't be listed, sets 'errorCode' and returns what it found before.
+std::vector<TBackupFile> ListBackups(const std::filesystem::path& logPath, std::error_code& errorCode)
+{
+    // Names are matched as UTF-8, since the ANSI code page conversion of path::string() can throw
+    const auto stem = PathToUTF8String(logPath.stem());
+    const auto folder = logPath.has_parent_path() ? logPath.parent_path() : std::filesystem::path(".");
+
+    std::vector<TBackupFile> backups;
+    std::filesystem::directory_iterator entries(folder, errorCode);
+    for (const std::filesystem::directory_iterator end; !errorCode && entries != end; entries.increment(errorCode))
+    {
+        const auto& entry = *entries;
+
+        std::error_code entryError;
+        if (!entry.is_regular_file(entryError) || !IsBackupName(PathToUTF8String(entry.path().filename()), stem))
+            continue;
+
+        const auto lastWrite = entry.last_write_time(entryError);
+        if (entryError)
+            continue;
+
+        const auto size = entry.file_size(entryError);
+        if (entryError)
+            continue;
+
+        backups.push_back({ entry.path(), lastWrite, size });
+    }
+
+    std::sort(backups.begin(), backups.end(), [](const TBackupFile& left, const TBackupFile& right) {
+                if (left.LastWrite != right.LastWrite)
+                    return left.LastWrite > right.LastWrite;
+
+                return left.Path.filename() > right.Path.filename();
+            });
+
+    return backups;
 }
 
 // Formats a UTC time for a backup file name: "YYYY-MM-DD_HHMMSS_mmm".
@@ -404,11 +438,102 @@ bool TASWFileLog::CloseUnlocked()
 }
 
 //---------------------------------------------------------------------------
+/*
+    TASWFileLog::DeleteOldBackupsUnlocked
+
+    Applies TASWFileConfig's backup rules after a successful rotation: deletes this log's backups (see IsBackupName())
+    that are older than RetentionMaxAge, and, keeping the newest, those beyond MaxBackupFiles or MaxBackupTotalBytes.
+    Reports each backup it couldn't delete. If the folder can't be fully listed, it reports that and deletes nothing,
+    since a partial list could make it count the wrong backups as the newest.
+*/
+void TASWFileLog::DeleteOldBackupsUnlocked()
+{
+    const auto& file = GetConfigUnlocked().File;
+    const bool hasMaxAge = file.RetentionMaxAge.count() > 0;
+    if (!hasMaxAge && file.MaxBackupFiles == 0 && file.MaxBackupTotalBytes == 0)
+        return;
+
+    const auto logPath = file.ResolvePath();
+    std::error_code listError;
+    const auto backups = ListBackups(logPath, listError);
+    if (listError)
+    {
+        ReportFileErrorUnlocked(ErrorKind::DeleteFailed, "Couldn't list the log folder to delete old backups", file.ResolveFolder(), listError);
+        return;
+    }
+
+    const auto cutoff = std::filesystem::file_time_type::clock::now() - file.RetentionMaxAge;
+    std::size_t keptCount = 0;
+    std::uintmax_t keptBytes = 0;
+    bool isOverLimit = false; // Once a backup is over a limit, every older one is too
+
+    for (const auto& backup : backups) // Newest first
+    {
+        if (!isOverLimit)
+        {
+            isOverLimit = (file.MaxBackupFiles > 0 && keptCount >= file.MaxBackupFiles) ||
+                (file.MaxBackupTotalBytes > 0 && backup.Size > file.MaxBackupTotalBytes - keptBytes);
+        }
+
+        const bool isExpired = hasMaxAge && backup.LastWrite < cutoff;
+        if (!isOverLimit && !isExpired)
+        {
+            ++keptCount;
+            keptBytes += backup.Size;
+            continue;
+        }
+
+        // Returns false without an error if another process sharing the log deleted it meanwhile
+        std::error_code deleteError;
+        std::filesystem::remove(backup.Path, deleteError);
+        if (deleteError)
+            ReportFileErrorUnlocked(ErrorKind::DeleteFailed, "Couldn't delete an old backup", backup.Path, deleteError);
+    }
+}
+
+//---------------------------------------------------------------------------
 std::size_t TASWFileLog::DeleteOldLogs(
     const std::filesystem::path& logDir, std::string_view pattern, std::chrono::hours maxAge)
 {
-    return DeleteOldFiles(logDir, pattern, maxAge, [](std::string_view, const std::filesystem::path&, std::error_code) {
-        });
+    // Never throws: uses the std::error_code overloads, skipping an entry it can't read and stopping if the folder can't
+    // be listed. File names are matched as UTF-8, since the ANSI code page conversion of path::string() can throw.
+
+    // An empty pattern would match every file; a caller who means that passes "*"
+    if (pattern.empty())
+        return 0;
+
+    std::error_code errorCode;
+    if (!std::filesystem::is_directory(logDir, errorCode))
+        return 0;
+
+    // Never clean up a root folder, such as "C:\", "\\server\share\" or "/"
+    if (IsRootFolder(logDir))
+        return 0;
+
+    const auto cutoff = std::filesystem::file_time_type::clock::now() - maxAge;
+    std::size_t deletedCount = 0;
+
+    std::filesystem::directory_iterator entries(logDir, errorCode);
+    for (const std::filesystem::directory_iterator end; !errorCode && entries != end; entries.increment(errorCode))
+    {
+        const auto& entry = *entries;
+
+        std::error_code entryError;
+        if (!entry.is_regular_file(entryError))
+            continue;
+
+        if (!MatchesWildcard(PathToUTF8String(entry.path().filename()), pattern))
+            continue;
+
+        const auto lastWrite = entry.last_write_time(entryError);
+        if (!entryError && lastWrite < cutoff)
+        {
+            if (std::filesystem::remove(entry.path(), entryError) && !entryError)
+                ++deletedCount;
+        }
+    }
+
+    return deletedCount;
 }
 
 //---------------------------------------------------------------------------
@@ -723,14 +848,7 @@ bool TASWFileLog::RotateLogFilesUnlocked(std::string_view reasonTag, std::string
         return false;
     }
 
-    if (GetConfigUnlocked().File.RetentionMaxAge.count() > 0)
-    {
-        DeleteOldFiles(GetConfigUnlocked().File.ResolveFolder(),
-            std::format("{}.*.bak", PathToUTF8String(GetConfigUnlocked().File.ResolvePath().stem())), GetConfigUnlocked().File.RetentionMaxAge,
-            [this](std::string_view message, const std::filesystem::path& path, std::error_code deleteError) {
-                ReportFileErrorUnlocked(ErrorKind::DeleteFailed, message, path, deleteError);
-            });
-    }
+    DeleteOldBackupsUnlocked();
 
     if (wasOpen)
         return OpenUnlocked();

@@ -25,12 +25,15 @@ limitations under the License.
 #include "Test_ASWLog_FileLog.h"
 //---------------------------------------------------------------------------
 #include <chrono>
+#include <cstddef>
 #include <cstdint>
 #include <cstdio>
 #include <filesystem>
+#include <format>
 #include <fstream>
 #include <iterator>
 #include <string>
+#include <string_view>
 #include <system_error>
 #include <thread>
 #include <vector>
@@ -153,6 +156,29 @@ bool CanBlockFiles()
 #endif
 }
 
+// How many files in TestTempDir have names starting with 'prefix'
+std::size_t CountFilesStartingWith(std::string_view prefix)
+{
+    std::size_t count = 0;
+    for (const auto& entry : std::filesystem::directory_iterator(TestTempDir))
+    {
+        if (entry.path().filename().string().starts_with(prefix))
+            ++count;
+    }
+
+    return count;
+}
+
+// Creates 'file' with 'size' bytes, last written 'age' ago, e.g. a backup left by an earlier rotation
+void CreateAgedFile(const std::filesystem::path& file, std::size_t size, std::chrono::hours age)
+{
+    {
+        std::ofstream stream(file, std::ios::binary);
+        stream << std::string(size, 'x');
+    }
+    std::filesystem::last_write_time(file, std::filesystem::file_time_type::clock::now() - age);
+}
+
 // An OnError handler for the tests that cause failures on purpose, so their reports don't go to stderr (the OnError
 // tests check the reports)
 void IgnoreError(const ASWLog::TASWLogError& /*error*/)
@@ -201,6 +227,11 @@ TTest_ASWLog_FileLog::TTest_ASWLog_FileLog()
     : inherited("ASWLog_FileLog_Tests")
 {
     RegisterTest(&TTest_ASWLog_FileLog::Test_AutoOpenClose_StaysInitializedBetweenWrites, "AutoOpenClose_StaysInitializedBetweenWrites");
+    RegisterTest(&TTest_ASWLog_FileLog::Test_BackupLimits_ApplyOnlyToThisLogsBackups, "BackupLimits_ApplyOnlyToThisLogsBackups");
+    RegisterTest(&TTest_ASWLog_FileLog::Test_BackupLimits_MaxBackupFilesKeepsNewestByLastWrite, "BackupLimits_MaxBackupFilesKeepsNewestByLastWrite");
+    RegisterTest(&TTest_ASWLog_FileLog::Test_BackupLimits_MaxBackupTotalBytesDeletesOldestFirst, "BackupLimits_MaxBackupTotalBytesDeletesOldestFirst");
+    RegisterTest(&TTest_ASWLog_FileLog::Test_BackupLimits_MaxBackupTotalBytesIsStrict, "BackupLimits_MaxBackupTotalBytesIsStrict");
+    RegisterTest(&TTest_ASWLog_FileLog::Test_BackupLimits_ZeroKeepsEveryBackup, "BackupLimits_ZeroKeepsEveryBackup");
     RegisterTest(&TTest_ASWLog_FileLog::Test_ChildProcess_DoesNotInheritLogFile, "ChildProcess_DoesNotInheritLogFile");
     RegisterTest(&TTest_ASWLog_FileLog::Test_DailyRolling_KeepsExistingBackupForSameDate, "DailyRolling_KeepsExistingBackupForSameDate");
     RegisterTest(&TTest_ASWLog_FileLog::Test_DailyRolling_KeepsLeftoverLogFromSameDay, "DailyRolling_KeepsLeftoverLogFromSameDay");
@@ -312,6 +343,168 @@ void TTest_ASWLog_FileLog::Test_AutoOpenClose_StaysInitializedBetweenWrites()
     CheckTrue(entryPos != std::string::npos, __func__, __LINE__, "The entry should be written");
     CheckTrue(shutdownPos != std::string::npos && shutdownPos > entryPos, __func__, __LINE__,
         "The destructor should write the shutdown line after the last entry: " + contents);
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_FileLog::Test_BackupLimits_ApplyOnlyToThisLogsBackups()
+{
+    // Arrange: every file is old enough for File.RetentionMaxAge, and File.MaxBackupFiles keeps only the new backup
+    using namespace std::chrono_literals;
+    const std::vector<std::string> ownBackups{
+        "app.size.2026-01-01_000000_000.bak",
+        "app.daily.2026-01-02.bak", // Also the form of every backup before 0.43
+        "app.manual.2026-01-03_000000_000_1.bak",
+        "app.daily.2026-01-04_2.bak",
+    };
+    const std::vector<std::string> otherFiles{
+        "app.audit.size.2026-01-01_000000_000.bak", // A backup of app.audit.log
+        "application.size.2026-01-01_000000_000.bak",
+        "app.notes.bak",
+        "app.size.not-a-date.bak",
+        "app.pre.upgrade.2026-01-01.bak", // A reason with a '.' isn't recognized
+        "app.size.2026-01-01_000000_000.bak.old",
+    };
+    for (const auto& name : ownBackups)
+        CreateAgedFile(TestTempDir / name, 10, 48h);
+    for (const auto& name : otherFiles)
+        CreateAgedFile(TestTempDir / name, 10, 48h);
+
+    auto config = MakeRotationTestConfig(TestTempDir / "app.log");
+    config.File.RetentionMaxAge = 24h;
+    config.File.MaxBackupFiles = 1;
+    ASWLog::TASWFileLog logger;
+    const bool initialized = logger.Initialize(config);
+    logger.LogInfo("current");
+
+    // Act
+    const bool rotated = logger.RotateLogFiles("manual");
+    logger.Close();
+
+    // Assert
+    CheckTrue(initialized, __func__, __LINE__, "Initialize should succeed");
+    CheckTrue(rotated, __func__, __LINE__, "RotateLogFiles should succeed");
+    for (const auto& name : ownBackups)
+        CheckFalse(std::filesystem::exists(TestTempDir / name), __func__, __LINE__, "This log's old backup should be deleted: " + name);
+    for (const auto& name : otherFiles)
+        CheckTrue(std::filesystem::exists(TestTempDir / name), __func__, __LINE__, "A file that isn't this log's backup should be kept: " + name);
+    CheckEquals(static_cast<std::size_t>(1), CountFilesStartingWith("app.manual."), __func__, __LINE__, "The new backup should be kept");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_FileLog::Test_BackupLimits_MaxBackupFilesKeepsNewestByLastWrite()
+{
+    // Arrange: last write times in a different order than the names. The daily backup holds the end of its day, so it
+    // is newer than that day's size backups although its name sorts before theirs.
+    using namespace std::chrono_literals;
+    const auto daily = TestTempDir / "count.daily.2026-01-01.bak"; // 1 hour old
+    const auto sizeTwo = TestTempDir / "count.size.2026-01-02_000000_000.bak"; // 2 hours
+    const auto sizeThree = TestTempDir / "count.size.2026-01-03_000000_000_1.bak"; // 3 hours
+    const auto sizeLatestName = TestTempDir / "count.size.2026-01-05_000000_000.bak"; // 4 hours
+    CreateAgedFile(daily, 10, 1h);
+    CreateAgedFile(sizeTwo, 10, 2h);
+    CreateAgedFile(sizeThree, 10, 3h);
+    CreateAgedFile(sizeLatestName, 10, 4h);
+
+    auto config = MakeRotationTestConfig(TestTempDir / "count.log");
+    config.File.MaxBackupFiles = 3;
+    ASWLog::TASWFileLog logger;
+    const bool initialized = logger.Initialize(config);
+    logger.LogInfo("current");
+
+    // Act: the new backup is the newest, so the 2 next newest are kept with it
+    const bool rotated = logger.RotateLogFiles("manual");
+    logger.Close();
+
+    // Assert
+    CheckTrue(initialized, __func__, __LINE__, "Initialize should succeed");
+    CheckTrue(rotated, __func__, __LINE__, "RotateLogFiles should succeed");
+    CheckEquals(static_cast<std::size_t>(1), CountFilesStartingWith("count.manual."), __func__, __LINE__, "The new backup should be kept");
+    CheckTrue(std::filesystem::exists(daily), __func__, __LINE__, "The backup last written 1 hour ago should be kept");
+    CheckTrue(std::filesystem::exists(sizeTwo), __func__, __LINE__, "The backup last written 2 hours ago should be kept");
+    CheckFalse(std::filesystem::exists(sizeThree), __func__, __LINE__, "The backup last written 3 hours ago is beyond the limit");
+    CheckFalse(std::filesystem::exists(sizeLatestName), __func__, __LINE__, "The oldest backup should be deleted, whatever its name says");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_FileLog::Test_BackupLimits_MaxBackupTotalBytesDeletesOldestFirst()
+{
+    // Arrange
+    using namespace std::chrono_literals;
+    const auto first = TestTempDir / "bytes.size.2026-01-04_000000_000.bak";
+    const auto second = TestTempDir / "bytes.size.2026-01-03_000000_000.bak";
+    const auto third = TestTempDir / "bytes.size.2026-01-02_000000_000.bak";
+    const auto smallOldest = TestTempDir / "bytes.size.2026-01-01_000000_000.bak";
+    CreateAgedFile(first, 100, 1h);
+    CreateAgedFile(second, 100, 2h);
+    CreateAgedFile(third, 100, 3h);
+    CreateAgedFile(smallOldest, 10, 4h);
+
+    // The new backup holds ": current\n" (10 bytes): it and the 2 newest fit (210 bytes), the third doesn't (310)
+    auto config = MakeRotationTestConfig(TestTempDir / "bytes.log");
+    config.File.MaxBackupTotalBytes = 260;
+    ASWLog::TASWFileLog logger;
+    const bool initialized = logger.Initialize(config);
+    logger.LogInfo("current");
+
+    // Act
+    const bool rotated = logger.RotateLogFiles("manual");
+    logger.Close();
+
+    // Assert
+    CheckTrue(initialized, __func__, __LINE__, "Initialize should succeed");
+    CheckTrue(rotated, __func__, __LINE__, "RotateLogFiles should succeed");
+    CheckEquals(static_cast<std::size_t>(1), CountFilesStartingWith("bytes.manual."), __func__, __LINE__, "The new backup should be kept");
+    CheckTrue(std::filesystem::exists(first), __func__, __LINE__, "The newest old backup should be kept");
+    CheckTrue(std::filesystem::exists(second), __func__, __LINE__, "The second newest old backup should be kept");
+    CheckFalse(std::filesystem::exists(third), __func__, __LINE__, "The backup that doesn't fit should be deleted");
+    CheckFalse(std::filesystem::exists(smallOldest), __func__, __LINE__, "An older backup should be deleted too, even though it would fit");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_FileLog::Test_BackupLimits_MaxBackupTotalBytesIsStrict()
+{
+    // Arrange: a limit smaller than the backup that rotation makes
+    using namespace std::chrono_literals;
+    const auto older = TestTempDir / "strict.size.2026-01-01_000000_000.bak";
+    CreateAgedFile(older, 10, 1h);
+
+    auto config = MakeRotationTestConfig(TestTempDir / "strict.log");
+    config.File.MaxBackupTotalBytes = 1;
+    ASWLog::TASWFileLog logger;
+    const bool initialized = logger.Initialize(config);
+    logger.LogInfo("current");
+
+    // Act
+    const bool rotated = logger.RotateLogFiles("manual");
+    logger.LogInfo("after");
+    logger.Close();
+
+    // Assert
+    CheckTrue(initialized, __func__, __LINE__, "Initialize should succeed");
+    CheckTrue(rotated, __func__, __LINE__, "RotateLogFiles should succeed");
+    CheckEquals(static_cast<std::size_t>(0), CountFilesStartingWith("strict.manual."), __func__, __LINE__, "Even the new backup should be deleted when it alone exceeds the limit");
+    CheckFalse(std::filesystem::exists(older), __func__, __LINE__, "The older backup should be deleted");
+    CheckEquals(std::string(": after\n"), ReadFileText(TestTempDir / "strict.log"), __func__, __LINE__, "Logging should go on in the new log file");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_FileLog::Test_BackupLimits_ZeroKeepsEveryBackup()
+{
+    // Arrange: File.RetentionMaxAge is set, so the cleanup runs, but none of the backups has expired
+    using namespace std::chrono_literals;
+    for (int hours = 1; hours <= 3; ++hours)
+        CreateAgedFile(TestTempDir / std::format("zero.size.2026-01-0{}_000000_000.bak", hours), 1000, std::chrono::hours(hours));
+
+    auto config = MakeRotationTestConfig(TestTempDir / "zero.log");
+    config.File.RetentionMaxAge = 24h; // File.MaxBackupFiles and File.MaxBackupTotalBytes stay 0 (unlimited)
+    ASWLog::TASWFileLog logger;
+    const bool initialized = logger.Initialize(config);
+    logger.LogInfo("current");
+
+    // Act
+    const bool rotated = logger.RotateLogFiles("manual");
+    logger.Close();
+
+    // Assert
+    CheckTrue(initialized, __func__, __LINE__, "Initialize should succeed");
+    CheckTrue(rotated, __func__, __LINE__, "RotateLogFiles should succeed");
+    CheckEquals(static_cast<std::size_t>(3), CountFilesStartingWith("zero.size."), __func__, __LINE__, "Limits of 0 should keep every backup");
+    CheckEquals(static_cast<std::size_t>(1), CountFilesStartingWith("zero.manual."), __func__, __LINE__, "The new backup should be kept");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_FileLog::Test_ChildProcess_DoesNotInheritLogFile()

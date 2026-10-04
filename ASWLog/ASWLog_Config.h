@@ -30,6 +30,7 @@ limitations under the License.
 #define ASWLog_ConfigH
 //---------------------------------------------------------------------------
 #include <chrono>
+#include <cstddef>
 #include <cstdint>
 #include <filesystem>
 #include <functional>
@@ -84,8 +85,15 @@ struct TASWFileConfig
     // backup is named for the day it holds.
     bool EnableDailyRolling   = false;
 
-    // --- Log Retention Options (applied automatically after a successful rotation) ---
-    std::chrono::hours RetentionMaxAge{ 0 }; // 0 = disabled. When > 0, backups for this log older than this age are deleted after each rotation.
+    // --- Backup Cleanup Options (applied after each successful rotation) ---
+    // Each rule deletes some of this log's backups: the files in its folder named "<stem>.<reason>.<time>.bak", as
+    // rotation names them (not those of another log whose name starts the same way). A backup is deleted if any rule
+    // says so. Backups are ordered by when their newest entry was written (their last write time).
+    std::chrono::hours RetentionMaxAge{ 0 }; // 0 = disabled. Deletes the backups older than this.
+    std::size_t MaxBackupFiles = 0; // 0 = unlimited. Keeps the newest this many backups, deleting the older ones.
+    // 0 = unlimited. Keeps the newest backups that together take at most this many bytes, deleting the older ones, and
+    // even the backup just made if it alone is larger, so set it above MaxFileSizeBytes.
+    std::uintmax_t MaxBackupTotalBytes = 0;
 
     // The folder that holds the log file
     [[nodiscard]] std::filesystem::path ResolveFolder() const

@@ -119,6 +119,7 @@ private:
 
 private:
     void CloseFileUnlocked(); // Closes the file but, unlike CloseUnlocked(), leaves the logger initialized
+    void DeleteOldBackupsUnlocked();
     void MaybeFlush(bool isNewLine);
     // Reports a file failure (see ReportErrorUnlocked()). Never throws.
     void ReportFileErrorUnlocked(ErrorKind kind, std::string_view message, const std::filesystem::path& path, std::error_code errorCode) noexcept;
@@ -160,7 +161,8 @@ public:
     ~TASWFileLog();
 
     // Renames the log file to "<stem>.<reasonTag>.<YYYY-MM-DD_HHMMSS_mmm>.bak" (UTC), adding "_1", "_2", ... to the
-    // time if that name is taken, so an existing backup is never replaced. Then reopens the log if it was open.
+    // time if that name is taken, so an existing backup is never replaced. Then reopens the log if it was open. A
+    // 'reasonTag' that contains '.' makes a backup that TASWFileConfig's backup cleanup doesn't recognize, so it is kept.
     bool RotateLogFiles(std::string_view reasonTag = "manual");
 };
 
