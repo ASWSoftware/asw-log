@@ -29,6 +29,8 @@ limitations under the License.
 #include <iostream>
 #include <sstream>
 //---------------------------------------------------------------------------
+#include "ASWLog_Utils.h" // For GetCurrentOSProcessId(), GetCurrentOSThreadId()
+//---------------------------------------------------------------------------
 
 namespace ASWLog
 {
@@ -39,40 +41,53 @@ namespace ASWLog
 // TASWLogBase
 /////////////////////////////////////////////////////////////////////////////
 
-// --- Normally methods are alpha-order - these 'Log...' methods are grouped in the order of the 'Level' enum. ---
+//---------------------------------------------------------------------------
+std::shared_ptr<const TASWLogConfig> TASWLogBase::SetConfig(const TASWLogConfig& config)
+{
+    auto snapshot = std::make_shared<const TASWLogConfig>(config);
+
+    std::lock_guard<std::mutex> lock(m_ConfigMutex);
+    m_Config.swap(snapshot);
+    return snapshot;
+}
 
 //---------------------------------------------------------------------------
-void TASWLogBase::LogTrace(std::string_view msg, std::source_location loc)
+void TASWLogBase::StampRecord(TASWLogRecord& record) const noexcept
 {
-    Log(Level::Trace, msg, loc);
-}
-//---------------------------------------------------------------------------
-void TASWLogBase::LogDebug(std::string_view msg, std::source_location loc)
-{
-    Log(Level::Debug, msg, loc);
-}
-//---------------------------------------------------------------------------
-void TASWLogBase::LogInfo(std::string_view msg, std::source_location loc)
-{
-    Log(Level::Info, msg, loc);
-}
-//---------------------------------------------------------------------------
-void TASWLogBase::LogWarn(std::string_view msg, std::source_location loc)
-{
-    Log(Level::Warn, msg, loc);
-}
-//---------------------------------------------------------------------------
-void TASWLogBase::LogError(std::string_view msg, std::source_location loc)
-{
-    Log(Level::Error, msg, loc);
-}
-//---------------------------------------------------------------------------
-void TASWLogBase::LogCritical(std::string_view msg, std::source_location loc)
-{
-    Log(Level::Critical, msg, loc);
-}
-//---------------------------------------------------------------------------
+    if (record.Timestamp == std::chrono::system_clock::time_point{})
+        record.Timestamp = NowUTC();
 
-// --- End grouping for 'Log...' methods ---
+    if (record.ProcessId == 0)
+        record.ProcessId = GetCurrentOSProcessId();
+
+    if (record.ThreadId == 0)
+        record.ThreadId = GetCurrentOSThreadId();
+}
+
+//---------------------------------------------------------------------------
+void TASWLogBase::Write(const TASWLogRecord& record) noexcept
+{
+    // Off isn't a severity and a disabled logger writes nothing, even when forced; a forced entry ignores only the
+    // minimum level. Checked before stamping, so a filtered entry costs no clock or thread id read.
+    const bool isWritten = record.Forced ? record.LogLevel != Level::Off && IsEnabled() : PassesLevelGate(record.LogLevel);
+    if (!isWritten)
+        return;
+
+    // Stamped now, on the calling thread and before any lock, so the time is the moment of the call
+    TASWLogRecord stampedRecord = record;
+    StampRecord(stampedRecord);
+
+    // A derived logger's WriteRecord() may throw (e.g. out of memory, or a custom logger's own error); logging must
+    // never throw into the application, so the entry is dropped instead
+    try
+    {
+        WriteRecord(stampedRecord);
+    }
+    catch (...)
+    {
+    }
+}
+
+//---------------------------------------------------------------------------
 
 } // namespace ASWLog

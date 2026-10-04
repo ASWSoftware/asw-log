@@ -52,22 +52,29 @@ bool TASWMultiLog::AddLogger(IASWLog& logger)
 }
 
 //---------------------------------------------------------------------------
-bool TASWMultiLog::Close()
+bool TASWMultiLog::Close() noexcept
 {
-    bool allSucceeded = true;
-    for (auto* sink : SnapshotSinks())
+    try
     {
-        if (!sink->Close())
-            allSucceeded = false;
-    }
+        bool allSucceeded = true;
+        for (auto* sink : SnapshotSinks())
+        {
+            if (!sink->Close())
+                allSucceeded = false;
+        }
 
-    // Like the other loggers, a closed composite can be initialized again
+        // Like the other loggers, a closed composite can be initialized again
+        {
+            std::lock_guard<std::mutex> lock(m_StateMutex);
+            m_IsInitialized.store(false, std::memory_order_release);
+        }
+
+        return allSucceeded;
+    }
+    catch (...)
     {
-        std::lock_guard<std::mutex> lock(m_StateMutex);
-        m_IsInitialized.store(false, std::memory_order_release);
+        return false; // Couldn't copy the sink list (out of memory)
     }
-
-    return allSucceeded;
 }
 
 //---------------------------------------------------------------------------
@@ -78,30 +85,22 @@ bool TASWMultiLog::Contains(const IASWLog& logger) const noexcept
 }
 
 //---------------------------------------------------------------------------
-/*
-    TASWMultiLog::FanOut
-
-    Calls 'logCall' with each registered sink. Never throws: a sink that throws (e.g. a custom IASWLog) doesn't stop
-    the others from receiving the entry, and doesn't throw into the application.
-*/
-template<typename TLogCall>
-void TASWMultiLog::FanOut(const TLogCall& logCall) const noexcept
+bool TASWMultiLog::Flush() noexcept
 {
     try
     {
+        bool allSucceeded = true;
         for (auto* sink : SnapshotSinks())
         {
-            try
-            {
-                logCall(*sink);
-            }
-            catch (...)
-            {
-            }
+            if (!sink->Flush())
+                allSucceeded = false;
         }
+
+        return allSucceeded;
     }
     catch (...)
     {
+        return false;
     }
 }
 
@@ -119,32 +118,43 @@ std::vector<IASWLog*> TASWMultiLog::GetLoggers() const
 }
 
 //---------------------------------------------------------------------------
-bool TASWMultiLog::Initialize(const TASWLogConfig& config)
+bool TASWMultiLog::Initialize(const TASWLogConfig& config) noexcept
 {
+    try
     {
-        std::lock_guard<std::mutex> lock(m_StateMutex);
-        if (m_IsInitialized.load(std::memory_order_acquire))
-            return false;
+        {
+            std::shared_ptr<const TASWLogConfig> previousConfig; // Released after the lock (see SetConfig())
+            std::lock_guard<std::mutex> lock(m_StateMutex);
+            if (m_IsInitialized.load(std::memory_order_acquire))
+                return false;
 
-        m_Config = config;
-        m_MinimumLevel.store(m_Config.InitialMinimumLevel, std::memory_order_release);
-        m_IsInitialized.store(true, std::memory_order_release);
+            previousConfig = SetConfig(config);
+            SetMinimumLevel(config.InitialMinimumLevel);
+            m_IsInitialized.store(true, std::memory_order_release);
+        }
+
+        bool allSucceeded = true;
+        for (auto* sink : SnapshotSinks())
+        {
+            if (!sink->Initialize(config) && !sink->IsOpen())
+                allSucceeded = false;
+        }
+
+        return allSucceeded;
     }
-
-    bool allSucceeded = true;
-    for (auto* sink : SnapshotSinks())
+    catch (...)
     {
-        if (!sink->Initialize(config) && !sink->IsOpen())
-            allSucceeded = false;
+        return false; // Out of memory copying the config or the sink list
     }
-
-    return allSucceeded;
 }
 
 //---------------------------------------------------------------------------
 bool TASWMultiLog::IsOpen() const noexcept
 {
-    for (auto* sink : SnapshotSinks())
+    // Iterates under the lock instead of copying the list, which could throw. A sink's IsOpen() must not call back
+    // into this composite.
+    std::lock_guard<std::mutex> lock(m_ListMutex);
+    for (const auto* sink : m_Sinks)
     {
         if (!sink->IsOpen())
             return false;
@@ -154,54 +164,52 @@ bool TASWMultiLog::IsOpen() const noexcept
 }
 
 //---------------------------------------------------------------------------
-void TASWMultiLog::Log(Level level, std::string_view message, std::source_location loc)
+bool TASWMultiLog::Open() noexcept
 {
-    if (level < GetMinimumLevel())
-        return;
-
-    FanOut([&](IASWLog& sink) {
-            sink.Log(level, message, loc);
-        });
-}
-
-//---------------------------------------------------------------------------
-void TASWMultiLog::LogForce(Level level, std::string_view message, std::source_location loc)
-{
-    FanOut([&](IASWLog& sink) {
-            sink.LogForce(level, message, loc);
-        });
-}
-
-//---------------------------------------------------------------------------
-void TASWMultiLog::LogForceRaw(Level level, std::string_view message, std::source_location loc)
-{
-    FanOut([&](IASWLog& sink) {
-            sink.LogForceRaw(level, message, loc);
-        });
-}
-
-//---------------------------------------------------------------------------
-void TASWMultiLog::LogRaw(Level level, std::string_view message, std::source_location loc)
-{
-    if (level < GetMinimumLevel())
-        return;
-
-    FanOut([&](IASWLog& sink) {
-            sink.LogRaw(level, message, loc);
-        });
-}
-
-//---------------------------------------------------------------------------
-bool TASWMultiLog::Open()
-{
-    bool allSucceeded = true;
-    for (auto* sink : SnapshotSinks())
+    try
     {
-        if (!sink->Open())
-            allSucceeded = false;
-    }
+        bool allSucceeded = true;
+        for (auto* sink : SnapshotSinks())
+        {
+            if (!sink->Open())
+                allSucceeded = false;
+        }
 
-    return allSucceeded;
+        return allSucceeded;
+    }
+    catch (...)
+    {
+        return false; // Couldn't copy the sink list (out of memory)
+    }
+}
+
+//---------------------------------------------------------------------------
+bool TASWMultiLog::Reconfigure(const TASWLogConfig& config) noexcept
+{
+    try
+    {
+        {
+            std::shared_ptr<const TASWLogConfig> previousConfig; // Released after the lock (see SetConfig())
+            std::lock_guard<std::mutex> lock(m_StateMutex);
+            if (!m_IsInitialized.load(std::memory_order_acquire))
+                return false;
+
+            previousConfig = SetConfig(config);
+        }
+
+        bool allSucceeded = true;
+        for (auto* sink : SnapshotSinks())
+        {
+            if (!sink->Reconfigure(config))
+                allSucceeded = false;
+        }
+
+        return allSucceeded;
+    }
+    catch (...)
+    {
+        return false;
+    }
 }
 
 //---------------------------------------------------------------------------
@@ -228,10 +236,41 @@ bool TASWMultiLog::RemoveLogger(IASWLog& logger) noexcept
 }
 
 //---------------------------------------------------------------------------
+bool TASWMultiLog::ShouldLog(Level level) const noexcept
+{
+    if (!PassesLevelGate(level))
+        return false;
+
+    // Iterates under the lock instead of copying the list, which could throw. A sink's ShouldLog() must not call back
+    // into this composite (the built-in loggers' ShouldLog() only reads their own level and enabled flag).
+    std::lock_guard<std::mutex> lock(m_ListMutex);
+    for (const auto* sink : m_Sinks)
+    {
+        if (sink->ShouldLog(level))
+            return true;
+    }
+
+    return false;
+}
+
+//---------------------------------------------------------------------------
 std::vector<IASWLog*> TASWMultiLog::SnapshotSinks() const
 {
     std::lock_guard<std::mutex> lock(m_ListMutex);
     return m_Sinks;
+}
+
+//---------------------------------------------------------------------------
+/*
+    TASWMultiLog::WriteRecord
+
+    Each sink's Write() is noexcept, so a failing sink can't stop the others from getting the entry. If copying the
+    sink list throws (out of memory), TASWLogBase::Write() drops the entry.
+*/
+void TASWMultiLog::WriteRecord(const TASWLogRecord& record)
+{
+    for (auto* sink : SnapshotSinks())
+        sink->Write(record);
 }
 
 //---------------------------------------------------------------------------

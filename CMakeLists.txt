@@ -38,6 +38,8 @@ add_library(ASWLog STATIC
     ASWLog/ASWLog_Types.h
     ASWLog/ASWLog_Utils.cpp
     ASWLog/ASWLog_Utils.h
+    ASWLog/ASWLog_Version.cpp
+    ASWLog/ASWLog_Version.h
 )
 add_library(ASWLog::ASWLog ALIAS ASWLog)
 
