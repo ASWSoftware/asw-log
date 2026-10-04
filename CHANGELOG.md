@@ -10,12 +10,14 @@ see [0.26.1](#0261---2026-09-17) for the initial versioned baseline.
 
 ## [Unreleased]
 
+## [0.65.0] - 2026-10-03
+
 ### Added
 
 - `Level::Off`, to turn a logger off through its level:
   `SetMinimumLevel(Level::Off)` (or `InitialMinimumLevel`) stops all
   entries except `LogForce`/`LogForceRaw`, which still ignore the minimum
-  level, and `CallbackMinimumLevel = Level::Off` turns off `OnLogEntry`. A
+  level, and `OnLogEntryMinimumLevel = Level::Off` turns off `OnLogEntry`. A
   message logged at `Off` is never written, even when forced.
   `Level_ToString` gives "OFF", and `Level_FromString` accepts "OFF" and
   "NONE". `LevelCount` stays 6 (the severity levels, not counting `Off`).
@@ -24,7 +26,7 @@ see [0.26.1](#0261---2026-09-17) for the initial versioned baseline.
   not even forced entries or the startup and shutdown lines, while its
   output stays open and its level is kept (lock-free, like the level). Use
   it to stop logging; `Close()` releases the output, but with
-  `AutoOpenClosePerWrite` the next entry reopens the file.
+  `File.AutoOpenClosePerWrite` the next entry reopens the file.
 - `GetMinimumLevel()`/`SetMinimumLevel()` and the new `ShouldLog(level)` are
   now on `IASWLog`, so code holding only an `IASWLog&` can use them.
   `ShouldLog()` is true if `Log()` would write an entry at that level (for a
@@ -46,9 +48,10 @@ see [0.26.1](#0261---2026-09-17) for the initial versioned baseline.
 - `IASWLog::Reconfigure(const TASWLogConfig&)` changes an initialized
   logger's settings safely while other threads log; entries written after it
   returns use them. A file logger whose file path or
-  `AutoOpenClosePerWrite` changed closes the old file and opens the new one
-  (if that fails, `Reconfigure()` returns false, the settings are kept and
-  later entries retry the open); otherwise it flushes and keeps the file.
+  `File.AutoOpenClosePerWrite` changed closes the old file and opens the
+  new one (if that fails, `Reconfigure()` returns false, the settings are
+  kept and later entries retry the open); otherwise it flushes and keeps the
+  file.
   It doesn't change the minimum level (use `SetMinimumLevel()`) or write the
   startup lines. A multi-log passes the settings on to every logger it
   holds, like `Initialize()`.
@@ -167,8 +170,8 @@ see [0.26.1](#0261---2026-09-17) for the initial versioned baseline.
 
 ### Fixed
 
-- A file logger with `AutoOpenClosePerWrite` now writes its shutdown line,
-  and a second `Initialize()` call fails as for any initialized logger.
+- A file logger with `File.AutoOpenClosePerWrite` now writes its shutdown
+  line, and a second `Initialize()` call fails as for any initialized logger.
   Closing the file after each entry used to mark the logger as not
   initialized, so the shutdown line was skipped and a repeated
   `Initialize()` wrote the startup lines again.
@@ -466,7 +469,8 @@ Everything already present in the logger at this point (`TASWFileLog`,
 and CMake example projects, unit tests, `Deploy.bat`, etc.) is treated as the
 baseline and is not itemized commit-by-commit.
 
-[Unreleased]: https://github.com/ASWSoftware/asw-log/compare/v0.45.0...HEAD
+[Unreleased]: https://github.com/ASWSoftware/asw-log/compare/v0.65.0...HEAD
+[0.65.0]: https://github.com/ASWSoftware/asw-log/compare/v0.45.0...v0.65.0
 [0.45.0]: https://github.com/ASWSoftware/asw-log/compare/v0.43.0...v0.45.0
 [0.43.0]: https://github.com/ASWSoftware/asw-log/compare/v0.26.4...v0.43.0
 [0.26.4]: https://github.com/ASWSoftware/asw-log/compare/v0.26.3...v0.26.4
