@@ -36,6 +36,7 @@ private:
     typedef TTestGroupBase inherited;
 
 private: // Test methods
+    void Test_Async_BacktraceIsTakenWhenTheTriggerIsLogged();
     void Test_Async_BlockWaitsForRoomInTheQueue();
     void Test_Async_CallReturnsBeforeTheEntryIsWritten();
     void Test_Async_DestructorWritesQueuedEntriesBeforeTheShutdownLine();
@@ -48,6 +49,7 @@ private: // Test methods
     void Test_Async_OnLogEntryRunsOnTheWorkerWithItsOwnCopy();
     void Test_Async_ReconfigureToSyncWritesQueuedEntriesFirst();
     void Test_Async_SwitchingOnAndOffKeepsEachThreadsOrder();
+    void Test_Backtrace_IsFormattedAndWrittenBeforeTheTrigger();
     void Test_Finalize_WritesShutdownLineFromDestructor();
     void Test_Flush_CallsHookAndReturnsItsResult();
     void Test_Flush_ThrowingHookDoesNotEscape();

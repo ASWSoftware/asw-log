@@ -177,6 +177,7 @@ private:
 
 private:
     void DispatchLogCallback(const TASWLogConfig& config, const TASWLogRecord& record, std::string_view formattedLine) const noexcept;
+    TASWLogRecord MakeBacktraceMarker(std::string_view message) const noexcept;
     void OnCrash(std::string_view message, bool isInSignalHandler, std::chrono::steady_clock::time_point deadline) noexcept;
     bool QueueRecord(const TASWLogRecord& record);
     void RunDeferredWork() noexcept;
@@ -187,6 +188,10 @@ private:
     void UpdateWorkerFromWorker(bool mustStop);
     void WaitForQueuedEntries();
     void WriteApplicationInfo();
+    template<typename TWriteLine>
+    void WriteBacktraceForCrash(const TWriteLine& writeLine, bool mustClear, std::chrono::steady_clock::time_point deadline);
+    void WriteBacktraceForCrashDirect(bool mustClear, std::chrono::steady_clock::time_point deadline) noexcept;
+    void WriteBacktraceForCrashUnlocked(std::chrono::steady_clock::time_point deadline);
     void WriteDriveInfo();
     void WriteInfoLine(std::string_view message, std::source_location loc = std::source_location::current());
     void WriteInitializationInfo();

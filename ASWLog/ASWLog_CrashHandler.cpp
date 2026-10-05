@@ -698,6 +698,15 @@ void TCrashHandling::Unregister(TASWTextLogBase& log) noexcept
 }
 
 //---------------------------------------------------------------------------
+void AppendBacktraceBeginText(TCrashText& text, std::size_t count) noexcept
+{
+    text.Append("Backtrace: the last ");
+    text.AppendDecimal(count);
+    text.Append(count == 1 ? " entry" : " entries");
+    text.Append(" below the minimum level");
+}
+
+//---------------------------------------------------------------------------
 void AppendCrashLine(TCrashText& line, const TASWLogRecord& record, bool usesCRLF) noexcept
 {
     const std::string_view ending = usesCRLF ? "\r\n" : "\n";

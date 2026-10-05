@@ -73,6 +73,32 @@ struct TASWAsyncConfig
 
 
 /////////////////////////////////////////////////////////////////////////////
+// TASWBacktraceConfig
+//
+// A backtrace (TASWLogConfig::Backtrace): the logger keeps its most recent entries below its minimum level, at or
+// above LowestLevel, in memory, and writes them when an entry at or above DumpAtLevel is written (just before that
+// entry), when DumpBacktrace() is called, or when the application crashes (see InstallCrashHandlers()), then forgets
+// them. So a log written at Info still shows the Debug and Trace entries that led up to an error. The kept entries are
+// written between two Info lines, "Backtrace: the last N entries below the minimum level" and "Backtrace end", with
+// their own time, level, thread and location. Off by default (Capacity 0). Keeping an entry costs about as much as
+// copying its message, so the *Fmt methods also format the entries at the kept levels (see IASWLog::ShouldLog()).
+//
+// Each logger keeps its own backtrace, of what is below its own minimum level. A multi-log keeps none and filters with
+// its own minimum level first: to give its loggers' backtraces the lower levels, set its minimum level to LowestLevel
+// or lower.
+/////////////////////////////////////////////////////////////////////////////
+struct TASWBacktraceConfig
+{
+    // How many entries are kept; once full, a new one replaces the oldest. 0 = no backtrace.
+    std::size_t Capacity = 0;
+    Level LowestLevel = Level::Trace; // Entries below it aren't kept. Level::Off = no backtrace.
+    // Writing an entry at or above this level (forced and raw entries too) writes the backtrace first. Level::Off =
+    // only DumpBacktrace() and a crash write it.
+    Level DumpAtLevel = Level::Error;
+};
+
+
+/////////////////////////////////////////////////////////////////////////////
 // TASWBackupInfo
 //
 // A backup a file logger made by rotating its log, as passed to TASWFileConfig::OnBackupCreated.
@@ -256,6 +282,7 @@ struct TASWLogConfig
     TASWShutdownConfig Shutdown;
     TASWFileConfig File;
     TASWAsyncConfig Async;
+    TASWBacktraceConfig Backtrace;
 
     // --- Log Entry Callback Options ---
     // Receives the entry's record (with its time and ids) and the line as written. Both are only valid during the call.

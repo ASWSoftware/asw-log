@@ -57,6 +57,9 @@ namespace ASWLog
 // composite stops all fan-out, forced entries included. All other
 // settings in this class's config (Line, Startup, Shutdown, File,
 // OnLogEntry) are inert, since the composite performs no I/O of its own.
+// It keeps no backtrace either (each sink keeps its own, see
+// TASWBacktraceConfig), so its minimum level must be at or below the
+// sinks' Backtrace.LowestLevel for their backtraces to get those entries.
 /////////////////////////////////////////////////////////////////////////////
 class TASWMultiLog : public TASWLogBase
 {
@@ -79,6 +82,10 @@ protected:
     {
         return "TASWMultiLog";
     }
+
+    // False: each sink keeps its own backtrace, and this composite's gate stays its minimum level (see
+    // TASWBacktraceConfig)
+    bool KeepsBacktrace() const noexcept override;
 
     // Passes the record, stamped once by Write(), to every registered sink's Write(), so they all show the same time
     void WriteRecord(const TASWLogRecord& record) override;
@@ -115,6 +122,7 @@ public:
     // every sink's Flush() succeeds (vacuously true if none are registered).
     bool Flush() noexcept override;
     bool IsOpen() const noexcept override; // True if every registered sink reports open (vacuously true if none are registered).
+    void DumpBacktrace() noexcept override; // Passes it on to every registered sink, unless this composite is disabled
 
     // True if this composite's own gate passes (enabled, not Off, minimum level) and at least one registered sink's
     // ShouldLog() is true (false if none are registered).

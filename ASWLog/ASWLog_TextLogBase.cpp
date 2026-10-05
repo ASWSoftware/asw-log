@@ -275,16 +275,28 @@ bool TASWTextLogBase::IsOpen() const noexcept
 }
 
 //---------------------------------------------------------------------------
+// A line written around the backtrace on a crash (see WriteBacktraceForCrashDirect()), like TASWLogBase's markers
+TASWLogRecord TASWTextLogBase::MakeBacktraceMarker(std::string_view message) const noexcept
+{
+    TASWLogRecord marker;
+    marker.LogLevel = Level::Info;
+    marker.Message = message;
+    marker.Forced = true;
+    StampRecord(marker);
+    return marker;
+}
+
+//---------------------------------------------------------------------------
 /*
     TASWTextLogBase::OnCrash
 
     Called by a crash handler for each initialized logger (see Detail::TCrashHandling), on the crashing thread: waits
     until the worker has written the entries queued before the crash and m_Mutex is free, until 'deadline'. With the
-    lock, it flushes the output, then writes 'message' as a Critical line: formatted, or in a POSIX signal handler
-    ('isInSignalHandler') the fixed-layout line, written directly (see FlushForCrashUnlocked() and
-    WriteCrashLineDirect()). Without it, it writes only the fixed-layout line, directly. No line if the logger is
-    disabled or its config leaves the crash line out. Doesn't rotate the file, and leaves the failures it finds queued
-    (see DeferUnlocked()), so no callback runs in the crashed process.
+    lock, it flushes the output, then writes the backtrace (see TASWBacktraceConfig) and 'message' as a Critical line:
+    formatted, or in a POSIX signal handler ('isInSignalHandler') in the fixed layout, written directly (see
+    FlushForCrashUnlocked() and WriteCrashLineDirect()). Without it, it writes only those, in the fixed layout,
+    directly. Nothing if the logger is disabled; no crash line if its config leaves it out. Doesn't rotate the file, and
+    leaves the failures it finds queued (see DeferUnlocked()), so no callback runs in the crashed process.
 */
 void TASWTextLogBase::OnCrash(std::string_view message, bool isInSignalHandler, std::chrono::steady_clock::time_point deadline) noexcept
 {
@@ -321,8 +333,11 @@ void TASWTextLogBase::OnCrash(std::string_view message, bool isInSignalHandler, 
             // EnsureReadyUnlocked() reopens a file closed between entries (AutoOpenClosePerWrite)
             if (EnsureReadyUnlocked())
             {
-                // The entries written so far first, in case formatting the line fails in the crashed process
+                // The entries written so far first, in case formatting the lines fails in the crashed process
                 FlushUnlocked();
+                if (IsEnabled())
+                    WriteBacktraceForCrashUnlocked(deadline);
+
                 if (writesLine)
                 {
                     const auto line = FormatEntry(record, GetConfigUnlocked());
@@ -340,9 +355,14 @@ void TASWTextLogBase::OnCrash(std::string_view message, bool isInSignalHandler, 
         {
         }
     }
-    else if (lock.owns_lock())
+    else
     {
-        FlushForCrashUnlocked();
+        if (lock.owns_lock())
+            FlushForCrashUnlocked();
+
+        // Freeing the kept copies isn't async-signal-safe
+        if (IsEnabled())
+            WriteBacktraceForCrashDirect(!isInSignalHandler, deadline);
     }
 
     if (!isLineWritten)
@@ -817,6 +837,70 @@ void TASWTextLogBase::WriteApplicationInfo()
         applicationInfo += std::format(", command_line='{}'", GetCommandLineString());
 
     WriteInfoLine(std::format("App: {}", applicationInfo));
+}
+
+//---------------------------------------------------------------------------
+/*
+    TASWTextLogBase::WriteBacktraceForCrash
+
+    For the two below: passes the begin marker, each kept entry (oldest first) and the end marker to 'writeLine',
+    polling the backtrace's lock until 'deadline' (see VisitBacktraceForCrash()).
+*/
+template<typename TWriteLine>
+void TASWTextLogBase::WriteBacktraceForCrash(const TWriteLine& writeLine, bool mustClear,
+    std::chrono::steady_clock::time_point deadline)
+{
+    const auto visit = [this, &writeLine](const TASWLogRecord& record, std::size_t index, std::size_t count) {
+            if (index == 0)
+            {
+                Detail::TCrashText text;
+                Detail::AppendBacktraceBeginText(text, count);
+                writeLine(MakeBacktraceMarker(text.View()));
+            }
+
+            writeLine(record);
+            if (index + 1 == count)
+                writeLine(MakeBacktraceMarker(Detail::BacktraceEndText));
+        };
+
+    while (!VisitBacktraceForCrash(visit, mustClear) && Detail::PauseBeforeDeadline(deadline))
+    {
+    }
+}
+
+//---------------------------------------------------------------------------
+/*
+    TASWTextLogBase::WriteBacktraceForCrashDirect
+
+    For OnCrash(): writes the backtrace and its markers, each line in the fixed crash-line layout, straight to the
+    output (see WriteCrashLineDirect()), if the backtrace's lock gets free before 'deadline'. Allocates nothing unless
+    'mustClear', so it can run in a POSIX signal handler, with or without m_Mutex.
+*/
+void TASWTextLogBase::WriteBacktraceForCrashDirect(bool mustClear, std::chrono::steady_clock::time_point deadline) noexcept
+{
+    const bool usesCRLF = m_CrashLineUsesCRLF.load(std::memory_order_relaxed);
+    WriteBacktraceForCrash([this, usesCRLF](const TASWLogRecord& record) {
+            Detail::TCrashText line;
+            Detail::AppendCrashLine(line, record, usesCRLF);
+            WriteCrashLineDirect(line.View());
+        }, mustClear, deadline);
+}
+
+//---------------------------------------------------------------------------
+/*
+    TASWTextLogBase::WriteBacktraceForCrashUnlocked
+
+    For OnCrash(), holding m_Mutex in a normal (not signal handler) context: writes the backtrace and its markers
+    through the formatter and WriteLineUnlocked(), then forgets it, if the backtrace's lock gets free before 'deadline'.
+    Can throw (e.g. a formatter, or out of memory in the crashed process).
+*/
+void TASWTextLogBase::WriteBacktraceForCrashUnlocked(std::chrono::steady_clock::time_point deadline)
+{
+    const auto& config = GetConfigUnlocked();
+    WriteBacktraceForCrash([this, &config](const TASWLogRecord& record) {
+            const auto line = FormatEntry(record, config);
+            WriteLineUnlocked(record.LogLevel, line, !record.Raw);
+        }, true, deadline);
 }
 
 //---------------------------------------------------------------------------

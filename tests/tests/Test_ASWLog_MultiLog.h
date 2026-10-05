@@ -38,8 +38,11 @@ private:
 private: // Test methods
     void Test_AddLogger_RejectsDuplicateRegistration();
     void Test_AddLogger_RejectsSelfRegistration();
+    void Test_Backtrace_EachLoggerKeepsItsOwn();
+    void Test_Backtrace_IsNotKeptByTheMultiLog();
     void Test_Close_AllowsInitializeAgain();
     void Test_Contains_ReflectsRegistrationState();
+    void Test_DumpBacktrace_ReachesEverySinkUnlessDisabled();
     void Test_Flush_ReachesEverySinkEvenAfterAFailure();
     void Test_Flush_SucceedsWithNoSinks();
     void Test_Flush_WorksWhileDisabled();

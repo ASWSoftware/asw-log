@@ -30,6 +30,7 @@ limitations under the License.
 #include <filesystem>
 #include <format>
 #include <fstream>
+#include <initializer_list>
 #include <iterator>
 #include <source_location>
 #include <stdexcept>
@@ -206,6 +207,18 @@ public:
     }
 };
 
+// A config with a backtrace of 5 entries from Trace up, written at Error, for a logger whose minimum level is
+// 'minimumLevel'
+ASWLog::TASWLogConfig MakeBacktraceConfig(ASWLog::Level minimumLevel)
+{
+    ASWLog::TASWLogConfig config;
+    config.InitialMinimumLevel = minimumLevel;
+    config.Backtrace.Capacity = 5;
+    config.Backtrace.LowestLevel = ASWLog::Level::Trace;
+    config.Backtrace.DumpAtLevel = ASWLog::Level::Error;
+    return config;
+}
+
 std::string ReadFileText(const std::filesystem::path& path)
 {
     std::ifstream stream(path, std::ios::binary);
@@ -254,8 +267,11 @@ TTest_ASWLog_MultiLog::TTest_ASWLog_MultiLog()
 {
     RegisterTest(&TTest_ASWLog_MultiLog::Test_AddLogger_RejectsDuplicateRegistration, "AddLogger_RejectsDuplicateRegistration");
     RegisterTest(&TTest_ASWLog_MultiLog::Test_AddLogger_RejectsSelfRegistration, "AddLogger_RejectsSelfRegistration");
+    RegisterTest(&TTest_ASWLog_MultiLog::Test_Backtrace_EachLoggerKeepsItsOwn, "Backtrace_EachLoggerKeepsItsOwn");
+    RegisterTest(&TTest_ASWLog_MultiLog::Test_Backtrace_IsNotKeptByTheMultiLog, "Backtrace_IsNotKeptByTheMultiLog");
     RegisterTest(&TTest_ASWLog_MultiLog::Test_Close_AllowsInitializeAgain, "Close_AllowsInitializeAgain");
     RegisterTest(&TTest_ASWLog_MultiLog::Test_Contains_ReflectsRegistrationState, "Contains_ReflectsRegistrationState");
+    RegisterTest(&TTest_ASWLog_MultiLog::Test_DumpBacktrace_ReachesEverySinkUnlessDisabled, "DumpBacktrace_ReachesEverySinkUnlessDisabled");
     RegisterTest(&TTest_ASWLog_MultiLog::Test_Flush_ReachesEverySinkEvenAfterAFailure, "Flush_ReachesEverySinkEvenAfterAFailure");
     RegisterTest(&TTest_ASWLog_MultiLog::Test_Flush_SucceedsWithNoSinks, "Flush_SucceedsWithNoSinks");
     RegisterTest(&TTest_ASWLog_MultiLog::Test_Flush_WorksWhileDisabled, "Flush_WorksWhileDisabled");
@@ -352,6 +368,59 @@ void TTest_ASWLog_MultiLog::Test_AddLogger_RejectsSelfRegistration()
     multiLog.LogInfo("no_recursion_expected");
 }
 //---------------------------------------------------------------------------
+void TTest_ASWLog_MultiLog::Test_Backtrace_EachLoggerKeepsItsOwn()
+{
+    // Arrange: the multi-log lets every level through; each sink keeps what is below its own minimum level
+    const auto config = MakeBacktraceConfig(ASWLog::Level::Trace);
+    TRecordingLogger infoSink;
+    TRecordingLogger warnSink;
+    infoSink.Reconfigure(config);
+    warnSink.Reconfigure(config);
+    infoSink.SetMinimumLevel(ASWLog::Level::Info);
+    warnSink.SetMinimumLevel(ASWLog::Level::Warn);
+    infoSink.Calls.clear();
+    warnSink.Calls.clear();
+
+    ASWLog::TASWMultiLog multiLog;
+    multiLog.AddLogger(infoSink);
+    multiLog.AddLogger(warnSink);
+    multiLog.Initialize(config);
+
+    // Act
+    multiLog.LogDebug("debug_1");
+    multiLog.LogInfo("info_1");
+    multiLog.LogError("error_1");
+
+    // Assert
+    const std::vector<std::string> expectedInfo{ "Log:info_1", "LogForce:Backtrace: the last 1 entry below the minimum level",
+                                                 "LogForce:debug_1", "LogForce:Backtrace end", "Log:error_1" };
+    CheckTrue(infoSink.Calls == expectedInfo, "The Info sink should keep only the Debug entry");
+    const std::vector<std::string> expectedWarn{ "LogForce:Backtrace: the last 2 entries below the minimum level", "LogForce:debug_1",
+                                                 "LogForce:info_1", "LogForce:Backtrace end", "Log:error_1" };
+    CheckTrue(warnSink.Calls == expectedWarn, "The Warn sink should keep the Debug and Info entries");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_MultiLog::Test_Backtrace_IsNotKeptByTheMultiLog()
+{
+    // Arrange: the multi-log's own minimum level is Info, and its config asks for a backtrace
+    const auto config = MakeBacktraceConfig(ASWLog::Level::Info);
+    TRecordingLogger sink;
+    sink.Reconfigure(config);
+    sink.Calls.clear();
+
+    ASWLog::TASWMultiLog multiLog;
+    multiLog.AddLogger(sink);
+    multiLog.Initialize(config);
+
+    // Act
+    multiLog.LogDebug("debug_1");
+    multiLog.LogError("error_1");
+
+    // Assert: it filters the Debug entry first, and keeps nothing itself
+    CheckFalse(multiLog.ShouldLog(ASWLog::Level::Debug), "The multi-log's gate should stay its minimum level");
+    CheckTrue(sink.Calls == std::vector<std::string>{ "Log:error_1" }, "Neither the multi-log nor the sink should keep the Debug entry");
+}
+//---------------------------------------------------------------------------
 void TTest_ASWLog_MultiLog::Test_Close_AllowsInitializeAgain()
 {
     // Arrange
@@ -394,6 +463,41 @@ void TTest_ASWLog_MultiLog::Test_Contains_ReflectsRegistrationState()
     CheckFalse(multiLog.Contains(sinkA), "A sink should no longer be reported as contained after RemoveLogger");
 
     sinkA.Close();
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_MultiLog::Test_DumpBacktrace_ReachesEverySinkUnlessDisabled()
+{
+    // Arrange
+    const auto config = MakeBacktraceConfig(ASWLog::Level::Trace);
+    TRecordingLogger sinkA;
+    TRecordingLogger sinkB;
+    for (auto* sink : { &sinkA, &sinkB })
+    {
+        sink->Reconfigure(config);
+        sink->SetMinimumLevel(ASWLog::Level::Info);
+    }
+
+    ASWLog::TASWMultiLog multiLog;
+    multiLog.AddLogger(sinkA);
+    multiLog.AddLogger(sinkB);
+    multiLog.Initialize(config);
+    multiLog.LogDebug("debug_1");
+    sinkA.Calls.clear();
+    sinkB.Calls.clear();
+
+    // Act
+    multiLog.SetEnabled(false);
+    multiLog.DumpBacktrace();
+    const auto callsWhileDisabled = sinkA.Calls.size() + sinkB.Calls.size();
+    multiLog.SetEnabled(true);
+    multiLog.DumpBacktrace();
+
+    // Assert
+    CheckEquals(0, callsWhileDisabled, "A disabled multi-log should pass nothing on");
+    const std::vector<std::string> expected{ "LogForce:Backtrace: the last 1 entry below the minimum level", "LogForce:debug_1",
+                                             "LogForce:Backtrace end" };
+    CheckTrue(sinkA.Calls == expected, "The first sink should write its backtrace");
+    CheckTrue(sinkB.Calls == expected, "The second sink should write its backtrace");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_MultiLog::Test_Flush_ReachesEverySinkEvenAfterAFailure()

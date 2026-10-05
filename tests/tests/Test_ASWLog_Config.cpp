@@ -113,6 +113,11 @@ void TTest_ASWLog_Config::Test_Defaults_MatchDocumentedValues()
     CheckTrue(config.Shutdown.Banner.empty(), "Shutdown.Banner should default to empty");
     CheckTrue(config.Shutdown.WriteCrashLine, "Shutdown.WriteCrashLine should default to true");
 
+    // Assert: Backtrace
+    CheckEquals(0, config.Backtrace.Capacity, "Backtrace.Capacity should default to 0 (off)");
+    CheckEquals(static_cast<int>(ASWLog::Level::Trace), static_cast<int>(config.Backtrace.LowestLevel), "Backtrace.LowestLevel should default to Trace");
+    CheckEquals(static_cast<int>(ASWLog::Level::Error), static_cast<int>(config.Backtrace.DumpAtLevel), "Backtrace.DumpAtLevel should default to Error");
+
     // Assert: File
     CheckTrue(config.File.FolderPath == std::filesystem::path("logs"), "File.FolderPath should default to logs");
     CheckTrue(config.File.FilePath == std::filesystem::path("aswlog.txt"), "File.FilePath should default to aswlog.txt");

@@ -56,6 +56,23 @@ see [0.26.1](#0261---2026-09-17) for the initial versioned baseline.
   `TASWTextLogBase` is covered without changes; it can override the new
   protected hooks `FlushForCrashUnlocked()` and `WriteCrashLineDirect()` to
   get its crash line in a POSIX signal handler, or when its lock stays busy.
+- A backtrace buffer, in the new `TASWLogConfig::Backtrace` group
+  (`TASWBacktraceConfig`), off by default: with `Backtrace.Capacity` above 0,
+  a logger keeps its most recent entries below its minimum level (from
+  `Backtrace.LowestLevel` up, default Trace) in memory, and writes them when
+  an entry at or above `Backtrace.DumpAtLevel` (default Error) is written,
+  just before it, so a log written at Info still shows the Debug lines that
+  led up to an error. They are written with their own time, level and
+  location between a "Backtrace: the last N entries below the minimum
+  level" and a "Backtrace end" line, then forgotten. The new
+  `IASWLog::DumpBacktrace()` writes them on request, and a crash handler
+  writes them before the crash line. `ShouldLog()` is now true for the
+  levels the backtrace keeps, so the `*Fmt` methods format those entries
+  too. Each logger keeps its own backtrace; a multi-log keeps none and
+  filters with its own minimum level first, so set that to
+  `Backtrace.LowestLevel` or lower when its loggers keep a backtrace.
+  Breaking for a class that implements `IASWLog` directly: it must now
+  implement `DumpBacktrace()` (classes derived from `TASWLogBase` get it).
 
 ### Fixed
 

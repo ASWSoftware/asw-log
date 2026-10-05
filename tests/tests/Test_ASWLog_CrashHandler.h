@@ -44,6 +44,7 @@ private: // Test methods
     void Test_AppendCrashLine_UsesTheFixedLayout();
     void Test_CrashProcess_AbortWritesTheCrashLine();
     void Test_CrashProcess_AsyncQueueIsWrittenBeforeTheCrashLine();
+    void Test_CrashProcess_FaultWritesTheBacktrace();
     void Test_CrashProcess_FaultWritesTheCrashLine();
     void Test_CrashProcess_LockHeldByTheCrashingThreadWritesTheLineDirectly();
     void Test_CrashProcess_StackOverflowWritesTheCrashLine();
@@ -57,6 +58,7 @@ private: // Test methods
     void Test_HandleCrash_ThrowingFormatterGetsTheFixedLayoutLine();
     void Test_HandleCrash_WaitsForQueuedEntries();
     void Test_HandleCrash_WriteCrashLineFalseOnlyFlushes();
+    void Test_HandleCrash_WritesTheBacktraceBeforeTheCrashLine();
     void Test_HandleCrash_WritesTheLineDirectlyWhenTheLockStaysBusy();
     void Test_InstallCrashHandlers_ChainsAndUninstallRestores();
 

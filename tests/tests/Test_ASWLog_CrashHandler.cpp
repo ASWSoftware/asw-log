@@ -318,6 +318,18 @@ void WriteToNullPointer()
         ASWLog::InstallCrashHandlers();
         WriteToNullPointer();
     }
+    else if (scenario == "fault_backtrace")
+    {
+        // In a POSIX signal handler, the backtrace is written in the fixed layout
+        auto config = MakeCrashTestConfig(fileName);
+        config.Backtrace.Capacity = 5;
+        config.Backtrace.LowestLevel = ASWLog::Level::Debug;
+        auto& log = MakeCrashTestLog(config);
+        log.LogDebug("debug_1");
+        log.LogInfo("entry_1");
+        ASWLog::InstallCrashHandlers();
+        WriteToNullPointer();
+    }
     else if (scenario == "async")
     {
         // The worker pauses after writing entry_1, and the other entries are queued meanwhile, so they are still
@@ -510,6 +522,7 @@ TTest_ASWLog_CrashHandler::TTest_ASWLog_CrashHandler()
     RegisterTest(&TTest_ASWLog_CrashHandler::Test_AppendCrashLine_UsesTheFixedLayout, "AppendCrashLine_UsesTheFixedLayout");
     RegisterTest(&TTest_ASWLog_CrashHandler::Test_CrashProcess_AbortWritesTheCrashLine, "CrashProcess_AbortWritesTheCrashLine");
     RegisterTest(&TTest_ASWLog_CrashHandler::Test_CrashProcess_AsyncQueueIsWrittenBeforeTheCrashLine, "CrashProcess_AsyncQueueIsWrittenBeforeTheCrashLine");
+    RegisterTest(&TTest_ASWLog_CrashHandler::Test_CrashProcess_FaultWritesTheBacktrace, "CrashProcess_FaultWritesTheBacktrace");
     RegisterTest(&TTest_ASWLog_CrashHandler::Test_CrashProcess_FaultWritesTheCrashLine, "CrashProcess_FaultWritesTheCrashLine");
     RegisterTest(&TTest_ASWLog_CrashHandler::Test_CrashProcess_LockHeldByTheCrashingThreadWritesTheLineDirectly, "CrashProcess_LockHeldByTheCrashingThreadWritesTheLineDirectly");
     RegisterTest(&TTest_ASWLog_CrashHandler::Test_CrashProcess_StackOverflowWritesTheCrashLine, "CrashProcess_StackOverflowWritesTheCrashLine");
@@ -523,6 +536,7 @@ TTest_ASWLog_CrashHandler::TTest_ASWLog_CrashHandler()
     RegisterTest(&TTest_ASWLog_CrashHandler::Test_HandleCrash_ThrowingFormatterGetsTheFixedLayoutLine, "HandleCrash_ThrowingFormatterGetsTheFixedLayoutLine");
     RegisterTest(&TTest_ASWLog_CrashHandler::Test_HandleCrash_WaitsForQueuedEntries, "HandleCrash_WaitsForQueuedEntries");
     RegisterTest(&TTest_ASWLog_CrashHandler::Test_HandleCrash_WriteCrashLineFalseOnlyFlushes, "HandleCrash_WriteCrashLineFalseOnlyFlushes");
+    RegisterTest(&TTest_ASWLog_CrashHandler::Test_HandleCrash_WritesTheBacktraceBeforeTheCrashLine, "HandleCrash_WritesTheBacktraceBeforeTheCrashLine");
     RegisterTest(&TTest_ASWLog_CrashHandler::Test_HandleCrash_WritesTheLineDirectlyWhenTheLockStaysBusy, "HandleCrash_WritesTheLineDirectlyWhenTheLockStaysBusy");
     RegisterTest(&TTest_ASWLog_CrashHandler::Test_InstallCrashHandlers_ChainsAndUninstallRestores, "InstallCrashHandlers_ChainsAndUninstallRestores");
 }
@@ -631,6 +645,31 @@ void TTest_ASWLog_CrashHandler::Test_CrashProcess_AsyncQueueIsWrittenBeforeTheCr
         "The queued entries should be written and flushed first");
     CheckContains(contents, "Crash: ", "The crash line should follow them");
     CheckNotContains(ReadFileText(TestTempDir / "async_output.txt"), "Sanitizer", "No sanitizer report");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_CrashHandler::Test_CrashProcess_FaultWritesTheBacktrace()
+{
+    // Act
+    const int exitCode = RunCrashHelper("fault_backtrace", TestTempDir / "fault_backtrace_output.txt");
+
+    // Assert: on Windows through the formatter; in a POSIX signal handler in the fixed layout
+    const auto contents = ReadFileText(TestTempDir / "fault_backtrace.log");
+    CheckEquals(PassedOnFaultExitCode, exitCode, "The crash should be passed on to the fault handler installed before");
+#if defined(_WIN32)
+    CheckStartsWith(contents, "[INFO]: entry_1\n[INFO]: Backtrace: the last 1 entry below the minimum level\n[DEBUG]: debug_1\n"
+        "[INFO]: Backtrace end\n[CRITICAL]: Crash: unhandled exception 0x", "The backtrace should come before the crash line");
+#else
+    const auto beginAt = contents.find("][INFO][P:");
+    const auto entryAt = contents.find("]: debug_1\n");
+    const auto endAt = contents.find("]: Backtrace end\n");
+    const auto crashAt = contents.find("]: Crash: SIGSEGV");
+    CheckStartsWith(contents, "[INFO]: entry_1\n", "The buffered entry should be flushed first");
+    CheckContains(contents, "]: Backtrace: the last 1 entry below the minimum level\n", "The backtrace should start with its marker");
+    CheckContains(contents, "][DEBUG][P:", "The kept entry should have the fixed layout");
+    CheckTrue(beginAt < entryAt && entryAt < endAt && endAt < crashAt && crashAt != std::string::npos,
+        "The backtrace should come before the crash line");
+#endif
+    CheckNotContains(ReadFileText(TestTempDir / "fault_backtrace_output.txt"), "Sanitizer", "No sanitizer report");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_CrashHandler::Test_CrashProcess_FaultWritesTheCrashLine()
@@ -925,13 +964,41 @@ void TTest_ASWLog_CrashHandler::Test_HandleCrash_WriteCrashLineFalseOnlyFlushes(
         "The logger should be flushed, without the crash line");
 }
 //---------------------------------------------------------------------------
+void TTest_ASWLog_CrashHandler::Test_HandleCrash_WritesTheBacktraceBeforeTheCrashLine()
+{
+    // Arrange
+    auto config = MakeCrashTestConfig("backtrace.log");
+    config.Backtrace.Capacity = 5;
+    config.Backtrace.LowestLevel = ASWLog::Level::Debug;
+    ASWLog::TASWFileLog log;
+    CheckTrue(log.Initialize(config), "Initialize should succeed");
+    log.LogDebug("debug_1");
+    log.LogInfo("info_1");
+
+    // Act
+    ASWLog::HandleCrash("test crash");
+    const auto afterCrash = ReadFileText(TestTempDir / "backtrace.log");
+    log.LogError("error_1");
+    log.Close();
+
+    // Assert
+    CheckEquals(std::string("[INFO]: info_1\n[INFO]: Backtrace: the last 1 entry below the minimum level\n[DEBUG]: debug_1\n"
+        "[INFO]: Backtrace end\n[CRITICAL]: Crash: test crash\n"), afterCrash,
+        "The backtrace should be formatted and written between the flushed entries and the crash line");
+    CheckEndsWith(ReadFileText(TestTempDir / "backtrace.log"), "[CRITICAL]: Crash: test crash\n[ERROR]: error_1\n",
+        "The written backtrace should be forgotten");
+}
+//---------------------------------------------------------------------------
 void TTest_ASWLog_CrashHandler::Test_HandleCrash_WritesTheLineDirectlyWhenTheLockStaysBusy()
 {
     // Arrange: another thread holds the logger's lock until the test lets it go
     auto config = MakeCrashTestConfig("busy.log");
     config.Line.Ending = ASWLog::LineEnding::CRLF;
+    config.Backtrace.Capacity = 5;
+    config.Backtrace.LowestLevel = ASWLog::Level::Debug;
     TLockableFileLog log;
     CheckTrue(log.Initialize(config), "Initialize should succeed");
+    log.LogDebug("debug_1");
 
     std::mutex mutex;
     std::condition_variable changed;
@@ -976,6 +1043,12 @@ void TTest_ASWLog_CrashHandler::Test_HandleCrash_WritesTheLineDirectlyWhenTheLoc
     CheckStartsWith(contents, "[", "The crash line should start with the time");
     CheckEndsWith(contents, std::format("][CRITICAL][P:{}][T:{}]: Crash: busy\r\n", ASWLog::GetCurrentOSProcessId(),
         ASWLog::GetCurrentOSThreadId()), "The fixed-layout crash line should be written straight to the file");
+    const auto ids = std::format("[P:{}][T:{}]: ", ASWLog::GetCurrentOSProcessId(), ASWLog::GetCurrentOSThreadId());
+    const auto beginAt = contents.find("][INFO]" + ids + "Backtrace: the last 1 entry below the minimum level\r\n");
+    const auto entryAt = contents.find("][DEBUG]" + ids + "debug_1\r\n");
+    const auto endAt = contents.find("][INFO]" + ids + "Backtrace end\r\n");
+    CheckTrue(beginAt != std::string::npos && beginAt < entryAt && entryAt < endAt && endAt != std::string::npos,
+        "The backtrace should be written straight to the file too, in the fixed layout, before the crash line");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_CrashHandler::Test_InstallCrashHandlers_ChainsAndUninstallRestores()

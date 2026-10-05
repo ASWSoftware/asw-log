@@ -29,6 +29,7 @@ limitations under the License.
 #include <filesystem>
 #include <format>
 #include <fstream>
+#include <initializer_list>
 #include <iterator>
 #include <memory>
 #include <source_location>
@@ -119,6 +120,8 @@ public:
     std::source_location LastLocation;
     ASWLog::TASWLogRecord LastRecord; // The last record passed to WriteRecord(); its Message refers to LastMessage
     int WriteRecordCount = 0;
+    std::vector<std::string> Written; // "<LEVEL>|<message>" for each record passed to WriteRecord(), "|forced" added if forced
+    std::vector<std::chrono::system_clock::time_point> WrittenTimes; // The Timestamp of each
     std::chrono::system_clock::time_point FixedNow{}; // What NowUTC() returns, if set
     mutable int NowUTCCount = 0; // How many times NowUTC() was called
     bool ThrowsOnWrite = false; // WriteRecord() throws, like a faulty custom logger
@@ -141,6 +144,8 @@ protected:
             throw std::runtime_error("write failed");
 
         ++WriteRecordCount;
+        Written.push_back(std::format("{}|{}{}", ASWLog::Level_ToString(record.LogLevel), record.Message, record.Forced ? "|forced" : ""));
+        WrittenTimes.push_back(record.Timestamp);
         LastLevel = record.LogLevel;
         LastMessage = std::string(record.Message);
         LastLocation = record.Location;
@@ -197,6 +202,18 @@ public:
         ReportError(std::move(error));
     }
 };
+
+// A config with a backtrace of 'capacity' entries, kept from 'lowestLevel' up, written at 'dumpAtLevel' (minimum Info)
+ASWLog::TASWLogConfig MakeBacktraceConfig(std::size_t capacity, ASWLog::Level lowestLevel = ASWLog::Level::Debug,
+    ASWLog::Level dumpAtLevel = ASWLog::Level::Error)
+{
+    ASWLog::TASWLogConfig config;
+    config.InitialMinimumLevel = ASWLog::Level::Info;
+    config.Backtrace.Capacity = capacity;
+    config.Backtrace.LowestLevel = lowestLevel;
+    config.Backtrace.DumpAtLevel = dumpAtLevel;
+    return config;
+}
 
 // While alive, sends what is written to stderr to 'file' instead, by pointing stderr's file descriptor at it. Inactive
 // if stderr has no file descriptor (e.g. in a GUI application without a console).
@@ -271,6 +288,14 @@ public:
 TTest_ASWLog_Base::TTest_ASWLog_Base()
     : inherited("ASWLog_Base_Tests")
 {
+    RegisterTest(&TTest_ASWLog_Base::Test_Backtrace_CapacityKeepsTheNewest, "Backtrace_CapacityKeepsTheNewest");
+    RegisterTest(&TTest_ASWLog_Base::Test_Backtrace_DisabledLoggerKeepsAndWritesNothing, "Backtrace_DisabledLoggerKeepsAndWritesNothing");
+    RegisterTest(&TTest_ASWLog_Base::Test_Backtrace_DumpAtLevelOffWritesOnlyOnRequest, "Backtrace_DumpAtLevelOffWritesOnlyOnRequest");
+    RegisterTest(&TTest_ASWLog_Base::Test_Backtrace_KeptEntriesAreWrittenBeforeTheTrigger, "Backtrace_KeptEntriesAreWrittenBeforeTheTrigger");
+    RegisterTest(&TTest_ASWLog_Base::Test_Backtrace_MinimumLevelChangesKeepTheBacktrace, "Backtrace_MinimumLevelChangesKeepTheBacktrace");
+    RegisterTest(&TTest_ASWLog_Base::Test_Backtrace_OffKeepsNothing, "Backtrace_OffKeepsNothing");
+    RegisterTest(&TTest_ASWLog_Base::Test_Backtrace_ReconfigureResizesKeepingTheNewest, "Backtrace_ReconfigureResizesKeepingTheNewest");
+    RegisterTest(&TTest_ASWLog_Base::Test_Backtrace_ShouldLogAndFmtIncludeKeptLevels, "Backtrace_ShouldLogAndFmtIncludeKeptLevels");
     RegisterTest(&TTest_ASWLog_Base::Test_GetConfig_ReturnsUnchangingSnapshot, "GetConfig_ReturnsUnchangingSnapshot");
     RegisterTest(&TTest_ASWLog_Base::Test_GetFullVersionStr_ContainsVersion, "GetFullVersionStr_ContainsVersion");
     RegisterTest(&TTest_ASWLog_Base::Test_Interface_MethodsAreNoexcept, "Interface_MethodsAreNoexcept");
@@ -315,6 +340,198 @@ void TTest_ASWLog_Base::TearDown_Test(ITestCase& /*testCase*/)
 
 // /////// Begin tests after this line ///////////////////////
 
+//---------------------------------------------------------------------------
+void TTest_ASWLog_Base::Test_Backtrace_CapacityKeepsTheNewest()
+{
+    // Arrange
+    TTestLogger logger;
+    logger.Initialize(MakeBacktraceConfig(2));
+
+    // Act
+    for (int entry = 1; entry <= 5; ++entry)
+        logger.LogDebug(std::format("debug_{}", entry));
+
+    logger.DumpBacktrace();
+
+    // Assert
+    const std::vector<std::string> expected{ "INFO|Backtrace: the last 2 entries below the minimum level|forced", "DEBUG|debug_4|forced",
+                                             "DEBUG|debug_5|forced", "INFO|Backtrace end|forced" };
+    CheckTrue(logger.Written == expected, "Only the newest entries should be kept, oldest first");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_Base::Test_Backtrace_DisabledLoggerKeepsAndWritesNothing()
+{
+    // Arrange
+    TTestLogger logger;
+    logger.Initialize(MakeBacktraceConfig(5));
+    logger.LogDebug("kept");
+
+    // Act: while disabled, nothing is kept, and nothing written
+    logger.SetEnabled(false);
+    logger.LogDebug("not_kept");
+    logger.DumpBacktrace();
+    logger.LogError("error_1");
+    const auto writtenWhileDisabled = logger.Written.size();
+    logger.SetEnabled(true);
+    logger.LogError("error_2");
+
+    // Assert
+    CheckEquals(0, writtenWhileDisabled, "A disabled logger should write nothing, not even its backtrace");
+    const std::vector<std::string> expected{ "INFO|Backtrace: the last 1 entry below the minimum level|forced", "DEBUG|kept|forced",
+                                             "INFO|Backtrace end|forced", "ERROR|error_2" };
+    CheckTrue(logger.Written == expected, "Only the entry kept while enabled should be written");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_Base::Test_Backtrace_DumpAtLevelOffWritesOnlyOnRequest()
+{
+    // Arrange
+    TTestLogger logger;
+    logger.Initialize(MakeBacktraceConfig(5, ASWLog::Level::Debug, ASWLog::Level::Off));
+    logger.LogDebug("debug_1");
+
+    // Act
+    logger.LogCritical("critical_1");
+    const auto writtenBeforeDump = logger.Written;
+    logger.DumpBacktrace();
+    logger.DumpBacktrace(); // Empty now: writes nothing
+
+    // Assert
+    CheckTrue(writtenBeforeDump == std::vector<std::string>{ "CRITICAL|critical_1" }, "No level should write the backtrace");
+    const std::vector<std::string> expected{ "CRITICAL|critical_1", "INFO|Backtrace: the last 1 entry below the minimum level|forced",
+                                             "DEBUG|debug_1|forced", "INFO|Backtrace end|forced" };
+    CheckTrue(logger.Written == expected, "DumpBacktrace() should write it once, then forget it");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_Base::Test_Backtrace_KeptEntriesAreWrittenBeforeTheTrigger()
+{
+    // Arrange: each entry gets its own time
+    using namespace std::chrono_literals;
+    TTestLogger logger;
+    logger.Initialize(MakeBacktraceConfig(5));
+    const auto start = std::chrono::system_clock::time_point{} + 1000h;
+    logger.FixedNow = start;
+
+    // Act
+    logger.LogTrace("trace_1"); // Below LowestLevel: neither kept nor written
+    logger.LogDebug("debug_1");
+    logger.FixedNow = start + 1s;
+    logger.LogInfo("info_1");
+    logger.LogRaw(ASWLog::Level::Debug, "raw_debug");
+    logger.LogForce(ASWLog::Level::Debug, "forced_debug"); // Forced: written, not kept
+    logger.FixedNow = start + 2s;
+    logger.LogError("error_1");
+    logger.LogError("error_2"); // The backtrace was forgotten
+
+    // Assert
+    const std::vector<std::string> expected{ "INFO|info_1", "DEBUG|forced_debug|forced",
+                                             "INFO|Backtrace: the last 2 entries below the minimum level|forced", "DEBUG|debug_1|forced",
+                                             "DEBUG|raw_debug|forced", "INFO|Backtrace end|forced", "ERROR|error_1", "ERROR|error_2" };
+    CheckTrue(logger.Written == expected, "The kept entries should be written just before the first error, between the markers");
+    if (logger.WrittenTimes.size() == expected.size())
+    {
+        CheckTrue(logger.WrittenTimes[3] == start, "A kept entry should keep the time it was logged");
+        CheckTrue(logger.WrittenTimes[2] == start + 2s, "The marker should be stamped when the backtrace is written");
+    }
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_Base::Test_Backtrace_MinimumLevelChangesKeepTheBacktrace()
+{
+    // Arrange
+    TTestLogger logger;
+    logger.Initialize(MakeBacktraceConfig(5, ASWLog::Level::Trace));
+
+    // Act: raising the minimum level keeps the backtrace level, so more levels are kept; Off keeps nothing
+    logger.SetMinimumLevel(ASWLog::Level::Warn);
+    logger.LogInfo("info_kept");
+    const bool shouldLogTraceAtWarn = logger.ShouldLog(ASWLog::Level::Trace);
+    logger.SetMinimumLevel(ASWLog::Level::Off);
+    const bool shouldLogTraceAtOff = logger.ShouldLog(ASWLog::Level::Trace);
+    logger.LogInfo("info_not_kept");
+    logger.SetMinimumLevel(ASWLog::Level::Info);
+    logger.DumpBacktrace();
+
+    // Assert
+    CheckTrue(shouldLogTraceAtWarn, "The backtrace should still keep Trace with a minimum level of Warn");
+    CheckFalse(shouldLogTraceAtOff, "A minimum level of Off should keep nothing");
+    CheckEquals(static_cast<int>(ASWLog::Level::Info), static_cast<int>(logger.GetMinimumLevel()),
+        "GetMinimumLevel() should return the level set");
+    const std::vector<std::string> expected{ "INFO|Backtrace: the last 1 entry below the minimum level|forced", "INFO|info_kept|forced",
+                                             "INFO|Backtrace end|forced" };
+    CheckTrue(logger.Written == expected, "Only the entry kept below Warn should be in the backtrace");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_Base::Test_Backtrace_OffKeepsNothing()
+{
+    // Arrange: no capacity (the default), and a capacity with LowestLevel Off
+    TTestLogger defaultLogger;
+    defaultLogger.Initialize(MakeBacktraceConfig(0));
+    TTestLogger offLogger;
+    offLogger.Initialize(MakeBacktraceConfig(5, ASWLog::Level::Off));
+
+    // Act
+    for (auto* logger : { &defaultLogger, &offLogger })
+    {
+        logger->LogDebug("debug_1");
+        logger->LogError("error_1");
+        logger->DumpBacktrace();
+    }
+
+    // Assert
+    CheckFalse(defaultLogger.ShouldLog(ASWLog::Level::Debug), "Without a backtrace, Debug shouldn't pass the gate");
+    CheckFalse(offLogger.ShouldLog(ASWLog::Level::Debug), "With LowestLevel Off, Debug shouldn't pass the gate");
+    CheckTrue(defaultLogger.Written == std::vector<std::string>{ "ERROR|error_1" }, "Nothing should be kept by default");
+    CheckTrue(offLogger.Written == std::vector<std::string>{ "ERROR|error_1" }, "Nothing should be kept with LowestLevel Off");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_Base::Test_Backtrace_ReconfigureResizesKeepingTheNewest()
+{
+    // Arrange: a full backtrace that has wrapped around (debug_1 was replaced)
+    TTestLogger shrinking;
+    shrinking.Initialize(MakeBacktraceConfig(3));
+    TTestLogger growing;
+    growing.Initialize(MakeBacktraceConfig(3));
+    for (int entry = 1; entry <= 4; ++entry)
+    {
+        shrinking.LogDebug(std::format("debug_{}", entry));
+        growing.LogDebug(std::format("debug_{}", entry));
+    }
+
+    // Act
+    shrinking.Reconfigure(MakeBacktraceConfig(2));
+    shrinking.DumpBacktrace();
+    growing.Reconfigure(MakeBacktraceConfig(5));
+    growing.LogDebug("debug_5");
+    growing.LogDebug("debug_6");
+    growing.DumpBacktrace();
+
+    // Assert
+    const std::vector<std::string> expectedShrunk{ "INFO|Backtrace: the last 2 entries below the minimum level|forced", "DEBUG|debug_3|forced",
+                                                   "DEBUG|debug_4|forced", "INFO|Backtrace end|forced" };
+    CheckTrue(shrinking.Written == expectedShrunk, "A smaller capacity should keep the newest entries");
+    const std::vector<std::string> expectedGrown{ "INFO|Backtrace: the last 5 entries below the minimum level|forced", "DEBUG|debug_2|forced",
+                                                  "DEBUG|debug_3|forced", "DEBUG|debug_4|forced", "DEBUG|debug_5|forced",
+                                                  "DEBUG|debug_6|forced", "INFO|Backtrace end|forced" };
+    CheckTrue(growing.Written == expectedGrown, "A larger capacity should keep the order, with new entries after the newest");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_Base::Test_Backtrace_ShouldLogAndFmtIncludeKeptLevels()
+{
+    // Arrange
+    TTestLogger logger;
+    logger.Initialize(MakeBacktraceConfig(5));
+    CountedValueFormatCount = 0;
+
+    // Act
+    logger.LogDebugFmt("{}", TCountedValue{}); // Kept, so formatted
+    logger.LogTraceFmt("{}", TCountedValue{}); // Below LowestLevel: not formatted
+    logger.DumpBacktrace();
+
+    // Assert
+    CheckTrue(logger.ShouldLog(ASWLog::Level::Debug), "ShouldLog() should be true for a level the backtrace keeps");
+    CheckFalse(logger.ShouldLog(ASWLog::Level::Trace), "ShouldLog() should be false below LowestLevel");
+    CheckEquals(1, CountedValueFormatCount, "Only the kept entry should be formatted");
+    CheckEquals(3, logger.Written.size(), "The kept entry should be written between the markers");
+}
 //---------------------------------------------------------------------------
 void TTest_ASWLog_Base::Test_GetConfig_ReturnsUnchangingSnapshot()
 {
@@ -379,6 +596,7 @@ void TTest_ASWLog_Base::Test_Interface_MethodsAreNoexcept()
     static_assert(noexcept(logger.Open()));
     static_assert(noexcept(logger.Close()));
     static_assert(noexcept(logger.Write(record)));
+    static_assert(noexcept(logger.DumpBacktrace()));
     static_assert(noexcept(logger.Log(ASWLog::Level::Info, message)));
     static_assert(noexcept(logger.LogRaw(ASWLog::Level::Info, message)));
     static_assert(noexcept(logger.LogForce(ASWLog::Level::Info, message)));

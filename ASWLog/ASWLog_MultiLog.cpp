@@ -85,6 +85,24 @@ bool TASWMultiLog::Contains(const IASWLog& logger) const noexcept
 }
 
 //---------------------------------------------------------------------------
+void TASWMultiLog::DumpBacktrace() noexcept
+{
+    // Disabled, this composite passes nothing on (like an entry)
+    if (!IsEnabled())
+        return;
+
+    try
+    {
+        for (auto* sink : SnapshotSinks())
+            sink->DumpBacktrace();
+    }
+    catch (...)
+    {
+        // Out of memory copying the sink list
+    }
+}
+
+//---------------------------------------------------------------------------
 bool TASWMultiLog::Flush() noexcept
 {
     try
@@ -161,6 +179,12 @@ bool TASWMultiLog::IsOpen() const noexcept
     }
 
     return true;
+}
+
+//---------------------------------------------------------------------------
+bool TASWMultiLog::KeepsBacktrace() const noexcept
+{
+    return false;
 }
 
 //---------------------------------------------------------------------------

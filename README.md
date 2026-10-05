@@ -25,6 +25,8 @@ ASWLog is a thread-safe light-weight C++ logging tool for Windows and Linux proj
   on to the handler installed before, so error reports and core dumps still happen. Best effort, since a crashed process
   may be in any state; the header lists what is and isn't handled. An application with its own crash reporter can call
   `ASWLog::HandleCrash()` from it instead.
+- Optional backtrace (`TASWLogConfig::Backtrace`): keep the last N Debug/Trace entries in memory while logging at Info,
+  and write them just before the next error (or on `DumpBacktrace()`, or a crash), so the log shows what led up to it.
 - Internal failures (e.g. a log file that can't be opened, written or rotated) are reported to a
   `TASWLogConfig::OnError` handler, or to stderr, instead of silently dropping entries.
 - Backup cleanup after each rotation, by age, count and total size, plus wildcard-based cleanup of files older than a

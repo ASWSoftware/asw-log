@@ -57,9 +57,9 @@ struct TASWCrashHandlerOptions
 // Crash handling
 //
 // When the application crashes, every initialized text logger (TASWTextLogBase: file, console, custom; a multi-log
-// through its loggers) is flushed, after an asynchronous logger's thread has written what was queued, and gets a
-// Critical "Crash: <reason>" line, unless its TASWShutdownConfig::WriteCrashLine is false or it is disabled
-// (SetEnabled(false)). With the default FlushMode::EveryWrite every entry is in the file already, so the crash line
+// through its loggers) is flushed, after an asynchronous logger's thread has written what was queued, then writes its
+// backtrace, if it keeps one (see TASWBacktraceConfig), and a Critical "Crash: <reason>" line, unless its
+// TASWShutdownConfig::WriteCrashLine is false. A disabled logger (SetEnabled(false)) is only flushed. With the default FlushMode::EveryWrite every entry is in the file already, so the crash line
 // is what is added; with the other flush modes and with asynchronous writing, the entries still in memory are saved
 // too. A file logger syncs the line to disk if TASWFileConfig::SyncToDiskAtLevel is Critical or lower.
 //
@@ -70,9 +70,11 @@ struct TASWCrashHandlerOptions
 // - A POSIX signal handler may only do async-signal-safe work, so there the line has a fixed layout,
 //   "[<UTC time>][CRITICAL][P:<pid>][T:<tid>]: Crash: <reason>", built without allocating and written straight to the
 //   file. The buffered entries are flushed only if the logger's lock is free (fflush isn't on POSIX's list of
-//   async-signal-safe functions, but no other thread can use the file then).
+//   async-signal-safe functions, but no other thread can use the file then). The backtrace's lines get the same
+//   layout, with their own level, and only if the backtrace's lock is free.
 // - If a logger's lock stays busy until WaitTimeout has passed (e.g. the crash happened while that thread was
-//   writing an entry), its buffered entries are lost and only the fixed-layout line is written, straight to the file.
+//   writing an entry), its buffered entries are lost and only the fixed-layout lines (backtrace and crash line) are
+//   written, straight to the file.
 // - Not handled: a crash while a debugger is attached (Windows passes the exception to the debugger instead), fast
 //   fail (__fastfail, e.g. the /GS buffer check, control flow guard and the default invalid parameter handler on
 //   Windows), a stack overflow on a POSIX thread other than the one that called InstallCrashHandlers() (only that one
@@ -159,6 +161,13 @@ public:
     static void Register(TASWTextLogBase& log) noexcept;
     static void Unregister(TASWTextLogBase& log) noexcept;
 };
+
+// The message of the line after a written backtrace (see TASWBacktraceConfig)
+inline constexpr std::string_view BacktraceEndText = "Backtrace end";
+
+// Appends the message of the line before a written backtrace of 'count' entries: "Backtrace: the last N entries below
+// the minimum level". Doesn't allocate, so a crash handler can use it too.
+void AppendBacktraceBeginText(TCrashText& text, std::size_t count) noexcept;
 
 // Appends the fixed-layout crash line for 'record' (see the crash handling notes above), with a CRLF or LF ending. A
 // message too long for the buffer is cut off, but the line always ends with the line ending.

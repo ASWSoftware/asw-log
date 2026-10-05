@@ -384,6 +384,7 @@ bool WaitUntil(const std::function<bool()>& condition)
 TTest_ASWLog_TextLogBase::TTest_ASWLog_TextLogBase()
     : inherited("ASWLog_TextLogBase_Tests")
 {
+    RegisterTest(&TTest_ASWLog_TextLogBase::Test_Async_BacktraceIsTakenWhenTheTriggerIsLogged, "Async_BacktraceIsTakenWhenTheTriggerIsLogged");
     RegisterTest(&TTest_ASWLog_TextLogBase::Test_Async_BlockWaitsForRoomInTheQueue, "Async_BlockWaitsForRoomInTheQueue");
     RegisterTest(&TTest_ASWLog_TextLogBase::Test_Async_CallReturnsBeforeTheEntryIsWritten, "Async_CallReturnsBeforeTheEntryIsWritten");
     RegisterTest(&TTest_ASWLog_TextLogBase::Test_Async_DestructorWritesQueuedEntriesBeforeTheShutdownLine, "Async_DestructorWritesQueuedEntriesBeforeTheShutdownLine");
@@ -396,6 +397,7 @@ TTest_ASWLog_TextLogBase::TTest_ASWLog_TextLogBase()
     RegisterTest(&TTest_ASWLog_TextLogBase::Test_Async_OnLogEntryRunsOnTheWorkerWithItsOwnCopy, "Async_OnLogEntryRunsOnTheWorkerWithItsOwnCopy");
     RegisterTest(&TTest_ASWLog_TextLogBase::Test_Async_ReconfigureToSyncWritesQueuedEntriesFirst, "Async_ReconfigureToSyncWritesQueuedEntriesFirst");
     RegisterTest(&TTest_ASWLog_TextLogBase::Test_Async_SwitchingOnAndOffKeepsEachThreadsOrder, "Async_SwitchingOnAndOffKeepsEachThreadsOrder");
+    RegisterTest(&TTest_ASWLog_TextLogBase::Test_Backtrace_IsFormattedAndWrittenBeforeTheTrigger, "Backtrace_IsFormattedAndWrittenBeforeTheTrigger");
     RegisterTest(&TTest_ASWLog_TextLogBase::Test_Finalize_WritesShutdownLineFromDestructor, "Finalize_WritesShutdownLineFromDestructor");
     RegisterTest(&TTest_ASWLog_TextLogBase::Test_Flush_CallsHookAndReturnsItsResult, "Flush_CallsHookAndReturnsItsResult");
     RegisterTest(&TTest_ASWLog_TextLogBase::Test_Flush_ThrowingHookDoesNotEscape, "Flush_ThrowingHookDoesNotEscape");
@@ -481,6 +483,42 @@ void TTest_ASWLog_TextLogBase::Test_Async_BlockWaitsForRoomInTheQueue()
     CheckFalse(returnedWhileFull, "With Block, a call should wait while the queue is full");
     const std::vector<std::string> expected{ "[INFO]: entry_1\n", "[INFO]: entry_2\n", "[INFO]: entry_3\n" };
     CheckTrue(output.Lines == expected, "Every entry should be written, in order");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_TextLogBase::Test_Async_BacktraceIsTakenWhenTheTriggerIsLogged()
+{
+    // Arrange: the error doesn't wait, so the test can log on while the worker is held
+    TMemoryOutput output;
+    TWriteGate gate;
+    auto config = MakeAsyncConfig();
+    config.Async.WaitAtLevel = ASWLog::Level::Off;
+    config.Backtrace.Capacity = 5;
+    config.Backtrace.LowestLevel = ASWLog::Level::Debug;
+    TMemoryTextLog log(output);
+    log.Gate = &gate;
+    const bool initialized = log.Initialize(config);
+
+    // Act: debug_2 is logged after the error, while the worker hasn't written it yet
+    log.LogInfo("info_1");
+    const bool isWriting = gate.WaitForWrite();
+    log.LogDebug("debug_1");
+    log.LogError("error_1");
+    log.LogDebug("debug_2");
+    gate.Open();
+    log.Flush();
+    const auto linesAfterError = output.Lines;
+    log.DumpBacktrace();
+    log.Flush();
+
+    // Assert
+    CheckTrue(initialized, "Initialize should succeed");
+    CheckTrue(isWriting, "The worker should be writing the first entry");
+    const std::vector<std::string> expected{ "[INFO]: info_1\n", "[INFO]: Backtrace: the last 1 entry below the minimum level\n",
+                                             "[DEBUG]: debug_1\n", "[INFO]: Backtrace end\n", "[ERROR]: error_1\n" };
+    CheckTrue(linesAfterError == expected, "The error's backtrace should hold only what was logged before it, queued in order");
+    CheckEquals(8, output.Lines.size(), "The entry logged after the error should stay kept, for the next backtrace");
+    if (output.Lines.size() == 8)
+        CheckEquals(std::string("[DEBUG]: debug_2\n"), output.Lines[6], "DumpBacktrace() should write it");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_TextLogBase::Test_Async_CallReturnsBeforeTheEntryIsWritten()
@@ -874,6 +912,29 @@ void TTest_ASWLog_TextLogBase::Test_Async_SwitchingOnAndOffKeepsEachThreadsOrder
     CheckEquals(0, failedReconfigures, "Every Reconfigure should succeed");
     CheckEquals(0, CountOutOfOrderEntries(output.Lines, ThreadCount),
         "Each thread's entries should keep their order, with none missing, across the switches");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_TextLogBase::Test_Backtrace_IsFormattedAndWrittenBeforeTheTrigger()
+{
+    // Arrange
+    TMemoryOutput output;
+    auto config = MakeQuietConfig();
+    config.Backtrace.Capacity = 5;
+    config.Backtrace.LowestLevel = ASWLog::Level::Debug;
+    TMemoryTextLog log(output);
+    const bool initialized = log.Initialize(config);
+
+    // Act
+    log.LogDebug("debug_1");
+    log.LogRaw(ASWLog::Level::Debug, "raw_debug|");
+    log.LogInfo("info_1");
+    log.LogError("error_1");
+
+    // Assert: written through the formatter, a raw entry as is, past the logger's own minimum level check
+    CheckTrue(initialized, "Initialize should succeed");
+    const std::vector<std::string> expected{ "[INFO]: info_1\n", "[INFO]: Backtrace: the last 2 entries below the minimum level\n",
+                                             "[DEBUG]: debug_1\n", "raw_debug|", "[INFO]: Backtrace end\n", "[ERROR]: error_1\n" };
+    CheckTrue(output.Lines == expected, "The kept entries should be formatted and written just before the error");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_TextLogBase::Test_Finalize_WritesShutdownLineFromDestructor()
