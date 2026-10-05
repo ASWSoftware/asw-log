@@ -33,6 +33,29 @@ see [0.26.1](#0261---2026-09-17) for the initial versioned baseline.
   flush once per batch of queued entries. A logger derived from
   `TASWTextLogBase` gets this without changes; `AfterQueuedEntriesUnlocked()`
   is a new protected hook for flushing a batch.
+- Optional crash handlers, in the new `ASWLog_CrashHandler.h` (add
+  `ASWLog_CrashHandler.cpp` to projects that list the ASWLog sources):
+  `ASWLog::InstallCrashHandlers()` hooks `std::terminate()`, SIGABRT
+  (`abort()`, a failed `assert()`) and the fatal faults (Windows:
+  unhandled structured exceptions such as an access violation or a stack
+  overflow; POSIX: SIGSEGV, SIGBUS, SIGFPE, SIGILL). On a crash, every
+  initialized text logger waits briefly for its asynchronous queue to be
+  written, is flushed, and gets a Critical "Crash: <reason>" line (e.g. the
+  uncaught exception's `what()`, or the exception code and address), then
+  the crash is passed on to the handler installed before, so error reports
+  and core dumps still happen. `TASWCrashHandlerOptions::WaitTimeout`
+  (default 1 s) bounds the wait. In a POSIX signal handler the line has a
+  fixed layout, written straight to the file; elsewhere it uses the
+  logger's formatter. Best effort: the header lists what isn't handled
+  (e.g. a debugger attached, fast fail, a logger whose lock the crashed
+  thread held). `UninstallCrashHandlers()` restores the previous handlers;
+  `ASWLog::HandleCrash(reason)` does the logging part for an application
+  with its own crash reporter. `Shutdown.WriteCrashLine` (default true)
+  leaves a logger's crash line out; the line is synced to disk if
+  `File.SyncToDiskAtLevel` is Critical or lower. A logger derived from
+  `TASWTextLogBase` is covered without changes; it can override the new
+  protected hooks `FlushForCrashUnlocked()` and `WriteCrashLineDirect()` to
+  get its crash line in a POSIX signal handler, or when its lock stays busy.
 
 ### Fixed
 

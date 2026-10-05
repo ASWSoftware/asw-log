@@ -111,6 +111,7 @@ void TTest_ASWLog_Config::Test_Defaults_MatchDocumentedValues()
     // Assert: Shutdown
     CheckTrue(config.Shutdown.WriteLine, "Shutdown.WriteLine should default to true");
     CheckTrue(config.Shutdown.Banner.empty(), "Shutdown.Banner should default to empty");
+    CheckTrue(config.Shutdown.WriteCrashLine, "Shutdown.WriteCrashLine should default to true");
 
     // Assert: File
     CheckTrue(config.File.FolderPath == std::filesystem::path("logs"), "File.FolderPath should default to logs");

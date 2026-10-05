@@ -27,6 +27,7 @@ limitations under the License.
 #ifndef ASWLog_FileLogH
 #define ASWLog_FileLogH
 //---------------------------------------------------------------------------
+#include <atomic>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
@@ -74,6 +75,10 @@ public:
     // what has been flushed out of this buffer is synced, so call pubsync() first. Sets 'errorCode' if it fails.
     bool SyncToDisk(std::error_code& errorCode);
     bool Write(std::string_view data);
+    // Writes 'data' straight to the end of the file (write() on POSIX, WriteFile() on Windows), bypassing the stdio
+    // buffer, so it is async-signal-safe: for a crash handler (see TASWTextLogBase::WriteCrashLineDirect()). Doesn't
+    // count the bytes in GetSize().
+    bool WriteDirect(std::string_view data) noexcept;
 };
 
 
@@ -100,6 +105,7 @@ public:
     std::uintmax_t GetSize() const noexcept; // See TASWFileStreamBuf::GetSize()
     bool SyncToDisk(std::error_code& errorCode); // See TASWFileStreamBuf::SyncToDisk()
     bool Write(std::string_view data);
+    bool WriteDirect(std::string_view data) noexcept; // See TASWFileStreamBuf::WriteDirect()
 };
 
 
@@ -120,6 +126,9 @@ private:
     std::chrono::system_clock::time_point m_LastOpenFailure{}; // NowUTC() when opening the file last failed
     std::chrono::system_clock::time_point m_LastRotationFailure{}; // NowUTC() when a rotation last failed
 
+    // File.SyncToDiskAtLevel is Critical or lower, for WriteCrashLineDirect(), which may run without m_Mutex
+    std::atomic<bool> m_SyncsCrashLine{ false };
+
 private:
     void CloseFileUnlocked(); // Closes the file but, unlike CloseUnlocked(), leaves the logger initialized
     void DeleteOldBackups(const TASWLogConfig& config); // Runs without m_Mutex
@@ -136,6 +145,7 @@ protected: // TASWTextLogBase hooks
     void AfterQueuedEntriesUnlocked(bool mustFlush) override;
     bool CloseUnlocked() override;
     bool EnsureReadyUnlocked() override;
+    void FlushForCrashUnlocked() noexcept override;
     bool FlushUnlocked() override;
     std::chrono::milliseconds GetWorkerIntervalUnlocked() const override; // FlushMode::Periodic
     bool InitializeUnlocked() override;
@@ -143,6 +153,7 @@ protected: // TASWTextLogBase hooks
     bool OpenUnlocked() override;
     bool PrepareWriteUnlocked(std::chrono::system_clock::time_point now) override;
     bool ReconfigureUnlocked(const TASWLogConfig& previous) override;
+    void WriteCrashLineDirect(std::string_view line) noexcept override;
     void WriteLineUnlocked(Level level, std::string_view line, bool endsLine) override;
 
 protected:

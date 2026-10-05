@@ -207,12 +207,15 @@ struct TASWLineConfig
 /////////////////////////////////////////////////////////////////////////////
 // TASWShutdownConfig
 //
-// The line a text logger writes when it shuts down (TASWLogConfig::Shutdown).
+// The lines a text logger writes when it shuts down, or when the application crashes (TASWLogConfig::Shutdown).
 /////////////////////////////////////////////////////////////////////////////
 struct TASWShutdownConfig
 {
     bool WriteLine = true; // "Logger shutdown: <time>", followed by the banner if set
     std::string Banner;
+    // A Critical "Crash: <reason>" line when the application crashes (see InstallCrashHandlers() and HandleCrash()). The
+    // logger is flushed on a crash either way.
+    bool WriteCrashLine = true;
 };
 
 

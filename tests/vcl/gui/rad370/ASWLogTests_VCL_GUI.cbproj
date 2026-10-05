@@ -200,6 +200,10 @@
             <DependentOn>..\..\..\..\ASWLog\ASWLog_ConsoleLog.h</DependentOn>
             <BuildOrder>4</BuildOrder>
         </CppCompile>
+        <CppCompile Include="..\..\..\..\ASWLog\ASWLog_CrashHandler.cpp">
+            <DependentOn>..\..\..\..\ASWLog\ASWLog_CrashHandler.h</DependentOn>
+            <BuildOrder>42</BuildOrder>
+        </CppCompile>
         <CppCompile Include="..\..\..\..\ASWLog\ASWLog_FileLog.cpp">
             <DependentOn>..\..\..\..\ASWLog\ASWLog_FileLog.h</DependentOn>
             <BuildOrder>5</BuildOrder>
@@ -243,6 +247,10 @@
         <CppCompile Include="..\..\..\tests\Test_ASWLog_ConsoleLog.cpp">
             <DependentOn>..\..\..\tests\Test_ASWLog_ConsoleLog.h</DependentOn>
             <BuildOrder>29</BuildOrder>
+        </CppCompile>
+        <CppCompile Include="..\..\..\tests\Test_ASWLog_CrashHandler.cpp">
+            <DependentOn>..\..\..\tests\Test_ASWLog_CrashHandler.h</DependentOn>
+            <BuildOrder>43</BuildOrder>
         </CppCompile>
         <CppCompile Include="..\..\..\tests\Test_ASWLog_FileLog.cpp">
             <DependentOn>..\..\..\tests\Test_ASWLog_FileLog.h</DependentOn>

@@ -76,6 +76,10 @@ call :CopyFile "ASWLog\ASWLog_ConsoleLog.cpp" "%TARGET_DIR%\ASWLog\ASWLog_Consol
 if errorlevel 1 exit /b 1
 call :CopyFile "ASWLog\ASWLog_ConsoleLog.h" "%TARGET_DIR%\ASWLog\ASWLog_ConsoleLog.h"
 if errorlevel 1 exit /b 1
+call :CopyFile "ASWLog\ASWLog_CrashHandler.cpp" "%TARGET_DIR%\ASWLog\ASWLog_CrashHandler.cpp"
+if errorlevel 1 exit /b 1
+call :CopyFile "ASWLog\ASWLog_CrashHandler.h" "%TARGET_DIR%\ASWLog\ASWLog_CrashHandler.h"
+if errorlevel 1 exit /b 1
 call :CopyFile "ASWLog\ASWLog_FileLog.cpp" "%TARGET_DIR%\ASWLog\ASWLog_FileLog.cpp"
 if errorlevel 1 exit /b 1
 call :CopyFile "ASWLog\ASWLog_FileLog.h" "%TARGET_DIR%\ASWLog\ASWLog_FileLog.h"

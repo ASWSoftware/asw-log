@@ -49,6 +49,13 @@ limitations under the License.
 namespace ASWLog
 {
 
+namespace Detail
+{
+
+class TCrashHandling; // See ASWLog_CrashHandler.h
+
+} // namespace Detail
+
 /////////////////////////////////////////////////////////////////////////////
 // TASWTextLogBase
 //
@@ -71,12 +78,18 @@ namespace ASWLog
 // TASWFileLog) that overrides a hook the worker calls must call Finalize() in its own destructor too, so that the
 // worker has stopped before its overrides are destroyed.
 //
+// While initialized, a logger is on the list that the crash handlers flush (see ASWLog_CrashHandler.h), through
+// FlushUnlocked() and WriteLineUnlocked(), or, in a POSIX signal handler, FlushForCrashUnlocked() and
+// WriteCrashLineDirect().
+//
 // To change the line layout, assign a formatter to TASWLogConfig::Line.Formatter (see IASWLogFormatter).
 /////////////////////////////////////////////////////////////////////////////
 class TASWTextLogBase : public TASWLogBase
 {
 private:
     typedef TASWLogBase inherited;
+
+    friend class Detail::TCrashHandling;
 
 protected:
     mutable std::mutex m_Mutex; // Serializes the writes, and the derived logger's own state
@@ -110,8 +123,9 @@ private:
     std::condition_variable m_WorkerWakeup; // The worker waits on it: an entry was queued, or a stop or a new interval
     std::condition_variable m_QueueChanged; // Callers wait on it: room in the queue, entries written, async switched
     std::deque<TQueuedEntry> m_Queue;
-    std::uint64_t m_LastQueuedSequence = 0;
-    std::uint64_t m_LastWrittenSequence = 0; // The worker has written (or dropped) the entries up to here
+    // Changed with m_QueueMutex held; atomic so that a crash handler can read them without it
+    std::atomic<std::uint64_t> m_LastQueuedSequence{ 0 };
+    std::atomic<std::uint64_t> m_LastWrittenSequence{ 0 }; // The worker has written (or dropped) the entries up to here
     std::size_t m_DroppedCount = 0; // Entries dropped (AsyncOverflowPolicy::DropNewest) since the worker last took them
     std::chrono::milliseconds m_WorkerInterval{ 0 }; // GetWorkerIntervalUnlocked(), as UpdateWorker() last read it
     bool m_IsAsyncActive = false; // Entries go to the queue: async is on and the worker runs
@@ -122,6 +136,16 @@ private:
     std::atomic<bool> m_IsAsync{ false };
 
     bool m_IsWritingQueuedEntries = false; // Guarded by m_Mutex (see IsWritingQueuedEntriesUnlocked())
+
+    // This logger's place on the list of loggers a crash flushes, guarded by that list's lock (see
+    // Detail::TCrashHandling)
+    TASWTextLogBase* m_CrashListPrevious = nullptr;
+    TASWTextLogBase* m_CrashListNext = nullptr;
+    bool m_IsOnCrashList = false;
+
+    // From the config (see StoreCrashLineSettingsUnlocked()), for a crash handler that doesn't get the lock
+    std::atomic<bool> m_CrashLineUsesCRLF{ false };
+    std::atomic<bool> m_WritesCrashLine{ true };
 
 private:
     // Calls UpdateWorker() when destroyed. Declare it before the TDeferredWorkRunner in a public method that can change
@@ -153,10 +177,12 @@ private:
 
 private:
     void DispatchLogCallback(const TASWLogConfig& config, const TASWLogRecord& record, std::string_view formattedLine) const noexcept;
+    void OnCrash(std::string_view message, bool isInSignalHandler, std::chrono::steady_clock::time_point deadline) noexcept;
     bool QueueRecord(const TASWLogRecord& record);
     void RunDeferredWork() noexcept;
     void RunWorker() noexcept;
     void SetAsyncActive(bool isActive) noexcept; // Holding m_QueueMutex
+    void StoreCrashLineSettingsUnlocked() noexcept;
     void UpdateWorker(bool mustStop) noexcept;
     void UpdateWorkerFromWorker(bool mustStop);
     void WaitForQueuedEntries();
@@ -221,8 +247,13 @@ protected:
 
     // Writes the shutdown line (if TASWLogConfig::Shutdown.WriteLine) and closes the output, if the logger is
     // initialized, then stops the worker thread. Never throws. Each logger calls it from its destructor, since the hooks
-    // can't be called from this class's destructor.
+    // can't be called from this class's destructor. Takes the logger off the list the crash handlers flush.
     void Finalize() noexcept;
+
+    // Called by a crash handler in a POSIX signal handler (see ASWLog_CrashHandler.h), holding m_Mutex, before
+    // WriteCrashLineDirect(): pushes the written entries out of the output's buffers, e.g. a file's stdio buffer. Must
+    // only do async-signal-safe work (no allocation, no locks), and is best effort. Does nothing by default.
+    virtual void FlushForCrashUnlocked() noexcept;
 
     // Called by Flush(): pushes the written entries out of the output's buffers. Returns false if the output isn't open
     // or the flush failed.
@@ -271,6 +302,13 @@ protected:
     // the current config, after the lock is released (see DeferUnlocked()). A failure that can't be queued (out of
     // memory) is dropped. Never throws.
     void ReportErrorUnlocked(TASWLogError error) noexcept;
+
+    // Called by a crash handler (see ASWLog_CrashHandler.h) with a finished fixed-layout crash line: writes it straight
+    // to the output, bypassing its buffers (e.g. write() on a file's descriptor), and syncs it if the config asks for
+    // that. Called in a POSIX signal handler holding m_Mutex, or, if the lock stayed busy, without it (the thread
+    // holding it may be the one that crashed), so it must only do async-signal-safe work and must not rely on the
+    // state m_Mutex guards being consistent. Does nothing by default.
+    virtual void WriteCrashLineDirect(std::string_view line) noexcept;
 
     // Writes a finished line. 'endsLine' is true if 'line' ends with the line ending (false for a Raw record).
     virtual void WriteLineUnlocked(Level level, std::string_view line, bool endsLine) = 0;

@@ -24,6 +24,8 @@ add_library(ASWLog STATIC
     ASWLog/ASWLog_Config.h
     ASWLog/ASWLog_ConsoleLog.cpp
     ASWLog/ASWLog_ConsoleLog.h
+    ASWLog/ASWLog_CrashHandler.cpp
+    ASWLog/ASWLog_CrashHandler.h
     ASWLog/ASWLog_FileLog.cpp
     ASWLog/ASWLog_FileLog.h
     ASWLog/ASWLog_Formatter.cpp

@@ -19,6 +19,12 @@ ASWLog is a thread-safe light-weight C++ logging tool for Windows and Linux proj
 - Optional asynchronous writing (`TASWLogConfig::Async`): a logging call only formats and queues its entry, and the
   logger's own thread writes it, while Error entries still wait until they are in the file. Off by default, since a
   synchronous logger has written every entry when the call returns.
+- Optional crash handlers (`ASWLog::InstallCrashHandlers()`, in `ASWLog_CrashHandler.h`): on `std::terminate()`,
+  `abort()`, or a fatal fault (an access violation on Windows, SIGSEGV and the like on Linux), every text logger is
+  flushed, including the entries still queued or buffered, and gets a "Crash: <reason>" line. The crash is then passed
+  on to the handler installed before, so error reports and core dumps still happen. Best effort, since a crashed process
+  may be in any state; the header lists what is and isn't handled. An application with its own crash reporter can call
+  `ASWLog::HandleCrash()` from it instead.
 - Internal failures (e.g. a log file that can't be opened, written or rotated) are reported to a
   `TASWLogConfig::OnError` handler, or to stderr, instead of silently dropping entries.
 - Backup cleanup after each rotation, by age, count and total size, plus wildcard-based cleanup of files older than a
@@ -120,7 +126,9 @@ cmake --build tests/cmake/build --config Release
 The executable is written to `tests/cmake/build/bin` (in a `Release` sub folder for multi-config generators such as
 Visual Studio). For RAD Studio, use `tests/rad370/ASWLogTests.cbproj` or its `Build_Win64x_*.bat` scripts; output is
 written to `tests/build/bin/<Config>`. GitHub Actions builds and runs the tests on Windows and Linux for each push and
-pull request to `main` and `develop`.
+pull request to `main` and `develop`. The crash handler tests start the test executable again with
+`--aswlog-crash-helper=<scenario>`, which makes it crash on purpose before its `main()` runs; a debugger attached to
+the test run doesn't see those processes.
 
 With GCC or Clang (on Linux), the tests can also be built with a sanitizer, which fails the run with a report when it
 finds a data race (`thread`), or a memory error or undefined behavior (`address`, which includes

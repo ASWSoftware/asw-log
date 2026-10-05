@@ -317,6 +317,40 @@ bool TASWFileStreamBuf::Write(std::string_view data)
 }
 
 //---------------------------------------------------------------------------
+bool TASWFileStreamBuf::WriteDirect(std::string_view data) noexcept
+{
+    if (m_File == nullptr)
+        return false;
+
+#if defined(_WIN32)
+    // The C library appends by moving to the end before each write, which this does too
+    const auto handle = reinterpret_cast<HANDLE>(_get_osfhandle(_fileno(m_File)));
+    LARGE_INTEGER noMove{};
+    if (handle == INVALID_HANDLE_VALUE || !SetFilePointerEx(handle, noMove, nullptr, FILE_END))
+        return false;
+
+    DWORD written = 0;
+    return WriteFile(handle, data.data(), static_cast<DWORD>(data.size()), &written, nullptr) && written == data.size();
+#else
+    // Opened for appending (O_APPEND), so each write goes to the end
+    const int descriptor = fileno(m_File);
+    while (!data.empty())
+    {
+        const auto written = write(descriptor, data.data(), data.size());
+        if (written < 0 && errno == EINTR)
+            continue;
+
+        if (written <= 0)
+            return false;
+
+        data.remove_prefix(static_cast<std::size_t>(written));
+    }
+
+    return true;
+#endif
+}
+
+//---------------------------------------------------------------------------
 TASWFileStreamBuf::int_type TASWFileStreamBuf::overflow(int_type character)
 {
     if (m_File == nullptr)
@@ -424,6 +458,12 @@ bool TASWFileStream::Write(std::string_view data)
     if (!result)
         setstate(std::ios::failbit);
     return result;
+}
+
+//---------------------------------------------------------------------------
+bool TASWFileStream::WriteDirect(std::string_view data) noexcept
+{
+    return m_Buffer.WriteDirect(data);
 }
 
 //---------------------------------------------------------------------------
@@ -609,6 +649,14 @@ bool TASWFileLog::EnsureReadyUnlocked()
 }
 
 //---------------------------------------------------------------------------
+void TASWFileLog::FlushForCrashUnlocked() noexcept
+{
+    // Holding m_Mutex, so no other thread is in a stdio call on the file, and fflush() only writes out its buffer
+    if (m_FileStream.IsOpen())
+        m_FileStream.rdbuf()->pubsync();
+}
+
+//---------------------------------------------------------------------------
 bool TASWFileLog::FlushUnlocked()
 {
     if (!m_FileStream.IsOpen())
@@ -650,6 +698,8 @@ std::chrono::milliseconds TASWFileLog::GetWorkerIntervalUnlocked() const
 //---------------------------------------------------------------------------
 bool TASWFileLog::InitializeUnlocked()
 {
+    m_SyncsCrashLine.store(Level::Critical >= GetConfigUnlocked().File.SyncToDiskAtLevel, std::memory_order_relaxed);
+
     if (GetConfigUnlocked().File.EnableDailyRolling)
         RotateDailyLogFromEarlierDayUnlocked();
 
@@ -798,6 +848,8 @@ bool TASWFileLog::PrepareWriteUnlocked(std::chrono::system_clock::time_point now
 bool TASWFileLog::ReconfigureUnlocked(const TASWLogConfig& previous)
 {
     const auto& file = GetConfigUnlocked().File;
+    m_SyncsCrashLine.store(Level::Critical >= file.SyncToDiskAtLevel, std::memory_order_relaxed);
+
     if (file.ResolvePath() == previous.File.ResolvePath() &&
         file.AutoOpenClosePerWrite == previous.File.AutoOpenClosePerWrite)
     {
@@ -978,6 +1030,15 @@ void TASWFileLog::SyncToDiskUnlocked()
     std::error_code errorCode;
     if (FlushUnlocked() && !m_FileStream.SyncToDisk(errorCode))
         ReportFileErrorUnlocked(ErrorKind::SyncFailed, "Couldn't sync the log file to disk", GetConfigUnlocked().File.ResolvePath(), errorCode);
+}
+
+//---------------------------------------------------------------------------
+void TASWFileLog::WriteCrashLineDirect(std::string_view line) noexcept
+{
+    // A crash isn't reported: OnError can't run in the crashed process
+    std::error_code errorCode;
+    if (m_FileStream.WriteDirect(line) && m_SyncsCrashLine.load(std::memory_order_relaxed))
+        m_FileStream.SyncToDisk(errorCode);
 }
 
 //---------------------------------------------------------------------------
