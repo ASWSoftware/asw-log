@@ -461,6 +461,20 @@ void TASWFileLog::CloseFileUnlocked()
 }
 
 //---------------------------------------------------------------------------
+void TASWFileLog::AfterQueuedEntriesUnlocked(bool mustFlush)
+{
+    // The modes that flush every entry flush a batch of queued entries once (see MaybeFlush())
+    const auto& file = GetConfigUnlocked().File;
+
+    if (mustFlush || file.Flush == FlushMode::EveryWrite || file.Flush == FlushMode::OnNewLine ||
+        (file.Flush == FlushMode::Periodic && file.FlushInterval.count() <= 0))
+    {
+        if (m_FileStream.IsOpen())
+            FlushUnlocked();
+    }
+}
+
+//---------------------------------------------------------------------------
 bool TASWFileLog::CloseUnlocked()
 {
     CloseFileUnlocked();
@@ -659,13 +673,14 @@ void TASWFileLog::MaybeFlush(Level level, bool isNewLine)
         return;
     }
 
-    // In Periodic mode the worker thread flushes (see OnWorkerWakeUnlocked()), unless FlushInterval is 0 or less
+    // In Periodic mode the worker thread flushes (see OnWorkerWakeUnlocked()), unless FlushInterval is 0 or less. The
+    // modes that flush every entry flush queued entries once per batch (see AfterQueuedEntriesUnlocked()).
     const auto flushMode = fileConfig.Flush;
-    if (flushMode == FlushMode::EveryWrite || (flushMode == FlushMode::OnNewLine && isNewLine) || level >= fileConfig.FlushImmediatelyAtLevel ||
-        (flushMode == FlushMode::Periodic && fileConfig.FlushInterval.count() <= 0))
-    {
+    const bool flushesEachEntry = flushMode == FlushMode::EveryWrite || (flushMode == FlushMode::OnNewLine && isNewLine) ||
+        (flushMode == FlushMode::Periodic && fileConfig.FlushInterval.count() <= 0);
+
+    if ((flushesEachEntry && !IsWritingQueuedEntriesUnlocked()) || level >= fileConfig.FlushImmediatelyAtLevel)
         FlushUnlocked();
-    }
 }
 
 //---------------------------------------------------------------------------

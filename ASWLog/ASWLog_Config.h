@@ -47,6 +47,32 @@ namespace ASWLog
 class IASWLogFormatter; // See ASWLog_Formatter.h
 
 /////////////////////////////////////////////////////////////////////////////
+// TASWAsyncConfig
+//
+// Asynchronous writing (TASWLogConfig::Async), for a text logger (file, console). Off by default: a synchronous logger
+// has written each entry when the call returns, which is the safest for finding the cause of a crash. With it on, the
+// logging call formats the entry and queues it, and a thread of the logger's own writes the queued entries in order,
+// so the call doesn't wait for the output. Entries still queued when the application crashes are lost, except those
+// at or above WaitAtLevel. Flush(), Close(), Reconfigure() and the logger's destructor first wait for the queued
+// entries to be written. OnLogEntry is called on the logger's thread, after the entry was written. It pays off when
+// writing is slow (e.g. File.Flush = EveryWrite, the default: a call then costs about as much as formatting its line);
+// with buffered output (e.g. FlushMode::Manual), queuing an entry can cost the caller a little more than writing it.
+/////////////////////////////////////////////////////////////////////////////
+struct TASWAsyncConfig
+{
+    bool Enabled = false;
+    // How many entries can wait in the queue. When it is full, OverflowPolicy decides.
+    std::size_t QueueCapacity = 8192;
+    AsyncOverflowPolicy OverflowPolicy = AsyncOverflowPolicy::Block;
+    // The call of an entry at or above this level returns only once the entry, and every entry queued before it, has
+    // been written and flushed (whatever File.Flush says; File.SyncToDiskAtLevel still syncs it), so it is in the file
+    // if the application crashes right after. Such an entry is never dropped: it waits for room in the queue.
+    // Level::Off = no entry waits.
+    Level WaitAtLevel = Level::Error;
+};
+
+
+/////////////////////////////////////////////////////////////////////////////
 // TASWBackupInfo
 //
 // A backup a file logger made by rotating its log, as passed to TASWFileConfig::OnBackupCreated.
@@ -111,7 +137,8 @@ struct TASWFileConfig
     // --- Backup Event ---
     // Called once for each backup that rotation makes, e.g. to compress it, upload it or move it elsewhere. Called
     // outside the logger's lock, on the thread whose call rotated the log (a logging call, Initialize(), Reconfigure()
-    // or RotateLogFiles()), so that call waits for it: hand slow work to another thread. Exceptions are swallowed. The
+    // or RotateLogFiles(); with Async.Enabled, the logger's own thread writes the entries and so rotates the log), so
+    // that call waits for it: hand slow work to another thread. Exceptions are swallowed. The
     // backup cleanup below runs after it, so the backup still exists during the call. A backup it renames out of the
     // "<stem>.<reason>.<time>.bak" form (e.g. to ".bak.gz") is the application's to clean up from then on. With
     // AutoOpenClosePerWrite, only the process that rotated the shared log calls it. Not called if the rotation failed
@@ -225,11 +252,12 @@ struct TASWLogConfig
     TASWStartupConfig Startup;
     TASWShutdownConfig Shutdown;
     TASWFileConfig File;
+    TASWAsyncConfig Async;
 
     // --- Log Entry Callback Options ---
     // Receives the entry's record (with its time and ids) and the line as written. Both are only valid during the call.
     using LogCallback = std::function<void (const TASWLogRecord& record, std::string_view formattedLine)>;
-    LogCallback OnLogEntry; // Optional hook invoked after a successful write (e.g. alerting/crash-reporting). Invoked outside the sink's internal lock; exceptions are swallowed.
+    LogCallback OnLogEntry; // Optional hook invoked after a successful write (e.g. alerting/crash-reporting). Invoked outside the sink's internal lock; exceptions are swallowed. With Async.Enabled, invoked on the logger's own thread.
     Level OnLogEntryMinimumLevel = Level::Error; // Independent threshold gating OnLogEntry (Off = never); unrelated to InitialMinimumLevel or the Force* APIs.
 
     // --- Error Reporting Options ---

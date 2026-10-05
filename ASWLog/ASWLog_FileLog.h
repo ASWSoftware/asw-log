@@ -133,6 +133,7 @@ private:
 
 protected: // TASWTextLogBase hooks
     void AfterEntryUnlocked() override;
+    void AfterQueuedEntriesUnlocked(bool mustFlush) override;
     bool CloseUnlocked() override;
     bool EnsureReadyUnlocked() override;
     bool FlushUnlocked() override;

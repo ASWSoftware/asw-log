@@ -16,6 +16,9 @@ ASWLog is a thread-safe light-weight C++ logging tool for Windows and Linux proj
 - Crash durability: every entry is flushed by default, and with buffered flushing Error and Critical entries still
   are (`File.FlushImmediatelyAtLevel`). Entries at a chosen level can also be synced to disk to survive a power loss
   (`File.SyncToDiskAtLevel`).
+- Optional asynchronous writing (`TASWLogConfig::Async`): a logging call only formats and queues its entry, and the
+  logger's own thread writes it, while Error entries still wait until they are in the file. Off by default, since a
+  synchronous logger has written every entry when the call returns.
 - Internal failures (e.g. a log file that can't be opened, written or rotated) are reported to a
   `TASWLogConfig::OnError` handler, or to stderr, instead of silently dropping entries.
 - Backup cleanup after each rotation, by age, count and total size, plus wildcard-based cleanup of files older than a

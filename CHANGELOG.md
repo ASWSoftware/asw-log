@@ -10,6 +10,30 @@ see [0.26.1](#0261---2026-09-17) for the initial versioned baseline.
 
 ## [Unreleased]
 
+### Added
+
+- Optional asynchronous writing for the text loggers (file and console),
+  in the new `TASWLogConfig::Async` group (`TASWAsyncConfig`), off by
+  default: the default synchronous logger, which has written each entry
+  when the call returns, stays the safest for finding the cause of a crash.
+  With `Async.Enabled`, a logging call formats the entry and queues it, and
+  the logger's own thread writes the queue in order, so the call doesn't
+  wait for the file or console. `Async.QueueCapacity` (default 8192
+  entries) and `Async.OverflowPolicy` (`AsyncOverflowPolicy::Block`, the
+  default, waits for room; `DropNewest` drops the entry) decide what
+  happens when the queue is full. A dropped run of entries is reported to
+  `OnError` as the new `ErrorKind::EntriesDropped` and marked in the log
+  by a "Dropped N entries" line where they would have been. An entry at or
+  above `Async.WaitAtLevel` (default `Error`) is never dropped, and its
+  call returns only once it and every entry before it are written and
+  flushed, so errors still reach the file before a crash. `Flush()`,
+  `Close()`, `Reconfigure()` and the destructor first wait for the queued
+  entries. In async mode `OnLogEntry` is called on the logger's thread,
+  after the entry was written; `File.Flush` `EveryWrite` and `OnNewLine`
+  flush once per batch of queued entries. A logger derived from
+  `TASWTextLogBase` gets this without changes; `AfterQueuedEntriesUnlocked()`
+  is a new protected hook for flushing a batch.
+
 ### Fixed
 
 - `FlushMode::Periodic` now flushes on a timer: a thread of the file

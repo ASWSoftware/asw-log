@@ -36,6 +36,10 @@ private:
     typedef TTestGroupBase inherited;
 
 private: // Test methods
+    void Test_Async_EntryAtWaitAtLevelIsInTheFileWhenTheCallReturns();
+    void Test_Async_EveryWriteFlushesEachBatch();
+    void Test_Async_PeriodicFlushesOnTheSameThread();
+    void Test_Async_ReconfigureWritesQueuedEntriesToTheOldFile();
     void Test_AutoOpenClose_StaysInitializedBetweenWrites();
     void Test_BackupLimits_ApplyOnlyToThisLogsBackups();
     void Test_BackupLimits_MaxBackupFilesKeepsNewestByLastWrite();

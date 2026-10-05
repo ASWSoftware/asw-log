@@ -26,11 +26,16 @@ limitations under the License.
 //---------------------------------------------------------------------------
 #include <atomic>
 #include <chrono>
+#include <condition_variable>
 #include <cstddef>
+#include <cstdio>
 #include <filesystem>
+#include <format>
 #include <fstream>
+#include <functional>
 #include <iterator>
 #include <memory>
+#include <mutex>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -54,13 +59,63 @@ namespace
 const auto GroupBaseTempDir = std::filesystem::temp_directory_path() / "aswlog_textlogbase_tests";
 const auto TestTempDir = GroupBaseTempDir / "test";
 
+// How long a test waits for something another thread does (e.g. an asynchronous logger's worker), before it fails
+constexpr std::chrono::milliseconds WaitTimeout = std::chrono::seconds(5);
+
+// How long a test waits to see that another thread did NOT get past a point (e.g. a call that must wait)
+constexpr std::chrono::milliseconds AbsenceWait = std::chrono::milliseconds(50);
+
 // What a TMemoryTextLog wrote. Outlives the logger, so a test can check what its destructor wrote.
 struct TMemoryOutput
 {
     std::vector<std::string> Lines;
     std::vector<bool> EndsLine;
+    std::vector<std::thread::id> WriteThreadIds; // The thread that wrote each line
     int AfterEntryCount = 0;
     int FlushCount = 0;
+    std::size_t LineCountAtLastFlush = 0; // How many lines were written when FlushUnlocked() was last called
+    std::size_t LineCountAtLastReconfigure = 0; // The same for ReconfigureUnlocked()
+};
+
+// Holds every write of a TMemoryTextLog while closed, so a test can keep an asynchronous logger's worker busy with an
+// entry while it queues more
+class TWriteGate
+{
+private:
+    std::mutex m_Mutex;
+    std::condition_variable m_Changed;
+    bool m_IsOpen = false;
+    int m_WaitingCount = 0;
+
+public:
+    // Lets every write through, now and from then on
+    void Open()
+    {
+        std::lock_guard<std::mutex> lock(m_Mutex);
+        m_IsOpen = true;
+        m_Changed.notify_all();
+    }
+
+    // Called by each write: waits until the gate is open
+    void Pass()
+    {
+        std::unique_lock<std::mutex> lock(m_Mutex);
+        ++m_WaitingCount;
+        m_Changed.notify_all();
+        m_Changed.wait(lock, [this] {
+                    return m_IsOpen;
+                });
+        --m_WaitingCount;
+    }
+
+    // Waits until a write is held at the gate, for at most WaitTimeout. Returns false if none came.
+    bool WaitForWrite()
+    {
+        std::unique_lock<std::mutex> lock(m_Mutex);
+        return m_Changed.wait_for(lock, WaitTimeout, [this] {
+                    return m_WaitingCount > 0;
+                });
+    }
 };
 
 // A text logger built only from the TASWTextLogBase hooks, writing to memory
@@ -77,6 +132,7 @@ public:
     bool ReportsOnWrite = false; // WriteLineUnlocked() reports a WriteFailed failure, but writes the line
     bool ThrowsOnFlush = false;
     bool ThrowsOnWrite = false;
+    TWriteGate* Gate = nullptr; // If set, each write waits at it
     // What ReconfigureUnlocked() saw: the banner of the config it replaced, and of the config stored by then
     std::vector<std::string> ReconfiguredFromBanners;
     std::vector<std::string> ReconfiguredToBanners;
@@ -105,6 +161,7 @@ protected:
             throw std::runtime_error("flush failed");
 
         ++m_Output.FlushCount;
+        m_Output.LineCountAtLastFlush = m_Output.Lines.size();
         return FlushResult;
     }
 
@@ -134,11 +191,15 @@ protected:
     {
         ReconfiguredFromBanners.push_back(previous.Startup.Banner);
         ReconfiguredToBanners.push_back(GetConfigUnlocked().Startup.Banner);
+        m_Output.LineCountAtLastReconfigure = m_Output.Lines.size();
         return ReconfigureResult;
     }
 
     void WriteLineUnlocked(ASWLog::Level /*level*/, std::string_view line, bool endsLine) override
     {
+        if (Gate != nullptr)
+            Gate->Pass();
+
         if (ThrowsOnWrite)
             throw std::runtime_error("write failed");
 
@@ -152,6 +213,7 @@ protected:
 
         m_Output.Lines.emplace_back(line);
         m_Output.EndsLine.push_back(endsLine);
+        m_Output.WriteThreadIds.push_back(std::this_thread::get_id());
     }
 
 public:
@@ -202,6 +264,16 @@ public:
     }
 };
 
+ASWLog::TASWLogConfig MakeQuietConfig(); // See below
+
+// MakeQuietConfig() with asynchronous writing on
+ASWLog::TASWLogConfig MakeAsyncConfig()
+{
+    auto config = MakeQuietConfig();
+    config.Async.Enabled = true;
+    return config;
+}
+
 // A config with no startup or shutdown lines, and only the level in each line, e.g. "[INFO]: message\n"
 ASWLog::TASWLogConfig MakeQuietConfig()
 {
@@ -226,6 +298,18 @@ ASWLog::TASWLogConfig MakeQuietConfig()
     return config;
 }
 
+// Makes an asynchronous logger's worker pause for AbsenceWait after it writes "entry_1", outside the lock and before
+// it writes the next queued entry (OnLogEntry runs there). A call that should wait for the queued entries but doesn't
+// then gets the lock during the pause and acts too early, which the test can see.
+void PauseAfterFirstEntry(ASWLog::TASWLogConfig& config)
+{
+    config.OnLogEntryMinimumLevel = ASWLog::Level::Info;
+    config.OnLogEntry = [](const ASWLog::TASWLogRecord& record, std::string_view /*line*/) {
+            if (record.Message == "entry_1")
+                std::this_thread::sleep_for(AbsenceWait);
+        };
+}
+
 std::string ReadFileText(const std::filesystem::path& path)
 {
     std::ifstream stream(path, std::ios::binary);
@@ -233,6 +317,21 @@ std::string ReadFileText(const std::filesystem::path& path)
         return {};
 
     return std::string((std::istreambuf_iterator<char>(stream)), std::istreambuf_iterator<char>());
+}
+
+// Checks 'condition' until it is true, for at most WaitTimeout. Returns false if it never was.
+bool WaitUntil(const std::function<bool()>& condition)
+{
+    const auto deadline = std::chrono::steady_clock::now() + WaitTimeout;
+    while (!condition())
+    {
+        if (std::chrono::steady_clock::now() >= deadline)
+            return false;
+
+        std::this_thread::sleep_for(std::chrono::milliseconds(2));
+    }
+
+    return true;
 }
 
 } // namespace
@@ -247,6 +346,18 @@ std::string ReadFileText(const std::filesystem::path& path)
 TTest_ASWLog_TextLogBase::TTest_ASWLog_TextLogBase()
     : inherited("ASWLog_TextLogBase_Tests")
 {
+    RegisterTest(&TTest_ASWLog_TextLogBase::Test_Async_BlockWaitsForRoomInTheQueue, "Async_BlockWaitsForRoomInTheQueue");
+    RegisterTest(&TTest_ASWLog_TextLogBase::Test_Async_CallReturnsBeforeTheEntryIsWritten, "Async_CallReturnsBeforeTheEntryIsWritten");
+    RegisterTest(&TTest_ASWLog_TextLogBase::Test_Async_DestructorWritesQueuedEntriesBeforeTheShutdownLine, "Async_DestructorWritesQueuedEntriesBeforeTheShutdownLine");
+    RegisterTest(&TTest_ASWLog_TextLogBase::Test_Async_DropNewestReportsAndMarksDroppedEntries, "Async_DropNewestReportsAndMarksDroppedEntries");
+    RegisterTest(&TTest_ASWLog_TextLogBase::Test_Async_EntriesKeepTheirOrderPerThread, "Async_EntriesKeepTheirOrderPerThread");
+    RegisterTest(&TTest_ASWLog_TextLogBase::Test_Async_EntryAtWaitAtLevelIsNeverDropped, "Async_EntryAtWaitAtLevelIsNeverDropped");
+    RegisterTest(&TTest_ASWLog_TextLogBase::Test_Async_EntryAtWaitAtLevelReturnsOnceWrittenAndFlushed, "Async_EntryAtWaitAtLevelReturnsOnceWrittenAndFlushed");
+    RegisterTest(&TTest_ASWLog_TextLogBase::Test_Async_FlushWaitsForQueuedEntries, "Async_FlushWaitsForQueuedEntries");
+    RegisterTest(&TTest_ASWLog_TextLogBase::Test_Async_LoggingFromOnLogEntryDoesNotWait, "Async_LoggingFromOnLogEntryDoesNotWait");
+    RegisterTest(&TTest_ASWLog_TextLogBase::Test_Async_OnLogEntryRunsOnTheWorkerWithItsOwnCopy, "Async_OnLogEntryRunsOnTheWorkerWithItsOwnCopy");
+    RegisterTest(&TTest_ASWLog_TextLogBase::Test_Async_ReconfigureToSyncWritesQueuedEntriesFirst, "Async_ReconfigureToSyncWritesQueuedEntriesFirst");
+    RegisterTest(&TTest_ASWLog_TextLogBase::Test_Async_SwitchingOnAndOffKeepsEachThreadsOrder, "Async_SwitchingOnAndOffKeepsEachThreadsOrder");
     RegisterTest(&TTest_ASWLog_TextLogBase::Test_Finalize_WritesShutdownLineFromDestructor, "Finalize_WritesShutdownLineFromDestructor");
     RegisterTest(&TTest_ASWLog_TextLogBase::Test_Flush_CallsHookAndReturnsItsResult, "Flush_CallsHookAndReturnsItsResult");
     RegisterTest(&TTest_ASWLog_TextLogBase::Test_Flush_ThrowingHookDoesNotEscape, "Flush_ThrowingHookDoesNotEscape");
@@ -297,6 +408,466 @@ void TTest_ASWLog_TextLogBase::TearDown_Test(ITestCase& testCase)
 
 // /////// Begin tests after this line ///////////////////////
 
+//---------------------------------------------------------------------------
+void TTest_ASWLog_TextLogBase::Test_Async_BlockWaitsForRoomInTheQueue()
+{
+    // Arrange: a queue of one entry
+    TMemoryOutput output;
+    TWriteGate gate;
+    auto config = MakeAsyncConfig();
+    config.Async.QueueCapacity = 1;
+    config.Async.OverflowPolicy = ASWLog::AsyncOverflowPolicy::Block;
+
+    TMemoryTextLog log(output);
+    log.Gate = &gate;
+    const bool initialized = log.Initialize(config);
+
+    // Act: the worker holds entry_1, entry_2 fills the queue, so entry_3 must wait
+    log.LogInfo("entry_1");
+    const bool isWriting = gate.WaitForWrite();
+    log.LogInfo("entry_2");
+    std::atomic<bool> hasReturned{ false };
+    std::thread caller([&log, &hasReturned] {
+        log.LogInfo("entry_3");
+        hasReturned.store(true);
+            });
+    std::this_thread::sleep_for(AbsenceWait);
+    const bool returnedWhileFull = hasReturned.load();
+    gate.Open();
+    caller.join();
+    log.Flush();
+
+    // Assert
+    CheckTrue(initialized, "Initialize should succeed");
+    CheckTrue(isWriting, "The worker should be writing the first entry");
+    CheckFalse(returnedWhileFull, "With Block, a call should wait while the queue is full");
+    const std::vector<std::string> expected{ "[INFO]: entry_1\n", "[INFO]: entry_2\n", "[INFO]: entry_3\n" };
+    CheckTrue(output.Lines == expected, "Every entry should be written, in order");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_TextLogBase::Test_Async_CallReturnsBeforeTheEntryIsWritten()
+{
+    // Arrange
+    TMemoryOutput output;
+    TWriteGate gate;
+    TMemoryTextLog log(output);
+    log.Gate = &gate;
+    const bool initialized = log.Initialize(MakeAsyncConfig());
+
+    // Act: the gate holds the worker's write, not the call
+    log.LogInfo("queued_entry");
+    const bool isWriting = gate.WaitForWrite();
+    const auto lineCountWhileHeld = output.Lines.size();
+    gate.Open();
+    const bool flushed = log.Flush();
+
+    // Assert
+    CheckTrue(initialized, "Initialize should succeed");
+    CheckTrue(isWriting, "The worker should be writing the entry");
+    CheckEquals(0, lineCountWhileHeld, "The call should return before the entry is written");
+    CheckTrue(flushed, "Flush should succeed");
+    CheckEquals(1, output.Lines.size(), "Flush should wait for the queued entry");
+    if (output.Lines.size() == 1)
+    {
+        CheckEquals(std::string("[INFO]: queued_entry\n"), output.Lines[0], "The entry should be formatted as usual");
+        CheckTrue(output.WriteThreadIds[0] != std::this_thread::get_id(), "The logger's own thread should write it");
+    }
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_TextLogBase::Test_Async_DestructorWritesQueuedEntriesBeforeTheShutdownLine()
+{
+    // Arrange
+    TMemoryOutput output;
+    auto config = MakeAsyncConfig();
+    config.Shutdown.WriteLine = true;
+    constexpr int EntryCount = 200;
+
+    // Act
+    bool initialized = false;
+    {
+        TMemoryTextLog log(output);
+        initialized = log.Initialize(config);
+        for (int entry = 0; entry < EntryCount; ++entry)
+            log.LogInfo(std::format("entry_{}", entry));
+    }
+
+    // Assert
+    CheckTrue(initialized, "Initialize should succeed");
+    CheckEquals(EntryCount + 1, output.Lines.size(), "Every queued entry and the shutdown line should be written");
+    if (output.Lines.size() == EntryCount + 1)
+    {
+        CheckEquals(std::string("[INFO]: entry_0\n"), output.Lines.front(), "The queued entries should come first");
+        CheckEquals(std::format("[INFO]: entry_{}\n", EntryCount - 1), output.Lines[EntryCount - 1], "The queued entries should keep their order");
+        CheckStartsWith(output.Lines.back(), "[INFO]: Logger shutdown: ", "The shutdown line should come last");
+    }
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_TextLogBase::Test_Async_DropNewestReportsAndMarksDroppedEntries()
+{
+    // Arrange: a queue of two entries
+    TMemoryOutput output;
+    TWriteGate gate;
+    auto config = MakeAsyncConfig();
+    config.Async.QueueCapacity = 2;
+    config.Async.OverflowPolicy = ASWLog::AsyncOverflowPolicy::DropNewest;
+
+    std::mutex errorsMutex;
+    std::vector<ASWLog::TASWLogError> errors;
+    config.OnError = [&errorsMutex, &errors](const ASWLog::TASWLogError& error) {
+            std::lock_guard<std::mutex> lock(errorsMutex);
+            errors.push_back(error);
+        };
+
+    TMemoryTextLog log(output);
+    log.Gate = &gate;
+    const bool initialized = log.Initialize(config);
+
+    // Act: the worker holds entry_1, entry_2 and entry_3 fill the queue, entry_4 to entry_6 are dropped
+    log.LogInfo("entry_1");
+    const bool isWriting = gate.WaitForWrite();
+    for (int entry = 2; entry <= 6; ++entry)
+        log.LogInfo(std::format("entry_{}", entry));
+
+    gate.Open();
+    log.Flush();
+
+    // Assert
+    CheckTrue(initialized, "Initialize should succeed");
+    CheckTrue(isWriting, "The worker should be writing the first entry");
+    const std::vector<std::string> expected{ "[INFO]: entry_1\n", "[INFO]: entry_2\n", "[INFO]: entry_3\n",
+                                             "[WARN]: Dropped 3 entries: the asynchronous queue was full\n" };
+    CheckTrue(output.Lines == expected, "The entries that fit should be written, then a line where the dropped ones were");
+    std::lock_guard<std::mutex> lock(errorsMutex);
+    CheckEquals(1, errors.size(), "The drop should be reported once");
+    if (errors.size() == 1)
+    {
+        CheckEquals(static_cast<int>(ASWLog::ErrorKind::EntriesDropped), static_cast<int>(errors[0].Kind), "The report should be EntriesDropped");
+        CheckContains(errors[0].Message, "Dropped 3 entries", "The report should say how many were dropped");
+    }
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_TextLogBase::Test_Async_EntriesKeepTheirOrderPerThread()
+{
+    // Arrange
+    TMemoryOutput output;
+    TMemoryTextLog log(output);
+    const bool initialized = log.Initialize(MakeAsyncConfig());
+    constexpr int ThreadCount = 4;
+    constexpr int EntriesPerThread = 500;
+
+    // Act
+    std::vector<std::thread> threads;
+    for (int threadIndex = 0; threadIndex < ThreadCount; ++threadIndex)
+    {
+        threads.emplace_back([&log, threadIndex] {
+                for (int entry = 0; entry < EntriesPerThread; ++entry)
+                    log.LogInfo(std::format("{} {}", threadIndex, entry));
+            });
+    }
+
+    for (auto& thread : threads)
+        thread.join();
+
+    log.Flush();
+
+    // Assert: each thread's entries are in the order it logged them
+    std::vector<int> nextEntry(ThreadCount, 0);
+    int outOfOrder = 0;
+    for (const auto& line : output.Lines)
+    {
+        int threadIndex = -1;
+        int entry = -1;
+        if (std::sscanf(line.c_str(), "[INFO]: %d %d", &threadIndex, &entry) != 2 || threadIndex < 0 || threadIndex >= ThreadCount ||
+            entry != nextEntry[threadIndex])
+        {
+            ++outOfOrder;
+            continue;
+        }
+
+        ++nextEntry[threadIndex];
+    }
+
+    CheckTrue(initialized, "Initialize should succeed");
+    CheckEquals(ThreadCount * EntriesPerThread, output.Lines.size(), "Every entry should be written once");
+    CheckEquals(0, outOfOrder, "Each thread's entries should keep their order");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_TextLogBase::Test_Async_EntryAtWaitAtLevelIsNeverDropped()
+{
+    // Arrange: a queue of one entry that drops entries below the wait level
+    TMemoryOutput output;
+    TWriteGate gate;
+    auto config = MakeAsyncConfig();
+    config.Async.QueueCapacity = 1;
+    config.Async.OverflowPolicy = ASWLog::AsyncOverflowPolicy::DropNewest;
+    config.OnError = [](const ASWLog::TASWLogError& /*error*/) {
+        };
+
+    TMemoryTextLog log(output);
+    log.Gate = &gate;
+    const bool initialized = log.Initialize(config);
+
+    // Act: the worker holds entry_1, entry_2 fills the queue, entry_3 is dropped, the Error entry waits for room
+    log.LogInfo("entry_1");
+    const bool isWriting = gate.WaitForWrite();
+    log.LogInfo("entry_2");
+    log.LogInfo("entry_3");
+    std::atomic<bool> hasReturned{ false };
+    std::thread caller([&log, &hasReturned] {
+        log.LogError("error_entry");
+        hasReturned.store(true);
+            });
+    std::this_thread::sleep_for(AbsenceWait);
+    const bool returnedWhileFull = hasReturned.load();
+    gate.Open();
+    caller.join();
+
+    // Assert
+    CheckTrue(initialized, "Initialize should succeed");
+    CheckTrue(isWriting, "The worker should be writing the first entry");
+    CheckFalse(returnedWhileFull, "The Error entry should wait for room rather than be dropped");
+    const std::vector<std::string> expected{ "[INFO]: entry_1\n", "[INFO]: entry_2\n",
+                                             "[WARN]: Dropped 1 entry: the asynchronous queue was full\n",
+                                             "[ERROR]: error_entry\n" };
+    CheckTrue(output.Lines == expected, "Only the Info entry should be dropped, and the Error entry written");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_TextLogBase::Test_Async_EntryAtWaitAtLevelReturnsOnceWrittenAndFlushed()
+{
+    // Arrange
+    TMemoryOutput output;
+    TWriteGate gate;
+    TMemoryTextLog log(output);
+    log.Gate = &gate;
+    const bool initialized = log.Initialize(MakeAsyncConfig());
+
+    // Act: the worker holds the Info entry, so the Error entry can't be written yet
+    log.LogInfo("info_entry");
+    const bool isWriting = gate.WaitForWrite();
+    std::atomic<bool> hasReturned{ false };
+    std::thread caller([&log, &hasReturned] {
+        log.LogError("error_entry");
+        hasReturned.store(true);
+            });
+    std::this_thread::sleep_for(AbsenceWait);
+    const bool returnedBeforeWrite = hasReturned.load();
+    gate.Open();
+    caller.join();
+
+    // Assert: no Flush() call; the Error call itself waited for the write and the flush
+    CheckTrue(initialized, "Initialize should succeed");
+    CheckTrue(isWriting, "The worker should be writing the Info entry");
+    CheckFalse(returnedBeforeWrite, "The Error call should wait until its entry is written");
+    const std::vector<std::string> expected{ "[INFO]: info_entry\n", "[ERROR]: error_entry\n" };
+    CheckTrue(output.Lines == expected, "Both entries should be written when the Error call returns");
+    CheckGreaterThanOrEqual(output.FlushCount, 1, "The Error entry should be flushed before its call returns");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_TextLogBase::Test_Async_FlushWaitsForQueuedEntries()
+{
+    // Arrange: after writing entry_1, the worker pauses outside the lock (see PauseAfterFirstEntry())
+    TMemoryOutput output;
+    TWriteGate gate;
+    auto config = MakeAsyncConfig();
+    PauseAfterFirstEntry(config);
+    TMemoryTextLog log(output);
+    log.Gate = &gate;
+    const bool initialized = log.Initialize(config);
+
+    // Act
+    log.LogInfo("entry_1");
+    const bool isWriting = gate.WaitForWrite();
+    log.LogInfo("entry_2");
+    std::atomic<bool> hasReturned{ false };
+    std::thread flusher([&log, &hasReturned] {
+        log.Flush();
+        hasReturned.store(true);
+            });
+    std::this_thread::sleep_for(AbsenceWait);
+    const bool returnedBeforeWrite = hasReturned.load();
+    gate.Open();
+    flusher.join();
+
+    // Assert
+    CheckTrue(initialized, "Initialize should succeed");
+    CheckTrue(isWriting, "The worker should be writing the first entry");
+    CheckFalse(returnedBeforeWrite, "Flush should wait for the queued entries");
+    const std::vector<std::string> expected{ "[INFO]: entry_1\n", "[INFO]: entry_2\n" };
+    CheckTrue(output.Lines == expected, "Both entries should be written when Flush returns");
+    CheckEquals(2, output.LineCountAtLastFlush, "Flush should flush after both queued entries are written");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_TextLogBase::Test_Async_LoggingFromOnLogEntryDoesNotWait()
+{
+    // Arrange: OnLogEntry, on the worker, logs an Error entry (which a caller waits for) into a full queue
+    TMemoryOutput output;
+    auto config = MakeAsyncConfig();
+    config.Async.QueueCapacity = 1;
+    config.OnLogEntryMinimumLevel = ASWLog::Level::Info;
+
+    TMemoryTextLog log(output);
+    std::atomic<bool> hasLoggedFromCallback{ false };
+    config.OnLogEntry = [&log, &hasLoggedFromCallback](const ASWLog::TASWLogRecord& record, std::string_view /*line*/) {
+            if (record.LogLevel == ASWLog::Level::Info)
+            {
+                log.LogError("from_callback");
+                log.LogError("from_callback_again");
+                hasLoggedFromCallback.store(true);
+            }
+        };
+    const bool initialized = log.Initialize(config);
+
+    // Act
+    log.LogInfo("trigger");
+    const bool callbackReturned = WaitUntil([&hasLoggedFromCallback] {
+            return hasLoggedFromCallback.load();
+        });
+    log.Flush();
+
+    // Assert
+    CheckTrue(initialized, "Initialize should succeed");
+    CheckTrue(callbackReturned, "Logging from OnLogEntry on the worker should not wait for the worker");
+    const std::vector<std::string> expected{ "[INFO]: trigger\n", "[ERROR]: from_callback\n", "[ERROR]: from_callback_again\n" };
+    CheckTrue(output.Lines == expected, "The entries logged from the callback should be written after it");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_TextLogBase::Test_Async_OnLogEntryRunsOnTheWorkerWithItsOwnCopy()
+{
+    // Arrange
+    TMemoryOutput output;
+    auto config = MakeAsyncConfig();
+    config.OnLogEntryMinimumLevel = ASWLog::Level::Info;
+
+    std::atomic<bool> isCalled{ false };
+    std::string seenMessage;
+    std::string seenLine;
+    std::thread::id seenThreadId;
+    std::size_t lineCountSeen = 0;
+    TMemoryTextLog log(output);
+    config.OnLogEntry = [&](const ASWLog::TASWLogRecord& record, std::string_view line) {
+            seenMessage = record.Message;
+            seenLine = line;
+            seenThreadId = std::this_thread::get_id();
+            lineCountSeen = output.Lines.size(); // The worker wrote them
+            isCalled.store(true);
+        };
+    const bool initialized = log.Initialize(config);
+
+    // Act: the message is overwritten as soon as the call returns
+    {
+        std::string message = "temporary_message";
+        log.LogInfo(message);
+        message.assign(message.size(), 'x');
+    }
+    const bool wasCalled = WaitUntil([&isCalled] {
+            return isCalled.load();
+        });
+
+    // Assert
+    CheckTrue(initialized, "Initialize should succeed");
+    CheckTrue(wasCalled, "OnLogEntry should be called");
+    if (wasCalled)
+    {
+        CheckEquals(std::string("temporary_message"), seenMessage, "The record should hold its own copy of the message");
+        CheckEquals(std::string("[INFO]: temporary_message\n"), seenLine, "The callback should get the line as written");
+        CheckTrue(seenThreadId != std::this_thread::get_id(), "OnLogEntry should run on the logger's own thread");
+        CheckEquals(1, lineCountSeen, "OnLogEntry should run after the entry was written");
+    }
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_TextLogBase::Test_Async_ReconfigureToSyncWritesQueuedEntriesFirst()
+{
+    // Arrange: after writing entry_1, the worker pauses outside the lock (see PauseAfterFirstEntry())
+    TMemoryOutput output;
+    TWriteGate gate;
+    auto config = MakeAsyncConfig();
+    PauseAfterFirstEntry(config);
+    TMemoryTextLog log(output);
+    log.Gate = &gate;
+    const bool initialized = log.Initialize(config);
+
+    // Act: switch to synchronous writing while entries are queued
+    log.LogInfo("entry_1");
+    const bool isWriting = gate.WaitForWrite();
+    log.LogInfo("entry_2");
+    config.Async.Enabled = false;
+    bool reconfigured = false;
+    std::thread reconfigurer([&log, &config, &reconfigured] {
+        reconfigured = log.Reconfigure(config);
+            });
+    std::this_thread::sleep_for(AbsenceWait);
+    gate.Open();
+    reconfigurer.join();
+    log.LogInfo("sync_entry");
+
+    // Assert
+    CheckTrue(initialized, "Initialize should succeed");
+    CheckTrue(isWriting, "The worker should be writing the first entry");
+    CheckTrue(reconfigured, "Reconfigure should succeed");
+    CheckEquals(2, output.LineCountAtLastReconfigure, "Reconfigure should apply the config after the queued entries are written");
+    const std::vector<std::string> expected{ "[INFO]: entry_1\n", "[INFO]: entry_2\n", "[INFO]: sync_entry\n" };
+    CheckTrue(output.Lines == expected, "The queued entries should be written before the synchronous one");
+    if (output.WriteThreadIds.size() == 3)
+        CheckTrue(output.WriteThreadIds[2] == std::this_thread::get_id(), "After the switch, the caller should write its entry");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_TextLogBase::Test_Async_SwitchingOnAndOffKeepsEachThreadsOrder()
+{
+    // Arrange
+    TMemoryOutput output;
+    auto config = MakeAsyncConfig();
+    TMemoryTextLog log(output);
+    const bool initialized = log.Initialize(config);
+    constexpr int ThreadCount = 4;
+    constexpr int MaxEntriesPerThread = 5000;
+
+    // Act: while the threads log, switch between asynchronous and synchronous writing
+    std::atomic<bool> stopLogging{ false };
+    std::vector<std::thread> threads;
+    for (int threadIndex = 0; threadIndex < ThreadCount; ++threadIndex)
+    {
+        threads.emplace_back([&log, &stopLogging, threadIndex] {
+                for (int entry = 0; entry < MaxEntriesPerThread && !stopLogging.load(); ++entry)
+                    log.LogInfo(std::format("{} {}", threadIndex, entry));
+            });
+    }
+
+    int failedReconfigures = 0;
+    for (int change = 0; change < 40; ++change)
+    {
+        config.Async.Enabled = change % 2 != 0;
+        if (!log.Reconfigure(config))
+            ++failedReconfigures;
+    }
+
+    stopLogging.store(true);
+    for (auto& thread : threads)
+        thread.join();
+
+    log.Flush();
+
+    // Assert: each thread's entries are in the order it logged them, none missing
+    std::vector<int> nextEntry(ThreadCount, 0);
+    int outOfOrder = 0;
+    for (const auto& line : output.Lines)
+    {
+        int threadIndex = -1;
+        int entry = -1;
+        if (std::sscanf(line.c_str(), "[INFO]: %d %d", &threadIndex, &entry) != 2 || threadIndex < 0 || threadIndex >= ThreadCount ||
+            entry != nextEntry[threadIndex])
+        {
+            ++outOfOrder;
+            continue;
+        }
+
+        ++nextEntry[threadIndex];
+    }
+
+    Log(std::format("  Wrote {} entries while switching", output.Lines.size()));
+    CheckTrue(initialized, "Initialize should succeed");
+    CheckEquals(0, failedReconfigures, "Every Reconfigure should succeed");
+    CheckEquals(0, outOfOrder, "Each thread's entries should keep their order, with none missing, across the switches");
+}
 //---------------------------------------------------------------------------
 void TTest_ASWLog_TextLogBase::Test_Finalize_WritesShutdownLineFromDestructor()
 {

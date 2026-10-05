@@ -41,6 +41,8 @@ namespace ASWUnitTests
 TTest_ASWLog_Types::TTest_ASWLog_Types()
     : inherited("ASWLog_Types_Tests")
 {
+    RegisterTest(&TTest_ASWLog_Types::Test_AsyncOverflowPolicy_FromString, "AsyncOverflowPolicy_FromString");
+    RegisterTest(&TTest_ASWLog_Types::Test_AsyncOverflowPolicy_ToString, "AsyncOverflowPolicy_ToString");
     RegisterTest(&TTest_ASWLog_Types::Test_ColorMode_FromString, "ColorMode_FromString");
     RegisterTest(&TTest_ASWLog_Types::Test_ColorMode_ToString, "ColorMode_ToString");
     RegisterTest(&TTest_ASWLog_Types::Test_ErrorKind_ToString, "ErrorKind_ToString");
@@ -76,6 +78,31 @@ void TTest_ASWLog_Types::TearDown_Test(ITestCase& /*testCase*/)
 
 // /////// Begin tests after this line ///////////////////////
 
+//---------------------------------------------------------------------------
+void TTest_ASWLog_Types::Test_AsyncOverflowPolicy_FromString()
+{
+    // Arrange
+    const auto block = ASWLog::AsyncOverflowPolicy_FromString("BLOCK");
+    const auto dropNewest = ASWLog::AsyncOverflowPolicy_FromString("DROP_NEWEST");
+    const auto dropNewestAlias_mixedCase = ASWLog::AsyncOverflowPolicy_FromString("DropNewest");
+    const auto unknown = ASWLog::AsyncOverflowPolicy_FromString("DROP_OLDEST");
+
+    // Act & Assert
+    CheckTrue(block.has_value(), "BLOCK should parse");
+    CheckTrue(dropNewest.has_value(), "DROP_NEWEST should parse");
+    CheckTrue(dropNewestAlias_mixedCase.has_value(), "DropNewest should parse");
+    CheckFalse(unknown.has_value(), "An unknown string should not parse");
+    CheckEquals(static_cast<int32_t>(ASWLog::AsyncOverflowPolicy::Block), static_cast<int32_t>(*block), "BLOCK should map to Block");
+    CheckEquals(static_cast<int32_t>(ASWLog::AsyncOverflowPolicy::DropNewest), static_cast<int32_t>(*dropNewest), "DROP_NEWEST should map to DropNewest");
+    CheckEquals(static_cast<int32_t>(ASWLog::AsyncOverflowPolicy::DropNewest), static_cast<int32_t>(*dropNewestAlias_mixedCase), "DropNewest should map to DropNewest");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_Types::Test_AsyncOverflowPolicy_ToString()
+{
+    // Arrange / Act / Assert
+    CheckEquals(std::string("BLOCK"), std::string(ASWLog::AsyncOverflowPolicy_ToString(ASWLog::AsyncOverflowPolicy::Block)), "Block should stringify as BLOCK");
+    CheckEquals(std::string("DROP_NEWEST"), std::string(ASWLog::AsyncOverflowPolicy_ToString(ASWLog::AsyncOverflowPolicy::DropNewest)), "DropNewest should stringify as DROP_NEWEST");
+}
 //---------------------------------------------------------------------------
 void TTest_ASWLog_Types::Test_ColorMode_FromString()
 {
@@ -122,7 +149,8 @@ void TTest_ASWLog_Types::Test_ErrorKind_ToString()
     CheckEquals(std::string("ROTATION_FAILED"), std::string(ASWLog::ErrorKind_ToString(ASWLog::ErrorKind::RotationFailed)), "RotationFailed should stringify as ROTATION_FAILED");
     CheckEquals(std::string("DELETE_FAILED"), std::string(ASWLog::ErrorKind_ToString(ASWLog::ErrorKind::DeleteFailed)), "DeleteFailed should stringify as DELETE_FAILED");
     CheckEquals(std::string("EXCEPTION"), std::string(ASWLog::ErrorKind_ToString(ASWLog::ErrorKind::Exception)), "Exception should stringify as EXCEPTION");
-    CheckEquals(static_cast<std::size_t>(ASWLog::ErrorKind::Exception) + 1, ASWLog::ErrorKindCount, "ErrorKindCount should count every kind (Exception is the last)");
+    CheckEquals(std::string("ENTRIES_DROPPED"), std::string(ASWLog::ErrorKind_ToString(ASWLog::ErrorKind::EntriesDropped)), "EntriesDropped should stringify as ENTRIES_DROPPED");
+    CheckEquals(static_cast<std::size_t>(ASWLog::ErrorKind::EntriesDropped) + 1, ASWLog::ErrorKindCount, "ErrorKindCount should count every kind (EntriesDropped is the last)");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_Types::Test_FlushMode_FromString()

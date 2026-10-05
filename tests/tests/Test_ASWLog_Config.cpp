@@ -80,6 +80,10 @@ void TTest_ASWLog_Config::Test_Defaults_MatchDocumentedValues()
     CheckTrue(config.OnLogEntry == nullptr, "OnLogEntry should default to unset");
     CheckTrue(config.OnLogEntryMinimumLevel == ASWLog::Level::Error, "OnLogEntryMinimumLevel should default to Error");
     CheckTrue(config.OnError == nullptr, "OnError should default to unset (reports go to stderr)");
+    CheckFalse(config.Async.Enabled, "Async.Enabled should default to false");
+    CheckEquals(8192, config.Async.QueueCapacity, "Async.QueueCapacity should default to 8192");
+    CheckTrue(config.Async.OverflowPolicy == ASWLog::AsyncOverflowPolicy::Block, "Async.OverflowPolicy should default to Block");
+    CheckTrue(config.Async.WaitAtLevel == ASWLog::Level::Error, "Async.WaitAtLevel should default to Error");
     CheckTrue(config.ErrorReportInterval == std::chrono::minutes(1), "ErrorReportInterval should default to 1 minute");
 
     // Assert: Line

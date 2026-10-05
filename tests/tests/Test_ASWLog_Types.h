@@ -36,6 +36,8 @@ private:
     typedef TTestGroupBase inherited;
 
 private: // Test methods
+    void Test_AsyncOverflowPolicy_FromString();
+    void Test_AsyncOverflowPolicy_ToString();
     void Test_ColorMode_FromString();
     void Test_ColorMode_ToString();
     void Test_ErrorKind_ToString();
