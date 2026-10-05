@@ -25,10 +25,10 @@ limitations under the License.
 #include "Test_ASWLog_TextLogBase.h"
 //---------------------------------------------------------------------------
 #include <atomic>
+#include <charconv>
 #include <chrono>
 #include <condition_variable>
 #include <cstddef>
-#include <cstdio>
 #include <filesystem>
 #include <format>
 #include <fstream>
@@ -39,6 +39,7 @@ limitations under the License.
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <system_error>
 #include <thread>
 #include <utility>
 #include <vector>
@@ -263,6 +264,43 @@ public:
         throw std::runtime_error("format failed");
     }
 };
+
+// For lines "[INFO]: <thread index> <entry>\n" from 'threadCount' threads that each logged their entries 0, 1, 2, ...:
+// counts the lines that don't parse, name an unknown thread, or aren't that thread's next entry (out of order,
+// repeated, or after a missing one)
+int CountOutOfOrderEntries(const std::vector<std::string>& lines, int threadCount)
+{
+    constexpr std::string_view Prefix = "[INFO]: ";
+    std::vector<int> nextEntry(threadCount, 0);
+    int outOfOrder = 0;
+    for (const std::string_view line : lines)
+    {
+        const char* const end = line.data() + line.size();
+        int threadIndex = -1;
+        int entry = -1;
+        bool isParsed = line.starts_with(Prefix);
+        if (isParsed)
+        {
+            const auto threadResult = std::from_chars(line.data() + Prefix.size(), end, threadIndex);
+            isParsed = threadResult.ec == std::errc() && threadResult.ptr != end && *threadResult.ptr == ' ';
+            if (isParsed)
+            {
+                const auto entryResult = std::from_chars(threadResult.ptr + 1, end, entry);
+                isParsed = entryResult.ec == std::errc() && std::string_view(entryResult.ptr, end) == "\n";
+            }
+        }
+
+        if (!isParsed || threadIndex < 0 || threadIndex >= threadCount || entry != nextEntry[threadIndex])
+        {
+            ++outOfOrder;
+            continue;
+        }
+
+        ++nextEntry[threadIndex];
+    }
+
+    return outOfOrder;
+}
 
 ASWLog::TASWLogConfig MakeQuietConfig(); // See below
 
@@ -571,25 +609,9 @@ void TTest_ASWLog_TextLogBase::Test_Async_EntriesKeepTheirOrderPerThread()
     log.Flush();
 
     // Assert: each thread's entries are in the order it logged them
-    std::vector<int> nextEntry(ThreadCount, 0);
-    int outOfOrder = 0;
-    for (const auto& line : output.Lines)
-    {
-        int threadIndex = -1;
-        int entry = -1;
-        if (std::sscanf(line.c_str(), "[INFO]: %d %d", &threadIndex, &entry) != 2 || threadIndex < 0 || threadIndex >= ThreadCount ||
-            entry != nextEntry[threadIndex])
-        {
-            ++outOfOrder;
-            continue;
-        }
-
-        ++nextEntry[threadIndex];
-    }
-
     CheckTrue(initialized, "Initialize should succeed");
     CheckEquals(ThreadCount * EntriesPerThread, output.Lines.size(), "Every entry should be written once");
-    CheckEquals(0, outOfOrder, "Each thread's entries should keep their order");
+    CheckEquals(0, CountOutOfOrderEntries(output.Lines, ThreadCount), "Each thread's entries should keep their order");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_TextLogBase::Test_Async_EntryAtWaitAtLevelIsNeverDropped()
@@ -847,26 +869,11 @@ void TTest_ASWLog_TextLogBase::Test_Async_SwitchingOnAndOffKeepsEachThreadsOrder
     log.Flush();
 
     // Assert: each thread's entries are in the order it logged them, none missing
-    std::vector<int> nextEntry(ThreadCount, 0);
-    int outOfOrder = 0;
-    for (const auto& line : output.Lines)
-    {
-        int threadIndex = -1;
-        int entry = -1;
-        if (std::sscanf(line.c_str(), "[INFO]: %d %d", &threadIndex, &entry) != 2 || threadIndex < 0 || threadIndex >= ThreadCount ||
-            entry != nextEntry[threadIndex])
-        {
-            ++outOfOrder;
-            continue;
-        }
-
-        ++nextEntry[threadIndex];
-    }
-
     Log(std::format("  Wrote {} entries while switching", output.Lines.size()));
     CheckTrue(initialized, "Initialize should succeed");
     CheckEquals(0, failedReconfigures, "Every Reconfigure should succeed");
-    CheckEquals(0, outOfOrder, "Each thread's entries should keep their order, with none missing, across the switches");
+    CheckEquals(0, CountOutOfOrderEntries(output.Lines, ThreadCount),
+        "Each thread's entries should keep their order, with none missing, across the switches");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_TextLogBase::Test_Finalize_WritesShutdownLineFromDestructor()
