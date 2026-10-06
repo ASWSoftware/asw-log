@@ -47,6 +47,29 @@ limitations under the License.
 namespace ASWLog
 {
 
+//---------------------------------------------------------------------------
+// Internals of the loggers. Not part of the public interface.
+//---------------------------------------------------------------------------
+namespace Detail
+{
+
+/////////////////////////////////////////////////////////////////////////////
+// TMutex
+//
+// A std::mutex that tells ThreadSanitizer when it is destroyed, for the loggers' own locks. libstdc++'s std::mutex
+// never destroys its pthread mutex, so ThreadSanitizer would take a later mutex at the same address (e.g. another
+// logger's, on a reused stack) for this one, and report lock-order inversions between unrelated loggers. Locked as a
+// std::mutex. Its destructor does nothing in other builds.
+/////////////////////////////////////////////////////////////////////////////
+class TMutex : public std::mutex
+{
+public:
+    TMutex() = default;
+    ~TMutex();
+};
+
+} // namespace Detail
+
 /////////////////////////////////////////////////////////////////////////////
 // TASWLogBase
 //
@@ -99,7 +122,7 @@ private:
 
     // The backtrace, guarded by m_BacktraceMutex: at most m_BacktraceCapacity entries, the oldest at m_BacktraceOldest
     // (0 until it is full, then a new entry replaces it). Lock order: a derived logger's own lock before this one.
-    mutable std::mutex m_BacktraceMutex;
+    mutable Detail::TMutex m_BacktraceMutex;
     std::vector<TBacktraceEntry> m_Backtrace;
     std::size_t m_BacktraceOldest = 0;
     std::size_t m_BacktraceCapacity = 0;
@@ -109,7 +132,7 @@ private:
     // The config, an immutable snapshot that SetConfig() replaces as a whole (never null). The pointer is changed with
     // m_ConfigMutex held, by a thread that also holds the derived logger's own lock; GetConfig() reads it with
     // m_ConfigMutex held, and the derived logger with its own lock held (see GetConfigUnlocked()).
-    mutable std::mutex m_ConfigMutex;
+    mutable Detail::TMutex m_ConfigMutex;
     std::shared_ptr<const TASWLogConfig> m_Config{ std::make_shared<const TASWLogConfig>() };
 
     // When ReportError() last reported each ErrorKind, and how many it left out since (see
@@ -121,7 +144,7 @@ private:
         bool HasReported = false;
     };
 
-    std::mutex m_ErrorReportMutex;
+    Detail::TMutex m_ErrorReportMutex;
     std::array<TErrorReportState, ErrorKindCount> m_ErrorReportStates{};
 
 private:

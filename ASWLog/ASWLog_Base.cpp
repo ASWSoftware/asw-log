@@ -38,6 +38,20 @@ limitations under the License.
 #include "ASWLog_Utils.h" // For GetCurrentOSProcessId(), GetCurrentOSThreadId()
 //---------------------------------------------------------------------------
 
+// A ThreadSanitizer build, whose runtime has the annotation Detail::TMutex uses (declared here as in
+// <sanitizer/tsan_interface.h>)
+#if defined(__SANITIZE_THREAD__)
+#define ASWLOG_THREAD_SANITIZER 1
+#elif defined(__has_feature)
+#if __has_feature(thread_sanitizer)
+#define ASWLOG_THREAD_SANITIZER 1
+#endif
+#endif
+
+#if defined(ASWLOG_THREAD_SANITIZER)
+extern "C" void __tsan_mutex_destroy(void* addr, unsigned flags);
+#endif
+
 namespace ASWLog
 {
 
@@ -66,6 +80,28 @@ public:
 };
 
 } // namespace
+
+//---------------------------------------------------------------------------
+
+namespace Detail
+{
+
+/////////////////////////////////////////////////////////////////////////////
+// TMutex
+/////////////////////////////////////////////////////////////////////////////
+
+//---------------------------------------------------------------------------
+TMutex::~TMutex()
+{
+#if defined(ASWLOG_THREAD_SANITIZER)
+    // What the pthread_mutex_destroy() that libstdc++ leaves out would tell it (libc++ calls it too, which is harmless)
+    __tsan_mutex_destroy(native_handle(), 0);
+#endif
+}
+
+//---------------------------------------------------------------------------
+
+} // namespace Detail
 
 //---------------------------------------------------------------------------
 

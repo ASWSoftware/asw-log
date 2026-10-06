@@ -68,11 +68,11 @@ private:
 
 private:
     std::vector<IASWLog*> m_Sinks;
-    mutable std::mutex m_ListMutex; // Protects only the sink list; each sink manages its own internal thread-safety.
+    mutable Detail::TMutex m_ListMutex; // Protects only the sink list; each sink manages its own internal thread-safety.
     // Serializes Initialize()/Reconfigure()/Close() changes to m_IsInitialized and the config (the lock under which
     // this class calls SetConfig()). Never held while calling into a sink, which may call back into this logger (e.g.
     // from an OnLogEntry callback).
-    std::mutex m_StateMutex;
+    Detail::TMutex m_StateMutex;
 
 private:
     std::vector<IASWLog*> SnapshotSinks() const;

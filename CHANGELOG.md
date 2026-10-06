@@ -92,6 +92,12 @@ see [0.26.1](#0261---2026-09-17) for the initial versioned baseline.
   `Threads::Threads`; other Linux builds may need `-pthread`. A logger
   derived from `TASWTextLogBase` can use the same thread through the new
   protected hooks `GetWorkerIntervalUnlocked()` and `OnWorkerWakeUnlocked()`.
+- In a ThreadSanitizer build with libstdc++ (GCC's standard library, which
+  Clang also uses on most Linux systems), destroying a logger now tells
+  ThreadSanitizer that its locks are gone. ThreadSanitizer used to take the
+  locks of a logger created later at the same address (e.g. on the stack)
+  for the old ones, and could report a lock-order inversion (potential
+  deadlock) between loggers that never existed at the same time.
 
 ## [0.66.0] - 2026-10-04
 

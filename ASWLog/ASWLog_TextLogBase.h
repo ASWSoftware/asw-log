@@ -92,7 +92,7 @@ private:
     friend class Detail::TCrashHandling;
 
 protected:
-    mutable std::mutex m_Mutex; // Serializes the writes, and the derived logger's own state
+    mutable Detail::TMutex m_Mutex; // Serializes the writes, and the derived logger's own state
     std::atomic<bool> m_IsOpen{ false };
 
 private:
@@ -115,11 +115,11 @@ private:
 
     // The worker thread (see GetWorkerIntervalUnlocked() and TASWAsyncConfig). m_WorkerMutex guards m_Worker and is
     // held by UpdateWorker() (never on the worker thread) while it starts, stops or joins the worker.
-    std::mutex m_WorkerMutex;
+    Detail::TMutex m_WorkerMutex;
     std::thread m_Worker;
 
     // The queue and the worker's state, guarded by m_QueueMutex. Lock order: m_Mutex before m_QueueMutex.
-    std::mutex m_QueueMutex;
+    Detail::TMutex m_QueueMutex;
     std::condition_variable m_WorkerWakeup; // The worker waits on it: an entry was queued, or a stop or a new interval
     std::condition_variable m_QueueChanged; // Callers wait on it: room in the queue, entries written, async switched
     std::deque<TQueuedEntry> m_Queue;
