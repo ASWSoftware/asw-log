@@ -47,6 +47,58 @@ namespace ASWLog
 class IASWLogFormatter; // See ASWLog_Formatter.h
 
 /////////////////////////////////////////////////////////////////////////////
+// TASWAsyncConfig
+//
+// Asynchronous writing (TASWLogConfig::Async), for a text logger (file, console). Off by default: a synchronous logger
+// has written each entry when the call returns, which is the safest for finding the cause of a crash. With it on, the
+// logging call formats the entry and queues it, and a thread of the logger's own writes the queued entries in order,
+// so the call doesn't wait for the output. Entries still queued when the application crashes are lost, except those
+// at or above WaitAtLevel. Flush(), Close(), Reconfigure() and the logger's destructor first wait for the queued
+// entries to be written. OnLogEntry is called on the logger's thread, after the entry was written. It pays off when
+// writing is slow (e.g. File.Flush = EveryWrite, the default: a call then costs about as much as formatting its line);
+// with buffered output (e.g. FlushMode::Manual), queuing an entry can cost the caller a little more than writing it.
+/////////////////////////////////////////////////////////////////////////////
+struct TASWAsyncConfig
+{
+    bool Enabled = false;
+    // How many entries can wait in the queue. When it is full, OverflowPolicy decides.
+    std::size_t QueueCapacity = 8192;
+    AsyncOverflowPolicy OverflowPolicy = AsyncOverflowPolicy::Block;
+    // The call of an entry at or above this level returns only once the entry, and every entry queued before it, has
+    // been written and flushed (whatever File.Flush says; File.SyncToDiskAtLevel still syncs it), so it is in the file
+    // if the application crashes right after. Such an entry is never dropped: it waits for room in the queue.
+    // Level::Off = no entry waits.
+    Level WaitAtLevel = Level::Error;
+};
+
+
+/////////////////////////////////////////////////////////////////////////////
+// TASWBacktraceConfig
+//
+// A backtrace (TASWLogConfig::Backtrace): the logger keeps its most recent entries below its minimum level, at or
+// above LowestLevel, in memory, and writes them when an entry at or above DumpAtLevel is written (just before that
+// entry), when DumpBacktrace() is called, or when the application crashes (see InstallCrashHandlers()), then forgets
+// them. So a log written at Info still shows the Debug and Trace entries that led up to an error. The kept entries are
+// written between two Info lines, "Backtrace: the last N entries below the minimum level" and "Backtrace end", with
+// their own time, level, thread and location. Off by default (Capacity 0). Keeping an entry costs about as much as
+// copying its message, so the *Fmt methods also format the entries at the kept levels (see IASWLog::ShouldLog()).
+//
+// Each logger keeps its own backtrace, of what is below its own minimum level. A multi-log keeps none and filters with
+// its own minimum level first: to give its loggers' backtraces the lower levels, set its minimum level to LowestLevel
+// or lower.
+/////////////////////////////////////////////////////////////////////////////
+struct TASWBacktraceConfig
+{
+    // How many entries are kept; once full, a new one replaces the oldest. 0 = no backtrace.
+    std::size_t Capacity = 0;
+    Level LowestLevel = Level::Trace; // Entries below it aren't kept. Level::Off = no backtrace.
+    // Writing an entry at or above this level (forced and raw entries too) writes the backtrace first. Level::Off =
+    // only DumpBacktrace() and a crash write it.
+    Level DumpAtLevel = Level::Error;
+};
+
+
+/////////////////////////////////////////////////////////////////////////////
 // TASWBackupInfo
 //
 // A backup a file logger made by rotating its log, as passed to TASWFileConfig::OnBackupCreated.
@@ -76,7 +128,10 @@ struct TASWFileConfig
     bool AutoOpenClosePerWrite = false;
 
     FlushMode Flush = FlushMode::EveryWrite;
-    std::chrono::milliseconds FlushInterval{ 1000 }; // Used by FlushMode::Periodic
+    // FlushMode::Periodic: a thread of the logger's own flushes the file this often, also when nothing more is logged.
+    // 0 or less = every entry is flushed, as with EveryWrite. Not used with AutoOpenClosePerWrite, which closes (and so
+    // flushes) the file after every entry.
+    std::chrono::milliseconds FlushInterval{ 1000 };
     // An entry at or above this level (raw ones too) is flushed as soon as it is written, whatever Flush says, so it
     // is in the file if the application crashes right after. Level::Off = only Flush decides.
     Level FlushImmediatelyAtLevel = Level::Error;
@@ -108,7 +163,8 @@ struct TASWFileConfig
     // --- Backup Event ---
     // Called once for each backup that rotation makes, e.g. to compress it, upload it or move it elsewhere. Called
     // outside the logger's lock, on the thread whose call rotated the log (a logging call, Initialize(), Reconfigure()
-    // or RotateLogFiles()), so that call waits for it: hand slow work to another thread. Exceptions are swallowed. The
+    // or RotateLogFiles(); with Async.Enabled, the logger's own thread writes the entries and so rotates the log), so
+    // that call waits for it: hand slow work to another thread. Exceptions are swallowed. The
     // backup cleanup below runs after it, so the backup still exists during the call. A backup it renames out of the
     // "<stem>.<reason>.<time>.bak" form (e.g. to ".bak.gz") is the application's to clean up from then on. With
     // AutoOpenClosePerWrite, only the process that rotated the shared log calls it. Not called if the rotation failed
@@ -177,12 +233,15 @@ struct TASWLineConfig
 /////////////////////////////////////////////////////////////////////////////
 // TASWShutdownConfig
 //
-// The line a text logger writes when it shuts down (TASWLogConfig::Shutdown).
+// The lines a text logger writes when it shuts down, or when the application crashes (TASWLogConfig::Shutdown).
 /////////////////////////////////////////////////////////////////////////////
 struct TASWShutdownConfig
 {
     bool WriteLine = true; // "Logger shutdown: <time>", followed by the banner if set
     std::string Banner;
+    // A Critical "Crash: <reason>" line when the application crashes (see InstallCrashHandlers() and HandleCrash()). The
+    // logger is flushed on a crash either way.
+    bool WriteCrashLine = true;
 };
 
 
@@ -222,21 +281,24 @@ struct TASWLogConfig
     TASWStartupConfig Startup;
     TASWShutdownConfig Shutdown;
     TASWFileConfig File;
+    TASWAsyncConfig Async;
+    TASWBacktraceConfig Backtrace;
 
     // --- Log Entry Callback Options ---
     // Receives the entry's record (with its time and ids) and the line as written. Both are only valid during the call.
     using LogCallback = std::function<void (const TASWLogRecord& record, std::string_view formattedLine)>;
-    LogCallback OnLogEntry; // Optional hook invoked after a successful write (e.g. alerting/crash-reporting). Invoked outside the sink's internal lock; exceptions are swallowed.
+    LogCallback OnLogEntry; // Optional hook invoked after a successful write (e.g. alerting/crash-reporting). Invoked outside the sink's internal lock; exceptions are swallowed. With Async.Enabled, invoked on the logger's own thread.
     Level OnLogEntryMinimumLevel = Level::Error; // Independent threshold gating OnLogEntry (Off = never); unrelated to InitialMinimumLevel or the Force* APIs.
 
     // --- Error Reporting Options ---
     // Receives the logger's internal failures (e.g. the log file can't be opened, written, flushed or rotated), which
     // would otherwise only show as missing entries. Empty: each report is written to stderr as one line (see
     // TASWLogError::ToString()). Called outside the logger's lock, on a thread that was using the logger (e.g. logging,
-    // or calling Flush() or Close()), so it may log to another logger; exceptions are swallowed. Failures caused by the
-    // handler itself, on its own thread, aren't reported again, so a handler that logs to the failing logger doesn't
-    // recurse. A multi-log passes it on to its loggers, which report their own failures. A *Fmt format error isn't a
-    // failure: the entry is written with the error in its line (see RuntimeFormat()).
+    // or calling Flush() or Close()) or on the logger's own thread (e.g. a failed FlushMode::Periodic flush), so it may
+    // log to another logger; exceptions are swallowed. Failures caused by the handler itself, on its own thread, aren't
+    // reported again, so a handler that logs to the failing logger doesn't recurse. A multi-log passes it on to its
+    // loggers, which report their own failures. A *Fmt format error isn't a failure: the entry is written with the
+    // error in its line (see RuntimeFormat()).
     using ErrorCallback = std::function<void (const TASWLogError& error)>;
     ErrorCallback OnError;
     // Limits the reports, to OnError or to stderr alike: a logger reports each ErrorKind at most once per interval,

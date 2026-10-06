@@ -116,7 +116,7 @@ void TTest_ASWLog_Version::Test_GetVersionStr_ReturnsVersion()
     const auto version = logger.GetVersionStr();
 
     // Assert
-    CheckEquals(std::string(ASWLOG_VERSION_STRING), std::string(version), __func__, __LINE__,
+    CheckEquals(std::string(ASWLOG_VERSION_STRING), std::string(version),
         "GetVersionStr() should return ASWLOG_VERSION_STRING");
 }
 //---------------------------------------------------------------------------
@@ -136,7 +136,7 @@ void TTest_ASWLog_Version::Test_PreRelease_IsValidSemVer()
     }
 
     // Assert
-    CheckTrue(isValid, __func__, __LINE__,
+    CheckTrue(isValid,
         "ASWLOG_VERSION_PRERELEASE should be empty or SemVer pre-release identifiers: " + std::string(preRelease));
 }
 //---------------------------------------------------------------------------
@@ -152,7 +152,7 @@ void TTest_ASWLog_Version::Test_VersionString_MatchesParts()
     const std::string version = ASWLog::Version;
 
     // Assert
-    CheckEquals(expected, version, __func__, __LINE__,
+    CheckEquals(expected, version,
         "ASWLOG_VERSION_STRING should be MAJOR.MINOR.PATCH, plus -PRERELEASE if there is one");
 }
 //---------------------------------------------------------------------------

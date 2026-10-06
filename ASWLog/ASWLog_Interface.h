@@ -193,6 +193,11 @@ public:
     virtual bool Flush() noexcept = 0;
     virtual bool IsOpen() const noexcept = 0;
 
+    // Writes the backtrace now (the entries kept below the minimum level, see TASWBacktraceConfig) and forgets it, e.g.
+    // when the application detects a problem that isn't logged as an error. Does nothing if the backtrace is empty or
+    // the logger is disabled. A multi-log passes it on to every logger it holds.
+    virtual void DumpBacktrace() noexcept = 0;
+
     // Whether the logger writes anything at all. While disabled, nothing is written, not even LogForce*() entries or
     // the startup and shutdown lines, but the output stays open and the minimum level is kept. Enabled by default.
     // Lock-free, so it can be changed from any thread at any time.
@@ -204,15 +209,17 @@ public:
     virtual Level GetMinimumLevel() const noexcept = 0;
     virtual void SetMinimumLevel(Level level) noexcept = 0;
 
-    // True if Log()/LogRaw() would write an entry at 'level': the logger is enabled, 'level' isn't Off, and it meets
-    // the minimum level (a multi-log also needs one of its loggers to accept it). The *Fmt methods use it to skip
-    // formatting an entry that wouldn't be written; use it the same way to skip building an expensive message.
+    // True if Log()/LogRaw() would use an entry at 'level': the logger is enabled, 'level' isn't Off, and it meets the
+    // minimum level, or the backtrace keeps it (see TASWBacktraceConfig; a multi-log also needs one of its loggers to
+    // accept it). The *Fmt methods use it to skip formatting an entry that wouldn't be used; use it the same way to
+    // skip building an expensive message.
     virtual bool ShouldLog(Level level) const noexcept = 0;
 
     // Receives every entry: from the logging methods below, or passed on by another logger (e.g. a multi-log). Writes
-    // it unless the logger is disabled, its level is Off, or it is below the minimum level and not record.Forced. A
-    // logger that writes it first fills in the record's Timestamp, ProcessId and ThreadId if they are still zero, on
-    // the calling thread (see TASWLogRecord). An entry that can't be written (e.g. out of memory) is dropped.
+    // it unless the logger is disabled, its level is Off, or it is below the minimum level and not record.Forced (the
+    // backtrace may keep such an entry, see TASWBacktraceConfig). A logger that writes or keeps it first fills in the
+    // record's Timestamp, ProcessId and ThreadId if they are still zero, on the calling thread (see TASWLogRecord). An
+    // entry that can't be written (e.g. out of memory) is dropped.
     virtual void Write(const TASWLogRecord& record) noexcept = 0;
 
     // --- Non-virtual Inline Logging Methods ---

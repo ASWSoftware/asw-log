@@ -26,6 +26,7 @@ limitations under the License.
 #include <string_view>
 //---------------------------------------------------------------------------
 #include "ASWLog_ConsoleLog.h"
+#include "ASWLog_CrashHandler.h"
 #include "ASWLog_FileLog.h"
 #include "ASWLog_MultiLog.h"
 #include "ASWLog_Utils.h"
@@ -109,6 +110,11 @@ int main(int argc, char* argv[])
     }
 
     std::cout << "Using singleton logger: " << globalLogger.GetFullVersionStr() << "\n";
+
+    // If the application crashes from here on (std::terminate(), abort(), an access violation, ...), every initialized
+    // logger is flushed and gets a "Crash: <reason>" line before the crash is passed on to the system
+    if (!ASWLog::InstallCrashHandlers())
+        std::cerr << "Warning: Couldn't install every crash handler\n";
 
     // A static object constructed after the first GetInstance() call is destroyed before the singleton is finalized at
     // exit, so its destructor's entry is written just before the shutdown banner

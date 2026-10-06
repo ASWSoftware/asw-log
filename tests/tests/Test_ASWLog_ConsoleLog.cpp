@@ -338,8 +338,8 @@ void TTest_ASWLog_ConsoleLog::Test_ColorModeAlways_WrapsOutputWithAnsiCodes()
     logger.Close();
 
     // Assert
-    CheckTrue(initialized, __func__, __LINE__, "Initialize should succeed");
-    CheckTrue(outCapture.Str().find("\x1b[") != std::string::npos, __func__, __LINE__, "ColorMode::Always should wrap output with ANSI escape codes");
+    CheckTrue(initialized, "Initialize should succeed");
+    CheckContains(outCapture.Str(), "\x1b[", "ColorMode::Always should wrap output with ANSI escape codes");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_ConsoleLog::Test_ColorModeAuto_ColorsOnlyStreamsThatSupportIt()
@@ -364,11 +364,11 @@ void TTest_ASWLog_ConsoleLog::Test_ColorModeAuto_ColorsOnlyStreamsThatSupportIt(
     const auto errContents = errCapture.Str();
 
     // Assert
-    CheckTrue(initialized, __func__, __LINE__, "Initialize should succeed");
-    CheckTrue(logger.GetColorMode() == ASWLog::ColorMode::Auto, __func__, __LINE__, "ColorMode should default to Auto");
-    CheckTrue(outContents.find("\x1b[") != std::string::npos, __func__, __LINE__, "Auto should color a stream that shows colors");
-    CheckTrue(errContents.find("\x1b[") == std::string::npos, __func__, __LINE__, "Auto should not color a stream that doesn't show colors, such as a file or a pipe");
-    CheckTrue(errContents.find("stderr_message") != std::string::npos, __func__, __LINE__, "The uncolored message should still be written");
+    CheckTrue(initialized, "Initialize should succeed");
+    CheckTrue(logger.GetColorMode() == ASWLog::ColorMode::Auto, "ColorMode should default to Auto");
+    CheckContains(outContents, "\x1b[", "Auto should color a stream that shows colors");
+    CheckNotContains(errContents, "\x1b[", "Auto should not color a stream that doesn't show colors, such as a file or a pipe");
+    CheckContains(errContents, "stderr_message", "The uncolored message should still be written");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_ConsoleLog::Test_ColorModeAuto_HonorsNoColor()
@@ -407,10 +407,10 @@ void TTest_ASWLog_ConsoleLog::Test_ColorModeAuto_HonorsNoColor()
     }
 
     // Assert
-    CheckTrue(autoInitialized && alwaysInitialized, __func__, __LINE__, "Initialize should succeed");
-    CheckTrue(autoContents.find("\x1b[") == std::string::npos, __func__, __LINE__, "Auto should not color any stream when NO_COLOR is set");
-    CheckTrue(autoContents.find("auto_message") != std::string::npos, __func__, __LINE__, "The uncolored message should still be written");
-    CheckTrue(alwaysContents.find("\x1b[") != std::string::npos, __func__, __LINE__, "Always should color even when NO_COLOR is set");
+    CheckTrue(autoInitialized && alwaysInitialized, "Initialize should succeed");
+    CheckNotContains(autoContents, "\x1b[", "Auto should not color any stream when NO_COLOR is set");
+    CheckContains(autoContents, "auto_message", "The uncolored message should still be written");
+    CheckContains(alwaysContents, "\x1b[", "Always should color even when NO_COLOR is set");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_ConsoleLog::Test_ColorModeNever_SuppressesAnsiCodes()
@@ -431,9 +431,9 @@ void TTest_ASWLog_ConsoleLog::Test_ColorModeNever_SuppressesAnsiCodes()
     const auto contents = outCapture.Str();
 
     // Assert
-    CheckTrue(initialized, __func__, __LINE__, "Initialize should succeed");
-    CheckTrue(contents.find("\x1b[") == std::string::npos, __func__, __LINE__, "ColorMode::Never should suppress all ANSI escape codes");
-    CheckTrue(contents.find("plain_message") != std::string::npos, __func__, __LINE__, "The message should still be written");
+    CheckTrue(initialized, "Initialize should succeed");
+    CheckNotContains(contents, "\x1b[", "ColorMode::Never should suppress all ANSI escape codes");
+    CheckContains(contents, "plain_message", "The message should still be written");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_ConsoleLog::Test_Flush_FlushesStdOutAndStdErrWhileOpen()
@@ -465,12 +465,12 @@ void TTest_ASWLog_ConsoleLog::Test_Flush_FlushesStdOutAndStdErrWhileOpen()
     }
 
     // Assert
-    CheckTrue(initialized, __func__, __LINE__, "Initialize should succeed");
-    CheckTrue(flushed, __func__, __LINE__, "Flush() should succeed while the logger is open");
+    CheckTrue(initialized, "Initialize should succeed");
+    CheckTrue(flushed, "Flush() should succeed while the logger is open");
     // At least once: std::cerr is tied to std::cout, and some standard libraries flush the tie when std::cerr is flushed
-    CheckTrue(stdOutFlushes >= 1, __func__, __LINE__, "Flush() should flush stdout");
-    CheckTrue(stdErrFlushes >= 1, __func__, __LINE__, "Flush() should flush stderr");
-    CheckFalse(flushedWhileClosed, __func__, __LINE__, "Flush() should return false while the logger is closed");
+    CheckGreaterThanOrEqual(stdOutFlushes, 1, "Flush() should flush stdout");
+    CheckGreaterThanOrEqual(stdErrFlushes, 1, "Flush() should flush stderr");
+    CheckFalse(flushedWhileClosed, "Flush() should return false while the logger is closed");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_ConsoleLog::Test_GetColorMode_ReflectsSetColorMode()
@@ -479,17 +479,17 @@ void TTest_ASWLog_ConsoleLog::Test_GetColorMode_ReflectsSetColorMode()
     ASWLog::TASWConsoleLog logger;
 
     // Assert
-    CheckTrue(logger.GetColorMode() == ASWLog::ColorMode::Auto, __func__, __LINE__, "ColorMode should default to Auto");
+    CheckTrue(logger.GetColorMode() == ASWLog::ColorMode::Auto, "ColorMode should default to Auto");
 
     // Act & Assert
     logger.SetColorMode(ASWLog::ColorMode::Always);
-    CheckTrue(logger.GetColorMode() == ASWLog::ColorMode::Always, __func__, __LINE__, "SetColorMode(Always) should be reflected by GetColorMode()");
+    CheckTrue(logger.GetColorMode() == ASWLog::ColorMode::Always, "SetColorMode(Always) should be reflected by GetColorMode()");
 
     logger.SetColorMode(ASWLog::ColorMode::Never);
-    CheckTrue(logger.GetColorMode() == ASWLog::ColorMode::Never, __func__, __LINE__, "SetColorMode(Never) should be reflected by GetColorMode()");
+    CheckTrue(logger.GetColorMode() == ASWLog::ColorMode::Never, "SetColorMode(Never) should be reflected by GetColorMode()");
 
     logger.SetColorMode(ASWLog::ColorMode::Auto);
-    CheckTrue(logger.GetColorMode() == ASWLog::ColorMode::Auto, __func__, __LINE__, "SetColorMode(Auto) should be reflected by GetColorMode()");
+    CheckTrue(logger.GetColorMode() == ASWLog::ColorMode::Auto, "SetColorMode(Auto) should be reflected by GetColorMode()");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_ConsoleLog::Test_GetInstance_ReturnsSameInstance()
@@ -499,7 +499,7 @@ void TTest_ASWLog_ConsoleLog::Test_GetInstance_ReturnsSameInstance()
     auto& second = ASWLog::TASWConsoleLog::GetInstance();
 
     // Assert
-    CheckTrue(&first == &second, __func__, __LINE__, "GetInstance should return the same logger on every call");
+    CheckTrue(&first == &second, "GetInstance should return the same logger on every call");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_ConsoleLog::Test_GetLevelColor_OffHasNoColor()
@@ -514,8 +514,8 @@ void TTest_ASWLog_ConsoleLog::Test_GetLevelColor_OffHasNoColor()
     const auto offColor = logger.GetLevelColor(ASWLog::Level::Off);
 
     // Assert
-    CheckTrue(offColor.empty(), __func__, __LINE__, "Off isn't a severity, so it should have no color, and setting one should be ignored");
-    CheckEquals(defaultCriticalColor, logger.GetLevelColor(ASWLog::Level::Critical), __func__, __LINE__,
+    CheckTrue(offColor.empty(), "Off isn't a severity, so it should have no color, and setting one should be ignored");
+    CheckEquals(defaultCriticalColor, logger.GetLevelColor(ASWLog::Level::Critical),
         "Setting or resetting Off's color should not change another level's color");
 }
 //---------------------------------------------------------------------------
@@ -543,15 +543,15 @@ void TTest_ASWLog_ConsoleLog::Test_Initialize_SuppressesInfoBannersBelowMinimumL
     const auto errContents = errCapture.Str();
 
     // Assert
-    CheckTrue(initialized, __func__, __LINE__, "Initialize should succeed");
-    CheckTrue(outContents.find("should_not_appear_banner") == std::string::npos, __func__, __LINE__, "Startup.Banner (Info level) should be suppressed when InitialMinimumLevel is Error");
-    CheckTrue(outContents.find("Time:") == std::string::npos, __func__, __LINE__, "Init time info (Info level) should be suppressed when InitialMinimumLevel is Error");
-    CheckTrue(outContents.find("OS:") == std::string::npos, __func__, __LINE__, "Init OS info (Info level) should be suppressed when InitialMinimumLevel is Error");
-    CheckTrue(outContents.find("Drive:") == std::string::npos, __func__, __LINE__, "Init drive info (Info level) should be suppressed when InitialMinimumLevel is Error");
-    CheckTrue(outContents.find("System memory:") == std::string::npos, __func__, __LINE__, "Init system memory info (Info level) should be suppressed when InitialMinimumLevel is Error");
-    CheckTrue(outContents.find("App:") == std::string::npos, __func__, __LINE__, "Init application info (Info level) should be suppressed when InitialMinimumLevel is Error");
-    CheckTrue(outContents.find("App Memory:") == std::string::npos, __func__, __LINE__, "Init app memory info (Info level) should be suppressed when InitialMinimumLevel is Error");
-    CheckTrue(errContents.find("this_error_should_appear") != std::string::npos, __func__, __LINE__, "Messages at or above InitialMinimumLevel should still be written");
+    CheckTrue(initialized, "Initialize should succeed");
+    CheckNotContains(outContents, "should_not_appear_banner", "Startup.Banner (Info level) should be suppressed when InitialMinimumLevel is Error");
+    CheckNotContains(outContents, "Time:", "Init time info (Info level) should be suppressed when InitialMinimumLevel is Error");
+    CheckNotContains(outContents, "OS:", "Init OS info (Info level) should be suppressed when InitialMinimumLevel is Error");
+    CheckNotContains(outContents, "Drive:", "Init drive info (Info level) should be suppressed when InitialMinimumLevel is Error");
+    CheckNotContains(outContents, "System memory:", "Init system memory info (Info level) should be suppressed when InitialMinimumLevel is Error");
+    CheckNotContains(outContents, "App:", "Init application info (Info level) should be suppressed when InitialMinimumLevel is Error");
+    CheckNotContains(outContents, "App Memory:", "Init app memory info (Info level) should be suppressed when InitialMinimumLevel is Error");
+    CheckContains(errContents, "this_error_should_appear", "Messages at or above InitialMinimumLevel should still be written");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_ConsoleLog::Test_Initialize_WritesDriveInfoWhenEnabled()
@@ -569,8 +569,8 @@ void TTest_ASWLog_ConsoleLog::Test_Initialize_WritesDriveInfoWhenEnabled()
     logger.Close();
 
     // Assert
-    CheckTrue(initialized, __func__, __LINE__, "Initialize should succeed");
-    CheckTrue(outCapture.Str().find("Drive:") != std::string::npos, __func__, __LINE__, "Startup.WriteDriveInfo should write disk space diagnostics to the console when enabled");
+    CheckTrue(initialized, "Initialize should succeed");
+    CheckContains(outCapture.Str(), "Drive:", "Startup.WriteDriveInfo should write disk space diagnostics to the console when enabled");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_ConsoleLog::Test_IsColorSupported_ReflectsDetectedStreams()
@@ -584,7 +584,7 @@ void TTest_ASWLog_ConsoleLog::Test_IsColorSupported_ReflectsDetectedStreams()
     stdErrOnlyLogger.StdErrSupportsColor = true;
 
     // Assert: color support is not yet determined before Initialize() runs
-    CheckFalse(stdErrOnlyLogger.IsColorSupported(), __func__, __LINE__, "IsColorSupported should be false before Initialize() runs");
+    CheckFalse(stdErrOnlyLogger.IsColorSupported(), "IsColorSupported should be false before Initialize() runs");
 
     // Act
     const bool noStreamInitialized = noStreamLogger.Initialize(config);
@@ -593,9 +593,9 @@ void TTest_ASWLog_ConsoleLog::Test_IsColorSupported_ReflectsDetectedStreams()
     stdErrOnlyLogger.Close();
 
     // Assert
-    CheckTrue(noStreamInitialized && stdErrOnlyInitialized, __func__, __LINE__, "Initialize should succeed");
-    CheckFalse(noStreamLogger.IsColorSupported(), __func__, __LINE__, "IsColorSupported should be false when neither stream shows colors");
-    CheckTrue(stdErrOnlyLogger.IsColorSupported(), __func__, __LINE__, "IsColorSupported should be true when either stream shows colors");
+    CheckTrue(noStreamInitialized && stdErrOnlyInitialized, "Initialize should succeed");
+    CheckFalse(noStreamLogger.IsColorSupported(), "IsColorSupported should be false when neither stream shows colors");
+    CheckTrue(stdErrOnlyLogger.IsColorSupported(), "IsColorSupported should be true when either stream shows colors");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_ConsoleLog::Test_LogLineMetadata_Options()
@@ -621,13 +621,13 @@ void TTest_ASWLog_ConsoleLog::Test_LogLineMetadata_Options()
     const auto contents = outCapture.Str();
 
     // Assert
-    CheckTrue(initialized, __func__, __LINE__, "Initialize should succeed");
-    CheckTrue(contents.find("Z") != std::string::npos, __func__, __LINE__, "Line.ShowTimestamp should add a UTC timestamp");
-    CheckTrue(contents.find("INFO") != std::string::npos, __func__, __LINE__, "Line.ShowLevel should include the log level");
-    CheckTrue(contents.find("[P:") != std::string::npos, __func__, __LINE__, "Line.ShowProcessId should include the process id");
-    CheckTrue(contents.find("[T:") != std::string::npos, __func__, __LINE__, "Line.ShowThreadId should include the thread id");
-    CheckTrue(contents.find("Test_LogLineMetadata_Options") != std::string::npos, __func__, __LINE__, "Line.ShowFunctionName should include the calling method name");
-    CheckTrue(contents.find("metadata_message") != std::string::npos, __func__, __LINE__, "Metadata log line should still contain the message");
+    CheckTrue(initialized, "Initialize should succeed");
+    CheckContains(contents, "Z", "Line.ShowTimestamp should add a UTC timestamp");
+    CheckContains(contents, "INFO", "Line.ShowLevel should include the log level");
+    CheckContains(contents, "[P:", "Line.ShowProcessId should include the process id");
+    CheckContains(contents, "[T:", "Line.ShowThreadId should include the thread id");
+    CheckContains(contents, "Test_LogLineMetadata_Options", "Line.ShowFunctionName should include the calling method name");
+    CheckContains(contents, "metadata_message", "Metadata log line should still contain the message");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_ConsoleLog::Test_LogProcessAndThreadIds_AreOSIds()
@@ -662,9 +662,9 @@ void TTest_ASWLog_ConsoleLog::Test_LogProcessAndThreadIds_AreOSIds()
 
     // Assert
     const auto processTag = "[P:" + std::to_string(processId) + "]";
-    CheckTrue(mainThreadId != workerThreadId, __func__, __LINE__, "Two threads should have different OS thread ids");
-    CheckTrue(contents.find(processTag + "[T:" + std::to_string(mainThreadId) + "]: main_thread_entry") != std::string::npos, __func__, __LINE__, "The entry should show the OS process id and the logging thread's OS thread id");
-    CheckTrue(contents.find(processTag + "[T:" + std::to_string(workerThreadId) + "]: worker_thread_entry") != std::string::npos, __func__, __LINE__, "An entry from another thread should show that thread's OS thread id");
+    CheckTrue(mainThreadId != workerThreadId, "Two threads should have different OS thread ids");
+    CheckContains(contents, processTag + "[T:" + std::to_string(mainThreadId) + "]: main_thread_entry", "The entry should show the OS process id and the logging thread's OS thread id");
+    CheckContains(contents, processTag + "[T:" + std::to_string(workerThreadId) + "]: worker_thread_entry", "An entry from another thread should show that thread's OS thread id");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_ConsoleLog::Test_LogRawAndForceOptions()
@@ -687,11 +687,11 @@ void TTest_ASWLog_ConsoleLog::Test_LogRawAndForceOptions()
     const auto errContents = errCapture.Str();
 
     // Assert
-    CheckTrue(initialized, __func__, __LINE__, "Initialize should succeed");
-    CheckTrue(outContents.find("raw_message") != std::string::npos, __func__, __LINE__, "LogRaw should write the raw message to stdout");
-    CheckTrue(errContents.find("raw_force_message") != std::string::npos, __func__, __LINE__, "LogForceRaw should write the raw message to stderr even when filtered");
-    CheckTrue(outContents.find("raw_message\n") == std::string::npos, __func__, __LINE__, "LogRaw should not append a newline by default");
-    CheckTrue(errContents.find("raw_force_message\n") == std::string::npos, __func__, __LINE__, "LogForceRaw should not append a trailing newline");
+    CheckTrue(initialized, "Initialize should succeed");
+    CheckContains(outContents, "raw_message", "LogRaw should write the raw message to stdout");
+    CheckContains(errContents, "raw_force_message", "LogForceRaw should write the raw message to stderr even when filtered");
+    CheckNotContains(outContents, "raw_message\n", "LogRaw should not append a newline by default");
+    CheckNotContains(errContents, "raw_force_message\n", "LogForceRaw should not append a trailing newline");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_ConsoleLog::Test_LogRespectsMinimumLevel()
@@ -713,10 +713,10 @@ void TTest_ASWLog_ConsoleLog::Test_LogRespectsMinimumLevel()
     logger.Close();
 
     // Assert
-    CheckTrue(initialized, __func__, __LINE__, "Initialize should succeed");
-    CheckTrue(errCapture.Str().find("filtered_message") == std::string::npos, __func__, __LINE__, "Log should respect the minimum level unless forced");
-    CheckTrue(errCapture.Str().find("forced_message") != std::string::npos, __func__, __LINE__, "LogForce should bypass the minimum level");
-    CheckTrue(errCapture.Str().find("allowed_message") != std::string::npos, __func__, __LINE__, "Log should write a message at or above the minimum level");
+    CheckTrue(initialized, "Initialize should succeed");
+    CheckNotContains(errCapture.Str(), "filtered_message", "Log should respect the minimum level unless forced");
+    CheckContains(errCapture.Str(), "forced_message", "LogForce should bypass the minimum level");
+    CheckContains(errCapture.Str(), "allowed_message", "Log should write a message at or above the minimum level");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_ConsoleLog::Test_OnError_ReportsOnlyTheWriteThatFailedTheStream()
@@ -744,13 +744,13 @@ void TTest_ASWLog_ConsoleLog::Test_OnError_ReportsOnlyTheWriteThatFailedTheStrea
     }
 
     // Assert
-    CheckTrue(initialized, __func__, __LINE__, "Initialize should succeed");
-    CheckEquals(static_cast<size_t>(1), reports.size(), __func__, __LINE__, "Only the write that failed the stream should be reported, not every line after it");
+    CheckTrue(initialized, "Initialize should succeed");
+    CheckEquals(1, reports.size(), "Only the write that failed the stream should be reported, not every line after it");
     if (reports.empty())
         return;
 
-    CheckTrue(reports[0].Kind == ASWLog::ErrorKind::WriteFailed, __func__, __LINE__, "A failed console write should be reported as WriteFailed");
-    CheckEquals(std::string("Couldn't write to stdout"), reports[0].Message, __func__, __LINE__, "The report should name the stream");
+    CheckTrue(reports[0].Kind == ASWLog::ErrorKind::WriteFailed, "A failed console write should be reported as WriteFailed");
+    CheckEquals(std::string("Couldn't write to stdout"), reports[0].Message, "The report should name the stream");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_ConsoleLog::Test_OnLogEntry_FiresForQualifyingLevelsOnly()
@@ -777,10 +777,10 @@ void TTest_ASWLog_ConsoleLog::Test_OnLogEntry_FiresForQualifyingLevelsOnly()
     logger.Close();
 
     // Assert
-    CheckTrue(initialized, __func__, __LINE__, "Initialize should succeed");
-    CheckEquals(static_cast<size_t>(1), callbackMessages.size(), __func__, __LINE__, "OnLogEntry should only fire for entries at or above OnLogEntryMinimumLevel");
+    CheckTrue(initialized, "Initialize should succeed");
+    CheckEquals(1, callbackMessages.size(), "OnLogEntry should only fire for entries at or above OnLogEntryMinimumLevel");
     if (!callbackMessages.empty())
-        CheckTrue(callbackMessages[0].find("above_threshold") != std::string::npos, __func__, __LINE__, "Callback should receive the same formatted line written to the console");
+        CheckContains(callbackMessages[0], "above_threshold", "Callback should receive the same formatted line written to the console");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_ConsoleLog::Test_ResetLevelColor_RestoresDefault()
@@ -796,7 +796,7 @@ void TTest_ASWLog_ConsoleLog::Test_ResetLevelColor_RestoresDefault()
     const auto restoredColor = logger.GetLevelColor(ASWLog::Level::Info);
 
     // Assert
-    CheckEquals(defaultInfoColor, restoredColor, __func__, __LINE__, "ResetLevelColor should restore the level's built-in default color");
+    CheckEquals(defaultInfoColor, restoredColor, "ResetLevelColor should restore the level's built-in default color");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_ConsoleLog::Test_ResetLevelColors_RestoresAllDefaults()
@@ -813,8 +813,8 @@ void TTest_ASWLog_ConsoleLog::Test_ResetLevelColors_RestoresAllDefaults()
     logger.ResetLevelColors();
 
     // Assert
-    CheckEquals(defaultInfoColor, logger.GetLevelColor(ASWLog::Level::Info), __func__, __LINE__, "ResetLevelColors should restore Info's default color");
-    CheckEquals(defaultErrorColor, logger.GetLevelColor(ASWLog::Level::Error), __func__, __LINE__, "ResetLevelColors should restore Error's default color");
+    CheckEquals(defaultInfoColor, logger.GetLevelColor(ASWLog::Level::Info), "ResetLevelColors should restore Info's default color");
+    CheckEquals(defaultErrorColor, logger.GetLevelColor(ASWLog::Level::Error), "ResetLevelColors should restore Error's default color");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_ConsoleLog::Test_SetLevelColor_EmptyStringDisablesColorForLevel()
@@ -835,9 +835,9 @@ void TTest_ASWLog_ConsoleLog::Test_SetLevelColor_EmptyStringDisablesColorForLeve
     const auto contents = outCapture.Str();
 
     // Assert
-    CheckTrue(initialized, __func__, __LINE__, "Initialize should succeed");
-    CheckTrue(contents.find("\x1b[") == std::string::npos, __func__, __LINE__, "An empty level color should suppress both the color prefix and the reset code for that level");
-    CheckTrue(contents.find("uncolored_message") != std::string::npos, __func__, __LINE__, "The message should still be written");
+    CheckTrue(initialized, "Initialize should succeed");
+    CheckNotContains(contents, "\x1b[", "An empty level color should suppress both the color prefix and the reset code for that level");
+    CheckContains(contents, "uncolored_message", "The message should still be written");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_ConsoleLog::Test_SetLevelColor_OverridesDefaultColor()
@@ -863,11 +863,11 @@ void TTest_ASWLog_ConsoleLog::Test_SetLevelColor_OverridesDefaultColor()
     const auto contents = outCapture.Str();
 
     // Assert
-    CheckTrue(initialized, __func__, __LINE__, "Initialize should succeed");
-    CheckFalse(defaultInfoColor.empty(), __func__, __LINE__, "GetLevelColor should return a non-empty default color for Info");
-    CheckEquals(customColor, updatedColor, __func__, __LINE__, "GetLevelColor should reflect the color set via SetLevelColor");
-    CheckTrue(contents.find(customColor) != std::string::npos, __func__, __LINE__, "WriteLogEntry should use the custom color for Info");
-    CheckTrue(contents.find(defaultInfoColor) == std::string::npos, __func__, __LINE__, "The default color should no longer appear for Info once overridden");
+    CheckTrue(initialized, "Initialize should succeed");
+    CheckFalse(defaultInfoColor.empty(), "GetLevelColor should return a non-empty default color for Info");
+    CheckEquals(customColor, updatedColor, "GetLevelColor should reflect the color set via SetLevelColor");
+    CheckContains(contents, customColor, "WriteLogEntry should use the custom color for Info");
+    CheckNotContains(contents, defaultInfoColor, "The default color should no longer appear for Info once overridden");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_ConsoleLog::Test_WarnAndAboveWriteToStdErr()
@@ -887,10 +887,10 @@ void TTest_ASWLog_ConsoleLog::Test_WarnAndAboveWriteToStdErr()
     logger.Close();
 
     // Assert
-    CheckTrue(initialized, __func__, __LINE__, "Initialize should succeed");
-    CheckTrue(outCapture.Str().find("stdout_message") != std::string::npos, __func__, __LINE__, "Info and below should be written to stdout");
-    CheckTrue(errCapture.Str().find("stderr_message") != std::string::npos, __func__, __LINE__, "Warn and above should be written to stderr");
-    CheckTrue(outCapture.Str().find("stderr_message") == std::string::npos, __func__, __LINE__, "Warn message should not also appear on stdout");
+    CheckTrue(initialized, "Initialize should succeed");
+    CheckContains(outCapture.Str(), "stdout_message", "Info and below should be written to stdout");
+    CheckContains(errCapture.Str(), "stderr_message", "Warn and above should be written to stderr");
+    CheckNotContains(outCapture.Str(), "stderr_message", "Warn message should not also appear on stdout");
 }
 //---------------------------------------------------------------------------
 

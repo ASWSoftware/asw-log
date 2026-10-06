@@ -29,6 +29,7 @@ limitations under the License.
 #include <filesystem>
 #include <format>
 #include <fstream>
+#include <initializer_list>
 #include <iterator>
 #include <memory>
 #include <source_location>
@@ -119,6 +120,8 @@ public:
     std::source_location LastLocation;
     ASWLog::TASWLogRecord LastRecord; // The last record passed to WriteRecord(); its Message refers to LastMessage
     int WriteRecordCount = 0;
+    std::vector<std::string> Written; // "<LEVEL>|<message>" for each record passed to WriteRecord(), "|forced" added if forced
+    std::vector<std::chrono::system_clock::time_point> WrittenTimes; // The Timestamp of each
     std::chrono::system_clock::time_point FixedNow{}; // What NowUTC() returns, if set
     mutable int NowUTCCount = 0; // How many times NowUTC() was called
     bool ThrowsOnWrite = false; // WriteRecord() throws, like a faulty custom logger
@@ -141,6 +144,8 @@ protected:
             throw std::runtime_error("write failed");
 
         ++WriteRecordCount;
+        Written.push_back(std::format("{}|{}{}", ASWLog::Level_ToString(record.LogLevel), record.Message, record.Forced ? "|forced" : ""));
+        WrittenTimes.push_back(record.Timestamp);
         LastLevel = record.LogLevel;
         LastMessage = std::string(record.Message);
         LastLocation = record.Location;
@@ -197,6 +202,18 @@ public:
         ReportError(std::move(error));
     }
 };
+
+// A config with a backtrace of 'capacity' entries, kept from 'lowestLevel' up, written at 'dumpAtLevel' (minimum Info)
+ASWLog::TASWLogConfig MakeBacktraceConfig(std::size_t capacity, ASWLog::Level lowestLevel = ASWLog::Level::Debug,
+    ASWLog::Level dumpAtLevel = ASWLog::Level::Error)
+{
+    ASWLog::TASWLogConfig config;
+    config.InitialMinimumLevel = ASWLog::Level::Info;
+    config.Backtrace.Capacity = capacity;
+    config.Backtrace.LowestLevel = lowestLevel;
+    config.Backtrace.DumpAtLevel = dumpAtLevel;
+    return config;
+}
 
 // While alive, sends what is written to stderr to 'file' instead, by pointing stderr's file descriptor at it. Inactive
 // if stderr has no file descriptor (e.g. in a GUI application without a console).
@@ -271,6 +288,14 @@ public:
 TTest_ASWLog_Base::TTest_ASWLog_Base()
     : inherited("ASWLog_Base_Tests")
 {
+    RegisterTest(&TTest_ASWLog_Base::Test_Backtrace_CapacityKeepsTheNewest, "Backtrace_CapacityKeepsTheNewest");
+    RegisterTest(&TTest_ASWLog_Base::Test_Backtrace_DisabledLoggerKeepsAndWritesNothing, "Backtrace_DisabledLoggerKeepsAndWritesNothing");
+    RegisterTest(&TTest_ASWLog_Base::Test_Backtrace_DumpAtLevelOffWritesOnlyOnRequest, "Backtrace_DumpAtLevelOffWritesOnlyOnRequest");
+    RegisterTest(&TTest_ASWLog_Base::Test_Backtrace_KeptEntriesAreWrittenBeforeTheTrigger, "Backtrace_KeptEntriesAreWrittenBeforeTheTrigger");
+    RegisterTest(&TTest_ASWLog_Base::Test_Backtrace_MinimumLevelChangesKeepTheBacktrace, "Backtrace_MinimumLevelChangesKeepTheBacktrace");
+    RegisterTest(&TTest_ASWLog_Base::Test_Backtrace_OffKeepsNothing, "Backtrace_OffKeepsNothing");
+    RegisterTest(&TTest_ASWLog_Base::Test_Backtrace_ReconfigureResizesKeepingTheNewest, "Backtrace_ReconfigureResizesKeepingTheNewest");
+    RegisterTest(&TTest_ASWLog_Base::Test_Backtrace_ShouldLogAndFmtIncludeKeptLevels, "Backtrace_ShouldLogAndFmtIncludeKeptLevels");
     RegisterTest(&TTest_ASWLog_Base::Test_GetConfig_ReturnsUnchangingSnapshot, "GetConfig_ReturnsUnchangingSnapshot");
     RegisterTest(&TTest_ASWLog_Base::Test_GetFullVersionStr_ContainsVersion, "GetFullVersionStr_ContainsVersion");
     RegisterTest(&TTest_ASWLog_Base::Test_Interface_MethodsAreNoexcept, "Interface_MethodsAreNoexcept");
@@ -316,6 +341,198 @@ void TTest_ASWLog_Base::TearDown_Test(ITestCase& /*testCase*/)
 // /////// Begin tests after this line ///////////////////////
 
 //---------------------------------------------------------------------------
+void TTest_ASWLog_Base::Test_Backtrace_CapacityKeepsTheNewest()
+{
+    // Arrange
+    TTestLogger logger;
+    logger.Initialize(MakeBacktraceConfig(2));
+
+    // Act
+    for (int entry = 1; entry <= 5; ++entry)
+        logger.LogDebug(std::format("debug_{}", entry));
+
+    logger.DumpBacktrace();
+
+    // Assert
+    const std::vector<std::string> expected{ "INFO|Backtrace: the last 2 entries below the minimum level|forced", "DEBUG|debug_4|forced",
+                                             "DEBUG|debug_5|forced", "INFO|Backtrace end|forced" };
+    CheckTrue(logger.Written == expected, "Only the newest entries should be kept, oldest first");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_Base::Test_Backtrace_DisabledLoggerKeepsAndWritesNothing()
+{
+    // Arrange
+    TTestLogger logger;
+    logger.Initialize(MakeBacktraceConfig(5));
+    logger.LogDebug("kept");
+
+    // Act: while disabled, nothing is kept, and nothing written
+    logger.SetEnabled(false);
+    logger.LogDebug("not_kept");
+    logger.DumpBacktrace();
+    logger.LogError("error_1");
+    const auto writtenWhileDisabled = logger.Written.size();
+    logger.SetEnabled(true);
+    logger.LogError("error_2");
+
+    // Assert
+    CheckEquals(0, writtenWhileDisabled, "A disabled logger should write nothing, not even its backtrace");
+    const std::vector<std::string> expected{ "INFO|Backtrace: the last 1 entry below the minimum level|forced", "DEBUG|kept|forced",
+                                             "INFO|Backtrace end|forced", "ERROR|error_2" };
+    CheckTrue(logger.Written == expected, "Only the entry kept while enabled should be written");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_Base::Test_Backtrace_DumpAtLevelOffWritesOnlyOnRequest()
+{
+    // Arrange
+    TTestLogger logger;
+    logger.Initialize(MakeBacktraceConfig(5, ASWLog::Level::Debug, ASWLog::Level::Off));
+    logger.LogDebug("debug_1");
+
+    // Act
+    logger.LogCritical("critical_1");
+    const auto writtenBeforeDump = logger.Written;
+    logger.DumpBacktrace();
+    logger.DumpBacktrace(); // Empty now: writes nothing
+
+    // Assert
+    CheckTrue(writtenBeforeDump == std::vector<std::string>{ "CRITICAL|critical_1" }, "No level should write the backtrace");
+    const std::vector<std::string> expected{ "CRITICAL|critical_1", "INFO|Backtrace: the last 1 entry below the minimum level|forced",
+                                             "DEBUG|debug_1|forced", "INFO|Backtrace end|forced" };
+    CheckTrue(logger.Written == expected, "DumpBacktrace() should write it once, then forget it");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_Base::Test_Backtrace_KeptEntriesAreWrittenBeforeTheTrigger()
+{
+    // Arrange: each entry gets its own time
+    using namespace std::chrono_literals;
+    TTestLogger logger;
+    logger.Initialize(MakeBacktraceConfig(5));
+    const auto start = std::chrono::system_clock::time_point{} + 1000h;
+    logger.FixedNow = start;
+
+    // Act
+    logger.LogTrace("trace_1"); // Below LowestLevel: neither kept nor written
+    logger.LogDebug("debug_1");
+    logger.FixedNow = start + 1s;
+    logger.LogInfo("info_1");
+    logger.LogRaw(ASWLog::Level::Debug, "raw_debug");
+    logger.LogForce(ASWLog::Level::Debug, "forced_debug"); // Forced: written, not kept
+    logger.FixedNow = start + 2s;
+    logger.LogError("error_1");
+    logger.LogError("error_2"); // The backtrace was forgotten
+
+    // Assert
+    const std::vector<std::string> expected{ "INFO|info_1", "DEBUG|forced_debug|forced",
+                                             "INFO|Backtrace: the last 2 entries below the minimum level|forced", "DEBUG|debug_1|forced",
+                                             "DEBUG|raw_debug|forced", "INFO|Backtrace end|forced", "ERROR|error_1", "ERROR|error_2" };
+    CheckTrue(logger.Written == expected, "The kept entries should be written just before the first error, between the markers");
+    if (logger.WrittenTimes.size() == expected.size())
+    {
+        CheckTrue(logger.WrittenTimes[3] == start, "A kept entry should keep the time it was logged");
+        CheckTrue(logger.WrittenTimes[2] == start + 2s, "The marker should be stamped when the backtrace is written");
+    }
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_Base::Test_Backtrace_MinimumLevelChangesKeepTheBacktrace()
+{
+    // Arrange
+    TTestLogger logger;
+    logger.Initialize(MakeBacktraceConfig(5, ASWLog::Level::Trace));
+
+    // Act: raising the minimum level keeps the backtrace level, so more levels are kept; Off keeps nothing
+    logger.SetMinimumLevel(ASWLog::Level::Warn);
+    logger.LogInfo("info_kept");
+    const bool shouldLogTraceAtWarn = logger.ShouldLog(ASWLog::Level::Trace);
+    logger.SetMinimumLevel(ASWLog::Level::Off);
+    const bool shouldLogTraceAtOff = logger.ShouldLog(ASWLog::Level::Trace);
+    logger.LogInfo("info_not_kept");
+    logger.SetMinimumLevel(ASWLog::Level::Info);
+    logger.DumpBacktrace();
+
+    // Assert
+    CheckTrue(shouldLogTraceAtWarn, "The backtrace should still keep Trace with a minimum level of Warn");
+    CheckFalse(shouldLogTraceAtOff, "A minimum level of Off should keep nothing");
+    CheckEquals(static_cast<int>(ASWLog::Level::Info), static_cast<int>(logger.GetMinimumLevel()),
+        "GetMinimumLevel() should return the level set");
+    const std::vector<std::string> expected{ "INFO|Backtrace: the last 1 entry below the minimum level|forced", "INFO|info_kept|forced",
+                                             "INFO|Backtrace end|forced" };
+    CheckTrue(logger.Written == expected, "Only the entry kept below Warn should be in the backtrace");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_Base::Test_Backtrace_OffKeepsNothing()
+{
+    // Arrange: no capacity (the default), and a capacity with LowestLevel Off
+    TTestLogger defaultLogger;
+    defaultLogger.Initialize(MakeBacktraceConfig(0));
+    TTestLogger offLogger;
+    offLogger.Initialize(MakeBacktraceConfig(5, ASWLog::Level::Off));
+
+    // Act
+    for (auto* logger : { &defaultLogger, &offLogger })
+    {
+        logger->LogDebug("debug_1");
+        logger->LogError("error_1");
+        logger->DumpBacktrace();
+    }
+
+    // Assert
+    CheckFalse(defaultLogger.ShouldLog(ASWLog::Level::Debug), "Without a backtrace, Debug shouldn't pass the gate");
+    CheckFalse(offLogger.ShouldLog(ASWLog::Level::Debug), "With LowestLevel Off, Debug shouldn't pass the gate");
+    CheckTrue(defaultLogger.Written == std::vector<std::string>{ "ERROR|error_1" }, "Nothing should be kept by default");
+    CheckTrue(offLogger.Written == std::vector<std::string>{ "ERROR|error_1" }, "Nothing should be kept with LowestLevel Off");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_Base::Test_Backtrace_ReconfigureResizesKeepingTheNewest()
+{
+    // Arrange: a full backtrace that has wrapped around (debug_1 was replaced)
+    TTestLogger shrinking;
+    shrinking.Initialize(MakeBacktraceConfig(3));
+    TTestLogger growing;
+    growing.Initialize(MakeBacktraceConfig(3));
+    for (int entry = 1; entry <= 4; ++entry)
+    {
+        shrinking.LogDebug(std::format("debug_{}", entry));
+        growing.LogDebug(std::format("debug_{}", entry));
+    }
+
+    // Act
+    shrinking.Reconfigure(MakeBacktraceConfig(2));
+    shrinking.DumpBacktrace();
+    growing.Reconfigure(MakeBacktraceConfig(5));
+    growing.LogDebug("debug_5");
+    growing.LogDebug("debug_6");
+    growing.DumpBacktrace();
+
+    // Assert
+    const std::vector<std::string> expectedShrunk{ "INFO|Backtrace: the last 2 entries below the minimum level|forced", "DEBUG|debug_3|forced",
+                                                   "DEBUG|debug_4|forced", "INFO|Backtrace end|forced" };
+    CheckTrue(shrinking.Written == expectedShrunk, "A smaller capacity should keep the newest entries");
+    const std::vector<std::string> expectedGrown{ "INFO|Backtrace: the last 5 entries below the minimum level|forced", "DEBUG|debug_2|forced",
+                                                  "DEBUG|debug_3|forced", "DEBUG|debug_4|forced", "DEBUG|debug_5|forced",
+                                                  "DEBUG|debug_6|forced", "INFO|Backtrace end|forced" };
+    CheckTrue(growing.Written == expectedGrown, "A larger capacity should keep the order, with new entries after the newest");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_Base::Test_Backtrace_ShouldLogAndFmtIncludeKeptLevels()
+{
+    // Arrange
+    TTestLogger logger;
+    logger.Initialize(MakeBacktraceConfig(5));
+    CountedValueFormatCount = 0;
+
+    // Act
+    logger.LogDebugFmt("{}", TCountedValue{}); // Kept, so formatted
+    logger.LogTraceFmt("{}", TCountedValue{}); // Below LowestLevel: not formatted
+    logger.DumpBacktrace();
+
+    // Assert
+    CheckTrue(logger.ShouldLog(ASWLog::Level::Debug), "ShouldLog() should be true for a level the backtrace keeps");
+    CheckFalse(logger.ShouldLog(ASWLog::Level::Trace), "ShouldLog() should be false below LowestLevel");
+    CheckEquals(1, CountedValueFormatCount, "Only the kept entry should be formatted");
+    CheckEquals(3, logger.Written.size(), "The kept entry should be written between the markers");
+}
+//---------------------------------------------------------------------------
 void TTest_ASWLog_Base::Test_GetConfig_ReturnsUnchangingSnapshot()
 {
     // Arrange: the snapshot is read-only, so it can't be changed behind the logger's back
@@ -337,14 +554,14 @@ void TTest_ASWLog_Base::Test_GetConfig_ReturnsUnchangingSnapshot()
     const auto secondSnapshot = logger.GetConfig();
 
     // Assert
-    CheckTrue(defaultConfig != nullptr && defaultConfig->Startup.Banner.empty(), __func__, __LINE__,
+    CheckTrue(defaultConfig != nullptr && defaultConfig->Startup.Banner.empty(),
         "Before Initialize(), GetConfig() should return the default config");
-    CheckTrue(reconfigured, __func__, __LINE__, "Reconfigure() should succeed once initialized");
-    CheckEquals(std::string("first"), firstSnapshot->Startup.Banner, __func__, __LINE__,
+    CheckTrue(reconfigured, "Reconfigure() should succeed once initialized");
+    CheckEquals(std::string("first"), firstSnapshot->Startup.Banner,
         "A snapshot should keep the settings it was taken with after Reconfigure()");
-    CheckEquals(std::string("second"), secondSnapshot->Startup.Banner, __func__, __LINE__,
+    CheckEquals(std::string("second"), secondSnapshot->Startup.Banner,
         "GetConfig() should return the settings passed to Reconfigure()");
-    CheckEquals(std::string("first"), firstConfig.Startup.Banner, __func__, __LINE__,
+    CheckEquals(std::string("first"), firstConfig.Startup.Banner,
         "The config passed to Initialize() should be copied, not kept");
 }
 //---------------------------------------------------------------------------
@@ -358,7 +575,7 @@ void TTest_ASWLog_Base::Test_GetFullVersionStr_ContainsVersion()
     const std::string version = logger.GetFullVersionStr();
 
     // Assert
-    CheckEquals(expected, version, __func__, __LINE__, "Full version string should combine the logger class name and the version number");
+    CheckEquals(expected, version, "Full version string should combine the logger class name and the version number");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_Base::Test_Interface_MethodsAreNoexcept()
@@ -379,6 +596,7 @@ void TTest_ASWLog_Base::Test_Interface_MethodsAreNoexcept()
     static_assert(noexcept(logger.Open()));
     static_assert(noexcept(logger.Close()));
     static_assert(noexcept(logger.Write(record)));
+    static_assert(noexcept(logger.DumpBacktrace()));
     static_assert(noexcept(logger.Log(ASWLog::Level::Info, message)));
     static_assert(noexcept(logger.LogRaw(ASWLog::Level::Info, message)));
     static_assert(noexcept(logger.LogForce(ASWLog::Level::Info, message)));
@@ -401,7 +619,7 @@ void TTest_ASWLog_Base::Test_Interface_MethodsAreNoexcept()
     static_assert(noexcept(logger.LogCriticalFmt("{}", 1)));
     static_assert(noexcept(logger.LogInfoFmt(ASWLog::RuntimeFormat(runtimeFormat), 1, 2)));
 
-    CheckTrue(logger.ShouldLog(ASWLog::Level::Info), __func__, __LINE__, "The noexcept checks above are made at compile time");
+    CheckTrue(logger.ShouldLog(ASWLog::Level::Info), "The noexcept checks above are made at compile time");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_Base::Test_LogFormatMethods_AcceptEveryArgumentKind()
@@ -419,16 +637,16 @@ void TTest_ASWLog_Base::Test_LogFormatMethods_AcceptEveryArgumentKind()
 
     // Act and Assert
     logger.LogInfoFmt("{} {} {} {} {}", value, constValue, text, view, 5);
-    CheckEquals(std::string("1 2 three four 5"), logger.LastMessage, __func__, __LINE__, "A level shortcut should format every kind of argument");
+    CheckEquals(std::string("1 2 three four 5"), logger.LastMessage, "A level shortcut should format every kind of argument");
 
     logger.LogFmt(ASWLog::Level::Info, "{} {} {} {} {}", value, constValue, text, view, 5);
-    CheckEquals(std::string("1 2 three four 5"), logger.LastMessage, __func__, __LINE__, "LogFmt() should format every kind of argument");
+    CheckEquals(std::string("1 2 three four 5"), logger.LastMessage, "LogFmt() should format every kind of argument");
 
     logger.LogWarnFmt(constantFormat, value, text);
-    CheckEquals(std::string("1-three"), logger.LastMessage, __func__, __LINE__, "A constexpr string_view format should be accepted");
+    CheckEquals(std::string("1-three"), logger.LastMessage, "A constexpr string_view format should be accepted");
 
     logger.LogInfoFmt(ASWLog::RuntimeFormat(runtimeFormat), value, constValue, text, view, 5);
-    CheckEquals(std::string("1 2 three four 5"), logger.LastMessage, __func__, __LINE__, "A RuntimeFormat() string that matches its arguments should format like a literal");
+    CheckEquals(std::string("1 2 three four 5"), logger.LastMessage, "A RuntimeFormat() string that matches its arguments should format like a literal");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_Base::Test_LogFormatMethods_LogErrorInsteadOfThrowing()
@@ -458,11 +676,11 @@ void TTest_ASWLog_Base::Test_LogFormatMethods_LogErrorInsteadOfThrowing()
     }
 
     // Assert
-    CheckFalse(threw, __func__, __LINE__, "A *Fmt call should not throw when formatting fails");
-    CheckTrue(wrongArgumentCountMessage.starts_with("[ASWLog format error: "), __func__, __LINE__, "A format string that doesn't match its arguments should log the error: " + wrongArgumentCountMessage);
-    CheckTrue(wrongArgumentCountMessage.ends_with("] bad {} {}"), __func__, __LINE__, "The logged error should end with the format string: " + wrongArgumentCountMessage);
-    CheckEquals(std::string("[ASWLog format error: formatter failed] value {}"), stdExceptionMessage, __func__, __LINE__, "A std::exception from a formatter should be logged with its message");
-    CheckEquals(std::string("[ASWLog format error: unknown exception] value {}"), otherExceptionMessage, __func__, __LINE__, "Any other exception from a formatter should be logged too");
+    CheckFalse(threw, "A *Fmt call should not throw when formatting fails");
+    CheckStartsWith(wrongArgumentCountMessage, "[ASWLog format error: ", "A format string that doesn't match its arguments should log the error: " + wrongArgumentCountMessage);
+    CheckEndsWith(wrongArgumentCountMessage, "] bad {} {}", "The logged error should end with the format string: " + wrongArgumentCountMessage);
+    CheckEquals(std::string("[ASWLog format error: formatter failed] value {}"), stdExceptionMessage, "A std::exception from a formatter should be logged with its message");
+    CheckEquals(std::string("[ASWLog format error: unknown exception] value {}"), otherExceptionMessage, "Any other exception from a formatter should be logged too");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_Base::Test_LogFormatMethods_PassCallerLocation()
@@ -474,14 +692,15 @@ void TTest_ASWLog_Base::Test_LogFormatMethods_PassCallerLocation()
     const std::string thisFile = std::source_location::current().file_name();
     const std::string runtimeFormat = "runtime {}";
 
-    // Checks the location and message the last *Fmt call passed to the logger
-    const auto checkCall = [&](int expectedLine, const std::string& method, const std::string& expectedMessage)
+    // Checks the location and message the last *Fmt call passed to the logger. A failure reports the line that called it.
+    const auto checkCall = [&](int expectedLine, const std::string& method, const std::string& expectedMessage,
+                               std::source_location loc = std::source_location::current())
         {
             const auto& location = logger.LastLocation;
-            CheckEquals(expectedMessage, logger.LastMessage, testName, __LINE__, method + " should format the message");
-            CheckEquals(thisFile, std::string(location.file_name()), testName, __LINE__, method + " should pass the caller's file, not ASWLog_Interface.h");
-            CheckEquals(static_cast<int64_t>(expectedLine), static_cast<int64_t>(location.line()), testName, __LINE__, method + " should pass the caller's line");
-            CheckTrue(std::string_view(location.function_name()).find(testName) != std::string_view::npos, testName, __LINE__, method + " should pass the caller's function");
+            CheckEquals(expectedMessage, logger.LastMessage, method + " should format the message", loc);
+            CheckEquals(thisFile, std::string(location.file_name()), method + " should pass the caller's file, not ASWLog_Interface.h", loc);
+            CheckEquals(expectedLine, location.line(), method + " should pass the caller's line", loc);
+            CheckContains(std::string(location.function_name()), testName, method + " should pass the caller's function", loc);
         };
 
     // Act and Assert: each expected line is the line after the one that records it
@@ -542,23 +761,23 @@ void TTest_ASWLog_Base::Test_LogFormatMethods_SkipFormattingWhenNotWritten()
     logger.LogRawFmt(ASWLog::Level::Debug, "{}", TCountedValue{});
     logger.LogFmt(ASWLog::Level::Off, "{}", TCountedValue{});
     logger.LogForceFmt(ASWLog::Level::Off, "{}", TCountedValue{});
-    CheckEquals(0, CountedValueFormatCount, __func__, __LINE__, "An entry below the minimum level, or at Off, should not be formatted");
+    CheckEquals(0, CountedValueFormatCount, "An entry below the minimum level, or at Off, should not be formatted");
 
     logger.LogInfoFmt("{}", TCountedValue{});
-    CheckEquals(1, CountedValueFormatCount, __func__, __LINE__, "An entry at the minimum level should be formatted once");
-    CheckEquals(std::string("counted"), logger.LastMessage, __func__, __LINE__, "The formatted entry should reach the logger");
+    CheckEquals(1, CountedValueFormatCount, "An entry at the minimum level should be formatted once");
+    CheckEquals(std::string("counted"), logger.LastMessage, "The formatted entry should reach the logger");
 
     logger.LogForceFmt(ASWLog::Level::Trace, "{}", TCountedValue{});
     logger.LogForceRawFmt(ASWLog::Level::Trace, "{}", TCountedValue{});
-    CheckEquals(3, CountedValueFormatCount, __func__, __LINE__, "A forced entry below the minimum level should still be formatted");
+    CheckEquals(3, CountedValueFormatCount, "A forced entry below the minimum level should still be formatted");
 
     logger.SetEnabled(false);
     logger.LastMessage.clear();
     logger.LogErrorFmt("{}", TCountedValue{});
     logger.LogForceFmt(ASWLog::Level::Critical, "{}", TCountedValue{});
     logger.LogForceRawFmt(ASWLog::Level::Critical, "{}", TCountedValue{});
-    CheckEquals(3, CountedValueFormatCount, __func__, __LINE__, "Nothing should be formatted while the logger is disabled, not even forced entries");
-    CheckTrue(logger.LastMessage.empty(), __func__, __LINE__, "Nothing should reach the logger while it is disabled");
+    CheckEquals(3, CountedValueFormatCount, "Nothing should be formatted while the logger is disabled, not even forced entries");
+    CheckTrue(logger.LastMessage.empty(), "Nothing should reach the logger while it is disabled");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_Base::Test_LogLevelConvenienceMethods()
@@ -571,43 +790,43 @@ void TTest_ASWLog_Base::Test_LogLevelConvenienceMethods()
     logger.LogTrace("trace");
 
     // Assert
-    CheckEquals(static_cast<int32_t>(ASWLog::Level::Trace), static_cast<int32_t>(logger.LastLevel), __func__, __LINE__, "LogTrace should set Trace level");
-    CheckEquals(std::string("trace"), logger.LastMessage, __func__, __LINE__, "LogTrace should store the message");
+    CheckEquals(static_cast<int32_t>(ASWLog::Level::Trace), static_cast<int32_t>(logger.LastLevel), "LogTrace should set Trace level");
+    CheckEquals(std::string("trace"), logger.LastMessage, "LogTrace should store the message");
 
     // Act
     logger.LogDebug("debug");
 
     // Assert
-    CheckEquals(static_cast<int32_t>(ASWLog::Level::Debug), static_cast<int32_t>(logger.LastLevel), __func__, __LINE__, "LogDebug should set Debug level");
-    CheckEquals(std::string("debug"), logger.LastMessage, __func__, __LINE__, "LogDebug should store the message");
+    CheckEquals(static_cast<int32_t>(ASWLog::Level::Debug), static_cast<int32_t>(logger.LastLevel), "LogDebug should set Debug level");
+    CheckEquals(std::string("debug"), logger.LastMessage, "LogDebug should store the message");
 
     // Act
     logger.LogInfo("info");
 
     // Assert
-    CheckEquals(static_cast<int32_t>(ASWLog::Level::Info), static_cast<int32_t>(logger.LastLevel), __func__, __LINE__, "LogInfo should set Info level");
-    CheckEquals(std::string("info"), logger.LastMessage, __func__, __LINE__, "LogInfo should store the message");
+    CheckEquals(static_cast<int32_t>(ASWLog::Level::Info), static_cast<int32_t>(logger.LastLevel), "LogInfo should set Info level");
+    CheckEquals(std::string("info"), logger.LastMessage, "LogInfo should store the message");
 
     // Act
     logger.LogWarn("warn");
 
     // Assert
-    CheckEquals(static_cast<int32_t>(ASWLog::Level::Warn), static_cast<int32_t>(logger.LastLevel), __func__, __LINE__, "LogWarn should set Warn level");
-    CheckEquals(std::string("warn"), logger.LastMessage, __func__, __LINE__, "LogWarn should store the message");
+    CheckEquals(static_cast<int32_t>(ASWLog::Level::Warn), static_cast<int32_t>(logger.LastLevel), "LogWarn should set Warn level");
+    CheckEquals(std::string("warn"), logger.LastMessage, "LogWarn should store the message");
 
     // Act
     logger.LogError("error");
 
     // Assert
-    CheckEquals(static_cast<int32_t>(ASWLog::Level::Error), static_cast<int32_t>(logger.LastLevel), __func__, __LINE__, "LogError should set Error level");
-    CheckEquals(std::string("error"), logger.LastMessage, __func__, __LINE__, "LogError should store the message");
+    CheckEquals(static_cast<int32_t>(ASWLog::Level::Error), static_cast<int32_t>(logger.LastLevel), "LogError should set Error level");
+    CheckEquals(std::string("error"), logger.LastMessage, "LogError should store the message");
 
     // Act
     logger.LogCritical("critical");
 
     // Assert
-    CheckEquals(static_cast<int32_t>(ASWLog::Level::Critical), static_cast<int32_t>(logger.LastLevel), __func__, __LINE__, "LogCritical should set Critical level");
-    CheckEquals(std::string("critical"), logger.LastMessage, __func__, __LINE__, "LogCritical should store the message");
+    CheckEquals(static_cast<int32_t>(ASWLog::Level::Critical), static_cast<int32_t>(logger.LastLevel), "LogCritical should set Critical level");
+    CheckEquals(std::string("critical"), logger.LastMessage, "LogCritical should store the message");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_Base::Test_LogMethods_PassRecordsToWrite()
@@ -615,18 +834,17 @@ void TTest_ASWLog_Base::Test_LogMethods_PassRecordsToWrite()
     // Arrange: a logger that only implements WriteRecord(), as a custom logger would
     TTestLogger logger;
     logger.SetMinimumLevel(ASWLog::Level::Trace);
-    const std::string testName = __func__;
-
-    // Checks the record the last logging call passed on
+    // Checks the record the last logging call passed on. A failure reports the line that called it.
     const auto checkRecord = [&](int expectedLine, const std::string& method, ASWLog::Level expectedLevel,
-                                 const std::string& expectedMessage, bool expectedRaw, bool expectedForced)
+                                 const std::string& expectedMessage, bool expectedRaw, bool expectedForced,
+                                 std::source_location loc = std::source_location::current())
         {
             const auto& record = logger.LastRecord;
-            CheckEquals(static_cast<int32_t>(expectedLevel), static_cast<int32_t>(record.LogLevel), testName, __LINE__, method + " should pass its level");
-            CheckEquals(expectedMessage, std::string(record.Message), testName, __LINE__, method + " should pass its message");
-            CheckEquals(static_cast<int64_t>(expectedLine), static_cast<int64_t>(record.Location.line()), testName, __LINE__, method + " should pass the caller's line");
-            CheckTrue(expectedRaw == record.Raw, testName, __LINE__, method + " should set Raw correctly");
-            CheckTrue(expectedForced == record.Forced, testName, __LINE__, method + " should set Forced correctly");
+            CheckEquals(static_cast<int32_t>(expectedLevel), static_cast<int32_t>(record.LogLevel), method + " should pass its level", loc);
+            CheckEquals(expectedMessage, std::string(record.Message), method + " should pass its message", loc);
+            CheckEquals(expectedLine, record.Location.line(), method + " should pass the caller's line", loc);
+            CheckEquals(expectedRaw, record.Raw, method + " should set Raw correctly", loc);
+            CheckEquals(expectedForced, record.Forced, method + " should set Forced correctly", loc);
         };
 
     // Act and Assert: each expected line is the line after the one that records it
@@ -666,7 +884,7 @@ void TTest_ASWLog_Base::Test_LogMethods_PassRecordsToWrite()
     logger.LogForceRawFmt(ASWLog::Level::Info, "force raw {}", 3);
     checkRecord(line, "LogForceRawFmt", ASWLog::Level::Info, "force raw 3", true, true);
 
-    CheckEquals(9, logger.WriteRecordCount, testName, __LINE__, "Each call should pass exactly one record to WriteRecord()");
+    CheckEquals(9, logger.WriteRecordCount, "Each call should pass exactly one record to WriteRecord()");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_Base::Test_ReportError_FailureInHandlerIsNotReportedAgain()
@@ -689,7 +907,7 @@ void TTest_ASWLog_Base::Test_ReportError_FailureInHandlerIsNotReportedAgain()
     logger.ReportTestError(ASWLog::ErrorKind::FlushFailed);
 
     // Assert
-    CheckTrue(reportedKinds == std::vector<ASWLog::ErrorKind>{ ASWLog::ErrorKind::OpenFailed, ASWLog::ErrorKind::FlushFailed }, __func__, __LINE__,
+    CheckTrue(reportedKinds == std::vector<ASWLog::ErrorKind>{ ASWLog::ErrorKind::OpenFailed, ASWLog::ErrorKind::FlushFailed },
         "Only the failures outside the handler should be reported, and the next failure after it should be reported again");
 }
 //---------------------------------------------------------------------------
@@ -725,18 +943,18 @@ void TTest_ASWLog_Base::Test_ReportError_ThrottlesEachKindSeparately()
     logger.ReportTestError(ASWLog::ErrorKind::OpenFailed, "unthrottled 2");
 
     // Assert
-    CheckEquals(static_cast<std::size_t>(3), throttledCount, __func__, __LINE__, "Each kind should be reported at most once per ErrorReportInterval");
-    CheckEquals(static_cast<std::size_t>(5), reports.size(), __func__, __LINE__, "An ErrorReportInterval of 0 should report every failure");
+    CheckEquals(3, throttledCount, "Each kind should be reported at most once per ErrorReportInterval");
+    CheckEquals(5, reports.size(), "An ErrorReportInterval of 0 should report every failure");
     if (reports.size() != 5)
         return;
 
-    CheckEquals(std::string("first"), reports[0].Message, __func__, __LINE__, "The first failure should be reported");
-    CheckEquals(static_cast<std::size_t>(0), reports[0].SuppressedCount, __func__, __LINE__, "Nothing was left out before the first report");
-    CheckEquals(std::string("other kind"), reports[1].Message, __func__, __LINE__, "Another kind should have its own interval");
-    CheckEquals(std::string("after the interval"), reports[2].Message, __func__, __LINE__, "The kind should be reported again once the interval has passed");
-    CheckEquals(static_cast<std::size_t>(3), reports[2].SuppressedCount, __func__, __LINE__, "The report should count the failures left out since the previous one");
-    CheckEquals(std::string("unthrottled 2"), reports[4].Message, __func__, __LINE__, "With an interval of 0, every failure should be reported");
-    CheckEquals(static_cast<std::size_t>(0), reports[4].SuppressedCount, __func__, __LINE__, "With an interval of 0, nothing should be left out");
+    CheckEquals(std::string("first"), reports[0].Message, "The first failure should be reported");
+    CheckEquals(0, reports[0].SuppressedCount, "Nothing was left out before the first report");
+    CheckEquals(std::string("other kind"), reports[1].Message, "Another kind should have its own interval");
+    CheckEquals(std::string("after the interval"), reports[2].Message, "The kind should be reported again once the interval has passed");
+    CheckEquals(3, reports[2].SuppressedCount, "The report should count the failures left out since the previous one");
+    CheckEquals(std::string("unthrottled 2"), reports[4].Message, "With an interval of 0, every failure should be reported");
+    CheckEquals(0, reports[4].SuppressedCount, "With an interval of 0, nothing should be left out");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_Base::Test_ReportError_ThrowingHandlerDoesNotEscape()
@@ -766,8 +984,8 @@ void TTest_ASWLog_Base::Test_ReportError_ThrowingHandlerDoesNotEscape()
     }
 
     // Assert
-    CheckFalse(threw, __func__, __LINE__, "An exception from OnError should not escape");
-    CheckEquals(2, handlerCalls, __func__, __LINE__, "A handler that threw should still be called for the next failure");
+    CheckFalse(threw, "An exception from OnError should not escape");
+    CheckEquals(2, handlerCalls, "A handler that threw should still be called for the next failure");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_Base::Test_ReportError_WritesToStdErrWithoutHandler()
@@ -792,7 +1010,7 @@ void TTest_ASWLog_Base::Test_ReportError_WritesToStdErrWithoutHandler()
     {
         std::error_code removeError;
         std::filesystem::remove(stdErrFile, removeError);
-        Skip(__func__, __LINE__, "stderr has no file descriptor to redirect (e.g. a GUI application)");
+        Skip("stderr has no file descriptor to redirect (e.g. a GUI application)");
     }
 
     std::string written;
@@ -805,7 +1023,7 @@ void TTest_ASWLog_Base::Test_ReportError_WritesToStdErrWithoutHandler()
     std::erase(written, '\r'); // In case stderr is in text mode on Windows
 
     // Assert
-    CheckEquals(std::string("ASWLog TTestLogger: OPEN_FAILED: Couldn't open the log file\n"), written, __func__, __LINE__,
+    CheckEquals(std::string("ASWLog TTestLogger: OPEN_FAILED: Couldn't open the log file\n"), written,
         "Without OnError, a failure should be written to stderr as one line naming the logger, once per interval");
 }
 //---------------------------------------------------------------------------
@@ -820,13 +1038,13 @@ void TTest_ASWLog_Base::Test_SetGetMinimumLevel_RoundTrips()
     logger.Initialize(config);
 
     // Assert
-    CheckEquals(static_cast<int32_t>(ASWLog::Level::Warn), static_cast<int32_t>(logger.GetMinimumLevel()), __func__, __LINE__, "GetMinimumLevel should be seeded from the config's InitialMinimumLevel at Initialize() time");
+    CheckEquals(static_cast<int32_t>(ASWLog::Level::Warn), static_cast<int32_t>(logger.GetMinimumLevel()), "GetMinimumLevel should be seeded from the config's InitialMinimumLevel at Initialize() time");
 
     // Act
     logger.SetMinimumLevel(ASWLog::Level::Trace);
 
     // Assert
-    CheckEquals(static_cast<int32_t>(ASWLog::Level::Trace), static_cast<int32_t>(logger.GetMinimumLevel()), __func__, __LINE__, "SetMinimumLevel should update the value returned by GetMinimumLevel immediately");
+    CheckEquals(static_cast<int32_t>(ASWLog::Level::Trace), static_cast<int32_t>(logger.GetMinimumLevel()), "SetMinimumLevel should update the value returned by GetMinimumLevel immediately");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_Base::Test_ShouldLog_ReflectsEnabledAndLevel()
@@ -851,14 +1069,14 @@ void TTest_ASWLog_Base::Test_ShouldLog_ReflectsEnabledAndLevel()
     const bool shouldLogCriticalAtMinimumOff = logger.ShouldLog(ASWLog::Level::Critical);
 
     // Assert
-    CheckTrue(enabledByDefault, __func__, __LINE__, "A logger should be enabled by default");
-    CheckTrue(logger.GetMinimumLevel() == ASWLog::Level::Off, __func__, __LINE__, "The minimum level should be readable through IASWLog");
-    CheckFalse(shouldLogInfo, __func__, __LINE__, "An entry below the minimum level should not be logged");
-    CheckTrue(shouldLogWarn, __func__, __LINE__, "An entry at the minimum level should be logged");
-    CheckFalse(shouldLogOff, __func__, __LINE__, "An entry at Off should never be logged");
-    CheckFalse(enabledAfterDisable, __func__, __LINE__, "SetEnabled(false) should disable the logger");
-    CheckFalse(shouldLogCriticalWhileDisabled, __func__, __LINE__, "Nothing should be logged while the logger is disabled");
-    CheckFalse(shouldLogCriticalAtMinimumOff, __func__, __LINE__, "Nothing should be logged at a minimum level of Off");
+    CheckTrue(enabledByDefault, "A logger should be enabled by default");
+    CheckTrue(logger.GetMinimumLevel() == ASWLog::Level::Off, "The minimum level should be readable through IASWLog");
+    CheckFalse(shouldLogInfo, "An entry below the minimum level should not be logged");
+    CheckTrue(shouldLogWarn, "An entry at the minimum level should be logged");
+    CheckFalse(shouldLogOff, "An entry at Off should never be logged");
+    CheckFalse(enabledAfterDisable, "SetEnabled(false) should disable the logger");
+    CheckFalse(shouldLogCriticalWhileDisabled, "Nothing should be logged while the logger is disabled");
+    CheckFalse(shouldLogCriticalAtMinimumOff, "Nothing should be logged at a minimum level of Off");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_Base::Test_Write_AppliesEnabledOffAndLevelChecks()
@@ -869,20 +1087,20 @@ void TTest_ASWLog_Base::Test_Write_AppliesEnabledOffAndLevelChecks()
 
     // Act and Assert: WriteRecordCount shows whether each entry reached WriteRecord()
     logger.LogInfo("below_minimum");
-    CheckEquals(0, logger.WriteRecordCount, __func__, __LINE__, "An entry below the minimum level should not reach WriteRecord()");
+    CheckEquals(0, logger.WriteRecordCount, "An entry below the minimum level should not reach WriteRecord()");
 
     logger.LogWarn("at_minimum");
-    CheckEquals(1, logger.WriteRecordCount, __func__, __LINE__, "An entry at the minimum level should reach WriteRecord()");
+    CheckEquals(1, logger.WriteRecordCount, "An entry at the minimum level should reach WriteRecord()");
 
     logger.LogForce(ASWLog::Level::Info, "forced");
-    CheckEquals(2, logger.WriteRecordCount, __func__, __LINE__, "A forced entry should ignore the minimum level");
+    CheckEquals(2, logger.WriteRecordCount, "A forced entry should ignore the minimum level");
 
     logger.LogForce(ASWLog::Level::Off, "forced_off");
-    CheckEquals(2, logger.WriteRecordCount, __func__, __LINE__, "An entry at Off should never be written, even forced");
+    CheckEquals(2, logger.WriteRecordCount, "An entry at Off should never be written, even forced");
 
     logger.SetEnabled(false);
     logger.LogForce(ASWLog::Level::Critical, "forced_while_disabled");
-    CheckEquals(2, logger.WriteRecordCount, __func__, __LINE__, "A disabled logger should write nothing, even forced");
+    CheckEquals(2, logger.WriteRecordCount, "A disabled logger should write nothing, even forced");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_Base::Test_Write_KeepsFieldsAlreadyStamped()
@@ -902,11 +1120,11 @@ void TTest_ASWLog_Base::Test_Write_KeepsFieldsAlreadyStamped()
     logger.Write(record);
 
     // Assert
-    CheckEquals(1, logger.WriteRecordCount, __func__, __LINE__, "The record should be written");
-    CheckTrue(logger.LastRecord.Timestamp == record.Timestamp, __func__, __LINE__, "A Timestamp already set should be kept");
-    CheckEquals(static_cast<int64_t>(7), static_cast<int64_t>(logger.LastRecord.ProcessId), __func__, __LINE__, "A ProcessId already set should be kept");
-    CheckEquals(static_cast<int64_t>(9), static_cast<int64_t>(logger.LastRecord.ThreadId), __func__, __LINE__, "A ThreadId already set should be kept");
-    CheckEquals(0, logger.NowUTCCount, __func__, __LINE__, "The clock should not be read for a record that already has its Timestamp");
+    CheckEquals(1, logger.WriteRecordCount, "The record should be written");
+    CheckTrue(logger.LastRecord.Timestamp == record.Timestamp, "A Timestamp already set should be kept");
+    CheckEquals(7, static_cast<int64_t>(logger.LastRecord.ProcessId), "A ProcessId already set should be kept");
+    CheckEquals(9, static_cast<int64_t>(logger.LastRecord.ThreadId), "A ThreadId already set should be kept");
+    CheckEquals(0, logger.NowUTCCount, "The clock should not be read for a record that already has its Timestamp");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_Base::Test_Write_StampsOnlyWrittenEntries()
@@ -923,11 +1141,11 @@ void TTest_ASWLog_Base::Test_Write_StampsOnlyWrittenEntries()
     logger.LogError("written");
 
     // Assert
-    CheckEquals(0, clockReadsWhenFiltered, __func__, __LINE__, "A filtered entry should not be stamped (no clock read)");
-    CheckEquals(1, logger.NowUTCCount, __func__, __LINE__, "A written entry should be stamped once");
-    CheckTrue(logger.LastRecord.Timestamp == logger.FixedNow, __func__, __LINE__, "The Timestamp should come from the logger's NowUTC()");
-    CheckEquals(static_cast<int64_t>(ASWLog::GetCurrentOSProcessId()), static_cast<int64_t>(logger.LastRecord.ProcessId), __func__, __LINE__, "The ProcessId should be this process's");
-    CheckEquals(static_cast<int64_t>(ASWLog::GetCurrentOSThreadId()), static_cast<int64_t>(logger.LastRecord.ThreadId), __func__, __LINE__, "The ThreadId should be the calling thread's");
+    CheckEquals(0, clockReadsWhenFiltered, "A filtered entry should not be stamped (no clock read)");
+    CheckEquals(1, logger.NowUTCCount, "A written entry should be stamped once");
+    CheckTrue(logger.LastRecord.Timestamp == logger.FixedNow, "The Timestamp should come from the logger's NowUTC()");
+    CheckEquals(static_cast<int64_t>(ASWLog::GetCurrentOSProcessId()), static_cast<int64_t>(logger.LastRecord.ProcessId), "The ProcessId should be this process's");
+    CheckEquals(static_cast<int64_t>(ASWLog::GetCurrentOSThreadId()), static_cast<int64_t>(logger.LastRecord.ThreadId), "The ThreadId should be the calling thread's");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_Base::Test_Write_ThrowingWriteRecordDropsEntry()
@@ -951,14 +1169,14 @@ void TTest_ASWLog_Base::Test_Write_ThrowingWriteRecordDropsEntry()
     logger.LogError("written");
 
     // Assert
-    CheckEquals(1, logger.WriteRecordCount, __func__, __LINE__, "Only the entry written after the failures should be recorded");
-    CheckEquals(std::string("written"), logger.LastMessage, __func__, __LINE__, "The logger should keep working after WriteRecord() threw");
-    CheckEquals(static_cast<std::size_t>(2), reports.size(), __func__, __LINE__, "Each dropped entry should be reported");
+    CheckEquals(1, logger.WriteRecordCount, "Only the entry written after the failures should be recorded");
+    CheckEquals(std::string("written"), logger.LastMessage, "The logger should keep working after WriteRecord() threw");
+    CheckEquals(2, reports.size(), "Each dropped entry should be reported");
     if (reports.empty())
         return;
 
-    CheckTrue(reports[0].Kind == ASWLog::ErrorKind::Exception, __func__, __LINE__, "A dropped entry should be reported as an Exception");
-    CheckEquals(std::string("Dropped an entry: write failed"), reports[0].Message, __func__, __LINE__, "The report should give the exception's what()");
+    CheckTrue(reports[0].Kind == ASWLog::ErrorKind::Exception, "A dropped entry should be reported as an Exception");
+    CheckEquals(std::string("Dropped an entry: write failed"), reports[0].Message, "The report should give the exception's what()");
 }
 //---------------------------------------------------------------------------
 

@@ -317,6 +317,40 @@ bool TASWFileStreamBuf::Write(std::string_view data)
 }
 
 //---------------------------------------------------------------------------
+bool TASWFileStreamBuf::WriteDirect(std::string_view data) noexcept
+{
+    if (m_File == nullptr)
+        return false;
+
+#if defined(_WIN32)
+    // The C library appends by moving to the end before each write, which this does too
+    const auto handle = reinterpret_cast<HANDLE>(_get_osfhandle(_fileno(m_File)));
+    LARGE_INTEGER noMove{};
+    if (handle == INVALID_HANDLE_VALUE || !SetFilePointerEx(handle, noMove, nullptr, FILE_END))
+        return false;
+
+    DWORD written = 0;
+    return WriteFile(handle, data.data(), static_cast<DWORD>(data.size()), &written, nullptr) && written == data.size();
+#else
+    // Opened for appending (O_APPEND), so each write goes to the end
+    const int descriptor = fileno(m_File);
+    while (!data.empty())
+    {
+        const auto written = write(descriptor, data.data(), data.size());
+        if (written < 0 && errno == EINTR)
+            continue;
+
+        if (written <= 0)
+            return false;
+
+        data.remove_prefix(static_cast<std::size_t>(written));
+    }
+
+    return true;
+#endif
+}
+
+//---------------------------------------------------------------------------
 TASWFileStreamBuf::int_type TASWFileStreamBuf::overflow(int_type character)
 {
     if (m_File == nullptr)
@@ -427,6 +461,12 @@ bool TASWFileStream::Write(std::string_view data)
 }
 
 //---------------------------------------------------------------------------
+bool TASWFileStream::WriteDirect(std::string_view data) noexcept
+{
+    return m_Buffer.WriteDirect(data);
+}
+
+//---------------------------------------------------------------------------
 
 /////////////////////////////////////////////////////////////////////////////
 // TASWFileLog
@@ -458,6 +498,20 @@ void TASWFileLog::CloseFileUnlocked()
     }
 
     m_IsOpen.store(false, std::memory_order_release);
+}
+
+//---------------------------------------------------------------------------
+void TASWFileLog::AfterQueuedEntriesUnlocked(bool mustFlush)
+{
+    // The modes that flush every entry flush a batch of queued entries once (see MaybeFlush())
+    const auto& file = GetConfigUnlocked().File;
+
+    if (mustFlush || file.Flush == FlushMode::EveryWrite || file.Flush == FlushMode::OnNewLine ||
+        (file.Flush == FlushMode::Periodic && file.FlushInterval.count() <= 0))
+    {
+        if (m_FileStream.IsOpen())
+            FlushUnlocked();
+    }
 }
 
 //---------------------------------------------------------------------------
@@ -595,6 +649,14 @@ bool TASWFileLog::EnsureReadyUnlocked()
 }
 
 //---------------------------------------------------------------------------
+void TASWFileLog::FlushForCrashUnlocked() noexcept
+{
+    // Holding m_Mutex, so no other thread is in a stdio call on the file, and fflush() only writes out its buffer
+    if (m_FileStream.IsOpen())
+        m_FileStream.rdbuf()->pubsync();
+}
+
+//---------------------------------------------------------------------------
 bool TASWFileLog::FlushUnlocked()
 {
     if (!m_FileStream.IsOpen())
@@ -607,7 +669,6 @@ bool TASWFileLog::FlushUnlocked()
         ReportFileErrorUnlocked(ErrorKind::FlushFailed, "Couldn't flush the log file", GetConfigUnlocked().File.ResolvePath(), errorCode);
     }
 
-    m_LastFlushTime = std::chrono::steady_clock::now();
     return isFlushed;
 }
 
@@ -624,8 +685,21 @@ TASWFileLog& TASWFileLog::GetInstance()
 }
 
 //---------------------------------------------------------------------------
+std::chrono::milliseconds TASWFileLog::GetWorkerIntervalUnlocked() const
+{
+    // With AutoOpenClosePerWrite, closing the file after each entry flushes it
+    const auto& file = GetConfigUnlocked().File;
+    if (file.Flush == FlushMode::Periodic && !file.AutoOpenClosePerWrite)
+        return file.FlushInterval;
+
+    return std::chrono::milliseconds(0);
+}
+
+//---------------------------------------------------------------------------
 bool TASWFileLog::InitializeUnlocked()
 {
+    m_SyncsCrashLine.store(Level::Critical >= GetConfigUnlocked().File.SyncToDiskAtLevel, std::memory_order_relaxed);
+
     if (GetConfigUnlocked().File.EnableDailyRolling)
         RotateDailyLogFromEarlierDayUnlocked();
 
@@ -649,19 +723,22 @@ void TASWFileLog::MaybeFlush(Level level, bool isNewLine)
         return;
     }
 
+    // In Periodic mode the worker thread flushes (see OnWorkerWakeUnlocked()), unless FlushInterval is 0 or less. The
+    // modes that flush every entry flush queued entries once per batch (see AfterQueuedEntriesUnlocked()).
     const auto flushMode = fileConfig.Flush;
-    if (flushMode == FlushMode::EveryWrite || (flushMode == FlushMode::OnNewLine && isNewLine) || level >= fileConfig.FlushImmediatelyAtLevel)
-    {
-        FlushUnlocked();
-        return;
-    }
+    const bool flushesEachEntry = flushMode == FlushMode::EveryWrite || (flushMode == FlushMode::OnNewLine && isNewLine) ||
+        (flushMode == FlushMode::Periodic && fileConfig.FlushInterval.count() <= 0);
 
-    if (flushMode == FlushMode::Periodic)
-    {
-        const auto now = std::chrono::steady_clock::now();
-        if (now - m_LastFlushTime >= fileConfig.FlushInterval)
-            FlushUnlocked();
-    }
+    if ((flushesEachEntry && !IsWritingQueuedEntriesUnlocked()) || level >= fileConfig.FlushImmediatelyAtLevel)
+        FlushUnlocked();
+}
+
+//---------------------------------------------------------------------------
+void TASWFileLog::OnWorkerWakeUnlocked()
+{
+    // FlushMode::Periodic. A buffer with nothing new in it flushes without writing to the file.
+    if (m_FileStream.IsOpen())
+        FlushUnlocked();
 }
 
 //---------------------------------------------------------------------------
@@ -714,7 +791,6 @@ bool TASWFileLog::OpenUnlocked()
 
     m_IsOpen.store(true, std::memory_order_release);
     m_IsInitialized.store(true, std::memory_order_release);
-    m_LastFlushTime = std::chrono::steady_clock::now();
     return true;
 }
 
@@ -766,11 +842,14 @@ bool TASWFileLog::PrepareWriteUnlocked(std::chrono::system_clock::time_point now
     failed open keeps the logger initialized, so later entries try again (see EnsureReadyUnlocked()).
 
     Otherwise the file stays open: flushes what the previous flush mode may have buffered, and the other settings take
-    effect with the next entry.
+    effect with the next entry (a FlushMode::Periodic thread is started, stopped or given its new interval after the
+    lock is released, see GetWorkerIntervalUnlocked()).
 */
 bool TASWFileLog::ReconfigureUnlocked(const TASWLogConfig& previous)
 {
     const auto& file = GetConfigUnlocked().File;
+    m_SyncsCrashLine.store(Level::Critical >= file.SyncToDiskAtLevel, std::memory_order_relaxed);
+
     if (file.ResolvePath() == previous.File.ResolvePath() &&
         file.AutoOpenClosePerWrite == previous.File.AutoOpenClosePerWrite)
     {
@@ -951,6 +1030,15 @@ void TASWFileLog::SyncToDiskUnlocked()
     std::error_code errorCode;
     if (FlushUnlocked() && !m_FileStream.SyncToDisk(errorCode))
         ReportFileErrorUnlocked(ErrorKind::SyncFailed, "Couldn't sync the log file to disk", GetConfigUnlocked().File.ResolvePath(), errorCode);
+}
+
+//---------------------------------------------------------------------------
+void TASWFileLog::WriteCrashLineDirect(std::string_view line) noexcept
+{
+    // A crash isn't reported: OnError can't run in the crashed process
+    std::error_code errorCode;
+    if (m_FileStream.WriteDirect(line) && m_SyncsCrashLine.load(std::memory_order_relaxed))
+        m_FileStream.SyncToDisk(errorCode);
 }
 
 //---------------------------------------------------------------------------

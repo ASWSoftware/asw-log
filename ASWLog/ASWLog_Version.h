@@ -34,10 +34,10 @@ limitations under the License.
 // ASWLOG_VERSION_STRING is "MAJOR.MINOR.PATCH", followed by "-PRERELEASE" if the pre-release isn't empty; change
 // them together (a unit test checks that they match).
 #define ASWLOG_VERSION_MAJOR 0
-#define ASWLOG_VERSION_MINOR 66
+#define ASWLOG_VERSION_MINOR 75
 #define ASWLOG_VERSION_PATCH 0
 #define ASWLOG_VERSION_PRERELEASE ""
-#define ASWLOG_VERSION_STRING "0.66.0"
+#define ASWLOG_VERSION_STRING "0.75.0"
 
 namespace ASWLog
 {

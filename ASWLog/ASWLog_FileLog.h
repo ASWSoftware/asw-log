@@ -27,6 +27,7 @@ limitations under the License.
 #ifndef ASWLog_FileLogH
 #define ASWLog_FileLogH
 //---------------------------------------------------------------------------
+#include <atomic>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
@@ -74,6 +75,10 @@ public:
     // what has been flushed out of this buffer is synced, so call pubsync() first. Sets 'errorCode' if it fails.
     bool SyncToDisk(std::error_code& errorCode);
     bool Write(std::string_view data);
+    // Writes 'data' straight to the end of the file (write() on POSIX, WriteFile() on Windows), bypassing the stdio
+    // buffer, so it is async-signal-safe: for a crash handler (see TASWTextLogBase::WriteCrashLineDirect()). Doesn't
+    // count the bytes in GetSize().
+    bool WriteDirect(std::string_view data) noexcept;
 };
 
 
@@ -100,6 +105,7 @@ public:
     std::uintmax_t GetSize() const noexcept; // See TASWFileStreamBuf::GetSize()
     bool SyncToDisk(std::error_code& errorCode); // See TASWFileStreamBuf::SyncToDisk()
     bool Write(std::string_view data);
+    bool WriteDirect(std::string_view data) noexcept; // See TASWFileStreamBuf::WriteDirect()
 };
 
 
@@ -117,9 +123,11 @@ private:
     // m_Mutex (see TASWTextLogBase) protects all of these
     TASWFileStream m_FileStream;
     std::string m_LastLogDateStr; // Stores YYYY-MM-DD state to detect structural calendar shifts
-    std::chrono::steady_clock::time_point m_LastFlushTime{};
     std::chrono::system_clock::time_point m_LastOpenFailure{}; // NowUTC() when opening the file last failed
     std::chrono::system_clock::time_point m_LastRotationFailure{}; // NowUTC() when a rotation last failed
+
+    // File.SyncToDiskAtLevel is Critical or lower, for WriteCrashLineDirect(), which may run without m_Mutex
+    std::atomic<bool> m_SyncsCrashLine{ false };
 
 private:
     void CloseFileUnlocked(); // Closes the file but, unlike CloseUnlocked(), leaves the logger initialized
@@ -134,13 +142,18 @@ private:
 
 protected: // TASWTextLogBase hooks
     void AfterEntryUnlocked() override;
+    void AfterQueuedEntriesUnlocked(bool mustFlush) override;
     bool CloseUnlocked() override;
     bool EnsureReadyUnlocked() override;
+    void FlushForCrashUnlocked() noexcept override;
     bool FlushUnlocked() override;
+    std::chrono::milliseconds GetWorkerIntervalUnlocked() const override; // FlushMode::Periodic
     bool InitializeUnlocked() override;
+    void OnWorkerWakeUnlocked() override;
     bool OpenUnlocked() override;
     bool PrepareWriteUnlocked(std::chrono::system_clock::time_point now) override;
     bool ReconfigureUnlocked(const TASWLogConfig& previous) override;
+    void WriteCrashLineDirect(std::string_view line) noexcept override;
     void WriteLineUnlocked(Level level, std::string_view line, bool endsLine) override;
 
 protected:
@@ -156,10 +169,12 @@ public: // Static methods
     static std::size_t DeleteOldLogs(const std::filesystem::path& logDir, std::string_view pattern, std::chrono::hours maxAge);
     // Singleton support for the common static instance. The instance is never destroyed, so it is safe to use until
     // the process ends, e.g. from another static object's destructor or a thread still running at exit. At exit it is
-    // finalized (shutdown entry, flush, close) in static destruction order: a static object constructed after the
-    // first GetInstance() call can still log from its destructor, while one constructed before it is destroyed after
-    // the finalize, so what it logs is dropped. Leak checkers that list memory still allocated at exit (e.g. the MSVC
-    // debug heap's report) include the instance.
+    // finalized (shutdown entry, flush, close, and its FlushMode::Periodic thread stopped) in static destruction order:
+    // a static object constructed after the first GetInstance() call can still log from its destructor, while one
+    // constructed before it is destroyed after the finalize, so what it logs is dropped. Leak checkers that list memory
+    // still allocated at exit (e.g. the MSVC debug heap's report) include the instance. In a Windows DLL (or package)
+    // that is unloaded before the process ends, Close() it before unloading when using FlushMode::Periodic: stopping a
+    // thread while the DLL is being unloaded can deadlock.
     static TASWFileLog& GetInstance();
 
 public:

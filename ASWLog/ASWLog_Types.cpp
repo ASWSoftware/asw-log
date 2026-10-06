@@ -57,6 +57,18 @@ bool iequals(std::string_view a, std::string_view b) noexcept
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
+std::optional<AsyncOverflowPolicy> AsyncOverflowPolicy_FromString(std::string_view str) noexcept
+{
+    if (iequals(str, "BLOCK"))
+        return AsyncOverflowPolicy::Block;
+
+    if (iequals(str, "DROP_NEWEST") || iequals(str, "DROPNEWEST"))
+        return AsyncOverflowPolicy::DropNewest;
+
+    return std::nullopt;
+}
+
+//---------------------------------------------------------------------------
 std::optional<ColorMode> ColorMode_FromString(std::string_view str) noexcept
 {
     if (iequals(str, "AUTO"))

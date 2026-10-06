@@ -10,6 +10,100 @@ see [0.26.1](#0261---2026-09-17) for the initial versioned baseline.
 
 ## [Unreleased]
 
+## [0.75.0] - 2026-10-06
+
+### Added
+
+- Optional asynchronous writing for the text loggers (file and console),
+  in the new `TASWLogConfig::Async` group (`TASWAsyncConfig`), off by
+  default: the default synchronous logger, which has written each entry
+  when the call returns, stays the safest for finding the cause of a crash.
+  With `Async.Enabled`, a logging call formats the entry and queues it, and
+  the logger's own thread writes the queue in order, so the call doesn't
+  wait for the file or console. `Async.QueueCapacity` (default 8192
+  entries) and `Async.OverflowPolicy` (`AsyncOverflowPolicy::Block`, the
+  default, waits for room; `DropNewest` drops the entry) decide what
+  happens when the queue is full. A dropped run of entries is reported to
+  `OnError` as the new `ErrorKind::EntriesDropped` (`ErrorKindCount` is
+  now 9) and marked in the log by a "Dropped N entries" line where they
+  would have been. An entry at or above `Async.WaitAtLevel` (default
+  `Error`) is never dropped, and its call returns only once it and every
+  entry before it are written and flushed, so errors still reach the file
+  before a crash. `Flush()`, `Close()`, `Reconfigure()` and the destructor
+  first wait for the queued entries. In async mode `OnLogEntry` is called
+  on the logger's thread, after the entry was written; `File.Flush` set to
+  `EveryWrite` or `OnNewLine` flushes once per batch of queued entries. A
+  logger derived from `TASWTextLogBase` gets this without changes;
+  `AfterQueuedEntriesUnlocked()` is a new protected hook for flushing a
+  batch.
+- Optional crash handlers, in the new `ASWLog_CrashHandler.h` (add
+  `ASWLog_CrashHandler.cpp` to projects that list the ASWLog sources):
+  `ASWLog::InstallCrashHandlers()` hooks `std::terminate()`, SIGABRT
+  (`abort()`, a failed `assert()`) and the fatal faults (Windows:
+  unhandled structured exceptions such as an access violation or a stack
+  overflow; POSIX: SIGSEGV, SIGBUS, SIGFPE, SIGILL). On a crash, every
+  initialized text logger waits briefly for its asynchronous queue to be
+  written, is flushed, and gets a Critical "Crash: <reason>" line (e.g. the
+  uncaught exception's `what()`, or the exception code and address), then
+  the crash is passed on to the handler installed before, so error reports
+  and core dumps still happen. `TASWCrashHandlerOptions::WaitTimeout`
+  (default 1 s) bounds the wait. In a POSIX signal handler the line has a
+  fixed layout, written straight to the file; elsewhere it uses the
+  logger's formatter. Best effort: the header lists what isn't handled
+  (e.g. a debugger attached, fast fail, the process being killed), and a
+  logger whose lock stays busy (e.g. the crashed thread held it) gets only
+  the fixed-layout line, written straight to its output, and loses its
+  buffered entries. `UninstallCrashHandlers()` restores the previous
+  handlers; `ASWLog::HandleCrash(reason)` does the logging part for an
+  application with its own crash reporter. `Shutdown.WriteCrashLine`
+  (default true) leaves a logger's crash line out; the line is synced to
+  disk if `File.SyncToDiskAtLevel` is Critical or lower. A logger derived
+  from `TASWTextLogBase` is covered without changes; it can override the new
+  protected hooks `FlushForCrashUnlocked()` and `WriteCrashLineDirect()` to
+  get its crash line in a POSIX signal handler, or when its lock stays busy.
+- A backtrace buffer, in the new `TASWLogConfig::Backtrace` group
+  (`TASWBacktraceConfig`), off by default: with `Backtrace.Capacity` above 0,
+  a logger keeps its most recent entries below its minimum level (from
+  `Backtrace.LowestLevel` up, default Trace) in memory, and writes them when
+  an entry at or above `Backtrace.DumpAtLevel` (default Error) is written,
+  just before it, so a log written at Info still shows the Debug lines that
+  led up to an error. They are written with their own time, level and
+  location between a "Backtrace: the last N entries below the minimum
+  level" and a "Backtrace end" line, then forgotten. The new
+  `IASWLog::DumpBacktrace()` writes them on request, and a crash handler
+  writes them before the crash line. `ShouldLog()` is now true for the
+  levels the backtrace keeps, so the `*Fmt` methods format those entries
+  too. Each logger keeps its own backtrace; a multi-log keeps none and
+  filters with its own minimum level first, so set that to
+  `Backtrace.LowestLevel` or lower when its loggers keep a backtrace.
+  Breaking for a class that implements `IASWLog` directly: it must now
+  implement `DumpBacktrace()` (classes derived from `TASWLogBase` get it).
+
+### Fixed
+
+- `FlushMode::Periodic` now flushes on a timer: a thread of the file
+  logger's own flushes the file every `File.FlushInterval`, so the last
+  entries reach the file within that time even when nothing more is logged.
+  They used to stay in the buffer until the next entry came after the
+  interval, or until the file was closed. Writing an entry no longer reads
+  the clock in this mode. The thread runs only while a logger in Periodic
+  mode is initialized (not with `File.AutoOpenClosePerWrite`, which flushes
+  by closing the file after each entry); `Reconfigure()` starts or stops it
+  or applies a new interval at once, and `Close()`, the destructor and the
+  exit handler of `GetInstance()` stop it without waiting for the interval.
+  A failed flush on that thread goes to `OnError` on that thread. A
+  `FlushInterval` of 0 or less flushes every entry, as before. ASWLog now
+  needs the threads library: the CMake target `ASWLog::ASWLog` links
+  `Threads::Threads`; other Linux builds may need `-pthread`. A logger
+  derived from `TASWTextLogBase` can use the same thread through the new
+  protected hooks `GetWorkerIntervalUnlocked()` and `OnWorkerWakeUnlocked()`.
+- In a ThreadSanitizer build with libstdc++ (GCC's standard library, which
+  Clang also uses on most Linux systems), destroying a logger now tells
+  ThreadSanitizer that its locks are gone. ThreadSanitizer used to take the
+  locks of a logger created later at the same address (e.g. on the stack)
+  for the old ones, and could report a lock-order inversion (potential
+  deadlock) between loggers that never existed at the same time.
+
 ## [0.66.0] - 2026-10-04
 
 ### Added
@@ -542,7 +636,8 @@ Everything already present in the logger at this point (`TASWFileLog`,
 and CMake example projects, unit tests, `Deploy.bat`, etc.) is treated as the
 baseline and is not itemized commit-by-commit.
 
-[Unreleased]: https://github.com/ASWSoftware/asw-log/compare/v0.66.0...HEAD
+[Unreleased]: https://github.com/ASWSoftware/asw-log/compare/v0.75.0...HEAD
+[0.75.0]: https://github.com/ASWSoftware/asw-log/compare/v0.66.0...v0.75.0
 [0.66.0]: https://github.com/ASWSoftware/asw-log/compare/v0.65.0...v0.66.0
 [0.65.0]: https://github.com/ASWSoftware/asw-log/compare/v0.45.0...v0.65.0
 [0.45.0]: https://github.com/ASWSoftware/asw-log/compare/v0.43.0...v0.45.0
