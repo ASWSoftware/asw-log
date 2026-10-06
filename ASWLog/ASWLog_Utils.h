@@ -137,6 +137,11 @@ struct TSystemMemoryUsage
 namespace Time
 {
 
+// The size of the buffer WriteISO8601() writes to
+inline constexpr std::size_t ISO8601BufferSize = 32;
+
+//---------------------------------------------------------------------------
+
 /*
     GetUTCOffsetMinutes
 
@@ -170,6 +175,16 @@ namespace Time
         Format: YYYY-MM-DDTHH:mm:ss.mmm+hh:mm (e.g. 2026-09-28T21:02:44.123-05:00)
 */
 [[nodiscard]] std::string ToLocalISO8601String(std::chrono::system_clock::time_point timePoint);
+
+/*
+    WriteISO8601
+
+    Writes 'timePoint' as an ISO 8601 UTC string, as ToISO8601String() returns it, into 'buffer', and returns the
+    number of characters written: 24 for the years 0 to 9999, the year written in full outside them. Calendar
+    arithmetic only: allocates nothing and calls no C runtime function, so a crash handler can use it too.
+        Format: YYYY-MM-DDTHH:mm:ss.mmmZ
+*/
+[[nodiscard]] std::size_t WriteISO8601(char (& buffer)[ISO8601BufferSize], std::chrono::system_clock::time_point timePoint) noexcept;
 
 } // namespace Time
 

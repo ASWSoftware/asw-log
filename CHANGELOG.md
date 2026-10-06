@@ -10,6 +10,20 @@ see [0.26.1](#0261---2026-09-17) for the initial versioned baseline.
 
 ## [Unreleased]
 
+### Changed
+
+- Writing a formatted line is much faster: the built-in layout now writes
+  the timestamp, level, process and thread ids and memory fields itself
+  instead of through `std::format`, which took most of a line's time. A
+  `LogInfo` line to a file with `FlushMode::Manual` takes about 0.4 us
+  instead of 1.0 us (MinGW and RAD Studio, Windows); the output is
+  unchanged. `Time::ToISO8601String()` and `Time::ToDateString()` (which
+  daily rolling calls for each entry) use the same code, and the new
+  `Time::WriteISO8601()` writes the timestamp into a buffer of
+  `Time::ISO8601BufferSize` characters without allocating, e.g. for a
+  custom formatter. A time before 1970 is now written as the day and
+  millisecond it falls in, instead of a malformed time.
+
 ## [0.75.0] - 2026-10-06
 
 ### Added

@@ -38,6 +38,7 @@ private:
 private: // Test methods
     void Test_Format_MatchesFormatLine();
     void Test_FormatLine_AllFieldsInOrder();
+    void Test_FormatLine_LargestIdsAndEachLevel();
     void Test_FormatLine_MemoryFields();
     void Test_FormatLine_NoFields();
     void Test_Formatter_ReceivesRecordFromLoggingThread();

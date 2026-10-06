@@ -32,6 +32,7 @@ limitations under the License.
 #include <format>
 #include <fstream>
 #include <iterator>
+#include <limits>
 #include <memory>
 #include <source_location>
 #include <string>
@@ -168,6 +169,7 @@ TTest_ASWLog_Formatter::TTest_ASWLog_Formatter()
 {
     RegisterTest(&TTest_ASWLog_Formatter::Test_Format_MatchesFormatLine, "Format_MatchesFormatLine");
     RegisterTest(&TTest_ASWLog_Formatter::Test_FormatLine_AllFieldsInOrder, "FormatLine_AllFieldsInOrder");
+    RegisterTest(&TTest_ASWLog_Formatter::Test_FormatLine_LargestIdsAndEachLevel, "FormatLine_LargestIdsAndEachLevel");
     RegisterTest(&TTest_ASWLog_Formatter::Test_FormatLine_MemoryFields, "FormatLine_MemoryFields");
     RegisterTest(&TTest_ASWLog_Formatter::Test_FormatLine_NoFields, "FormatLine_NoFields");
     RegisterTest(&TTest_ASWLog_Formatter::Test_Formatter_ReceivesRecordFromLoggingThread, "Formatter_ReceivesRecordFromLoggingThread");
@@ -244,6 +246,31 @@ void TTest_ASWLog_Formatter::Test_FormatLine_AllFieldsInOrder()
     CheckEquals(expected, line, "Each field should be written from the record, in the documented order");
 }
 //---------------------------------------------------------------------------
+void TTest_ASWLog_Formatter::Test_FormatLine_LargestIdsAndEachLevel()
+{
+    // Arrange
+    auto config = MakeConfigWithoutFields("unused.log");
+    config.Line.ShowLevel = true;
+    config.Line.ShowProcessId = true;
+    config.Line.ShowThreadId = true;
+    auto record = MakeRecord("ids");
+    record.ProcessId = std::numeric_limits<std::uint32_t>::max();
+    record.ThreadId = 0;
+
+    for (const auto level : { ASWLog::Level::Trace, ASWLog::Level::Debug, ASWLog::Level::Info, ASWLog::Level::Warn,
+                              ASWLog::Level::Error, ASWLog::Level::Critical })
+    {
+        record.LogLevel = level;
+
+        // Act
+        const auto line = ASWLog::TASWTextFormatter::FormatLine(record, config);
+
+        // Assert
+        const auto expected = std::format("[{}][P:4294967295][T:0]: ids", ASWLog::Level_ToString(level));
+        CheckEquals(expected, line, "The level's name and every digit of the ids should be written");
+    }
+}
+//---------------------------------------------------------------------------
 void TTest_ASWLog_Formatter::Test_FormatLine_MemoryFields()
 {
     // Arrange
@@ -259,6 +286,16 @@ void TTest_ASWLog_Formatter::Test_FormatLine_MemoryFields()
     CheckStartsWith(line, "[WS:", "The working set should come first: " + line);
     CheckTrue(peakPos != std::string::npos, "The peak working set should follow: " + line);
     CheckEndsWith(line, "]: memory", "The message should follow the fields: " + line);
+
+    if (peakPos != std::string::npos)
+    {
+        const auto isNumber = [](const std::string& text) {
+                return !text.empty() && text.find_first_not_of("0123456789") == std::string::npos;
+            };
+        const auto peakEnd = line.find(']', peakPos + 1);
+        CheckTrue(isNumber(line.substr(4, peakPos - 4)), "The working set should be a decimal number: " + line);
+        CheckTrue(isNumber(line.substr(peakPos + 6, peakEnd - peakPos - 6)), "The peak working set should be a decimal number: " + line);
+    }
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_Formatter::Test_FormatLine_NoFields()

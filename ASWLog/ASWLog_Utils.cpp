@@ -619,6 +619,28 @@ std::error_code RenameWithoutReplacing(const std::filesystem::path& from, const 
 namespace Time
 {
 
+namespace
+{
+
+// The characters after the date in WriteISO8601()'s text: "THH:mm:ss.mmmZ"
+constexpr std::size_t ISO8601TimeOfDaySize = 14;
+
+//---------------------------------------------------------------------------
+
+// Writes the lowest 'digitCount' decimal digits of 'value', with leading zeros, and returns the end of what it wrote
+char* WriteDigits(char* out, std::uint32_t value, int digitCount) noexcept
+{
+    for (int index = digitCount - 1; index >= 0; --index)
+    {
+        out[index] = static_cast<char>('0' + value % 10);
+        value /= 10;
+    }
+
+    return out + digitCount;
+}
+
+} // namespace
+
 //---------------------------------------------------------------------------
 int GetUTCOffsetMinutes(std::chrono::system_clock::time_point timePoint)
 {
@@ -645,44 +667,15 @@ int GetUTCOffsetMinutes(std::chrono::system_clock::time_point timePoint)
 //---------------------------------------------------------------------------
 std::string ToISO8601String(std::chrono::system_clock::time_point timePoint)
 {
-    auto timeTimeT = std::chrono::system_clock::to_time_t(timePoint);
-    auto durationSinceEpoch = timePoint.time_since_epoch();
-    auto secondsSinceEpoch = std::chrono::duration_cast<std::chrono::seconds>(durationSinceEpoch);
-    auto millisecondsFraction = std::chrono::duration_cast<std::chrono::milliseconds>(durationSinceEpoch - secondsSinceEpoch).count();
-
-    std::tm utcTime{};
-#if defined(_WIN32)
-    gmtime_s(&utcTime, &timeTimeT);
-#else
-    gmtime_r(&timeTimeT, &utcTime);
-#endif
-
-    // Use ISO 8601 format with T separator and Z suffix
-    return std::format("{:04}-{:02}-{:02}T{:02}:{:02}:{:02}.{:03}Z",
-        utcTime.tm_year + 1900,
-        utcTime.tm_mon + 1,
-        utcTime.tm_mday,
-        utcTime.tm_hour,
-        utcTime.tm_min,
-        utcTime.tm_sec,
-        millisecondsFraction);
+    char buffer[ISO8601BufferSize];
+    return std::string(buffer, WriteISO8601(buffer, timePoint));
 }
 
 //---------------------------------------------------------------------------
 std::string ToDateString(std::chrono::system_clock::time_point timePoint)
 {
-    auto timeTimeT = std::chrono::system_clock::to_time_t(timePoint);
-    std::tm utcTime{};
-#if defined(_WIN32)
-    gmtime_s(&utcTime, &timeTimeT);
-#else
-    gmtime_r(&timeTimeT, &utcTime);
-#endif
-
-    return std::format("{:04}-{:02}-{:02}",
-        utcTime.tm_year + 1900,
-        utcTime.tm_mon + 1,
-        utcTime.tm_mday);
+    char buffer[ISO8601BufferSize];
+    return std::string(buffer, WriteISO8601(buffer, timePoint) - ISO8601TimeOfDaySize);
 }
 
 //---------------------------------------------------------------------------
@@ -714,6 +707,39 @@ std::string ToLocalISO8601String(std::chrono::system_clock::time_point timePoint
         offsetMinutes < 0 ? '-' : '+',
         absoluteOffsetMinutes / 60,
         absoluteOffsetMinutes % 60);
+}
+
+//---------------------------------------------------------------------------
+std::size_t WriteISO8601(char (& buffer)[ISO8601BufferSize], std::chrono::system_clock::time_point timePoint) noexcept
+{
+    // Floored, so a time before 1970 falls on the day and millisecond it is in
+    const auto day = std::chrono::floor<std::chrono::days>(timePoint);
+    const std::chrono::year_month_day date{ day };
+    const auto milliseconds = static_cast<std::uint32_t>(std::chrono::floor<std::chrono::milliseconds>(timePoint - day).count());
+    const int year = static_cast<int>(date.year());
+
+    char* out = buffer;
+
+    if (year >= 0 && year <= 9999)
+        out = WriteDigits(out, static_cast<std::uint32_t>(year), 4);
+    else
+        out = std::to_chars(out, buffer + ISO8601BufferSize, year).ptr;
+
+    *out++ = '-';
+    out = WriteDigits(out, static_cast<unsigned>(date.month()), 2);
+    *out++ = '-';
+    out = WriteDigits(out, static_cast<unsigned>(date.day()), 2);
+    *out++ = 'T';
+    out = WriteDigits(out, milliseconds / 3600000, 2);
+    *out++ = ':';
+    out = WriteDigits(out, milliseconds / 60000 % 60, 2);
+    *out++ = ':';
+    out = WriteDigits(out, milliseconds / 1000 % 60, 2);
+    *out++ = '.';
+    out = WriteDigits(out, milliseconds % 1000, 3);
+    *out++ = 'Z';
+
+    return static_cast<std::size_t>(out - buffer);
 }
 
 } // namespace Time

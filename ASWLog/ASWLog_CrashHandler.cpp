@@ -47,6 +47,7 @@ limitations under the License.
 #endif
 //---------------------------------------------------------------------------
 #include "ASWLog_TextLogBase.h"
+#include "ASWLog_Utils.h"
 //---------------------------------------------------------------------------
 
 namespace ASWLog
@@ -592,25 +593,9 @@ void TCrashText::AppendHex(std::uint64_t value, int minDigits) noexcept
 //---------------------------------------------------------------------------
 void TCrashText::AppendISO8601(std::chrono::system_clock::time_point time) noexcept
 {
-    // Calendar arithmetic only, which doesn't allocate (unlike Time::ToISO8601String())
-    const auto day = std::chrono::floor<std::chrono::days>(time);
-    const std::chrono::year_month_day date{ day };
-    const auto milliseconds = std::chrono::duration_cast<std::chrono::milliseconds>(time - day).count();
-
-    AppendDecimal(static_cast<std::uint64_t>(static_cast<int>(date.year())), 4);
-    Append("-");
-    AppendDecimal(static_cast<unsigned>(date.month()), 2);
-    Append("-");
-    AppendDecimal(static_cast<unsigned>(date.day()), 2);
-    Append("T");
-    AppendDecimal(static_cast<std::uint64_t>(milliseconds / 3600000), 2);
-    Append(":");
-    AppendDecimal(static_cast<std::uint64_t>(milliseconds / 60000 % 60), 2);
-    Append(":");
-    AppendDecimal(static_cast<std::uint64_t>(milliseconds / 1000 % 60), 2);
-    Append(".");
-    AppendDecimal(static_cast<std::uint64_t>(milliseconds % 1000), 3);
-    Append("Z");
+    // Doesn't allocate (unlike Time::ToISO8601String())
+    char buffer[Time::ISO8601BufferSize];
+    Append(std::string_view(buffer, Time::WriteISO8601(buffer, time)));
 }
 
 //---------------------------------------------------------------------------

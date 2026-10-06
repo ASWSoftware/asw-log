@@ -149,6 +149,7 @@ TTest_ASWLog_Utils::TTest_ASWLog_Utils()
     RegisterTest(&TTest_ASWLog_Utils::Test_Time_ToDateString, "Time_ToDateString");
     RegisterTest(&TTest_ASWLog_Utils::Test_Time_ToISO8601String, "Time_ToISO8601String");
     RegisterTest(&TTest_ASWLog_Utils::Test_Time_ToLocalISO8601String_IncludesOffset, "Time_ToLocalISO8601String_IncludesOffset");
+    RegisterTest(&TTest_ASWLog_Utils::Test_Time_WriteISO8601_CalendarEdges, "Time_WriteISO8601_CalendarEdges");
 }
 //---------------------------------------------------------------------------
 TTest_ASWLog_Utils::~TTest_ASWLog_Utils()
@@ -500,6 +501,43 @@ void TTest_ASWLog_Utils::Test_Time_ToLocalISO8601String_IncludesOffset()
         const TScopedTimeZone timeZone("UTC0");
         CheckEquals(std::string("2026-07-01T12:00:00.123+00:00"), ASWLog::Time::ToLocalISO8601String(summer), "UTC should show a +00:00 offset");
         CheckEquals(std::string("2026-07-01T12:00:00.000+00:00"), ASWLog::Time::ToLocalISO8601String(std::chrono::sys_days{ 2026y / 7 / 1 } + 12h), "A whole second should show .000");
+    }
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_Utils::Test_Time_WriteISO8601_CalendarEdges()
+{
+    // Arrange
+    using namespace std::chrono_literals;
+    using std::chrono::sys_days;
+
+    struct TCase
+    {
+        std::chrono::system_clock::time_point Time;
+        std::string Expected;
+        std::string What;
+    };
+
+    const TCase cases[] = {
+        { sys_days{ 1970y / 1 / 1 }, "1970-01-01T00:00:00.000Z", "The epoch" },
+        { sys_days{ 2026y / 1 / 15 } + 7h + 7ms, "2026-01-15T07:00:00.007Z", "Short fields should be zero-padded" },
+        { sys_days{ 1999y / 12 / 31 } + 23h + 59min + 59s + 999ms, "1999-12-31T23:59:59.999Z", "The last millisecond of a year" },
+        { sys_days{ 2024y / 2 / 29 } + 12h + 34min + 56s + 500ms, "2024-02-29T12:34:56.500Z", "A leap day" },
+        { sys_days{ 2000y / 2 / 29 }, "2000-02-29T00:00:00.000Z", "A leap day in a century year divisible by 400" },
+        { sys_days{ 2100y / 2 / 28 } + 24h, "2100-03-01T00:00:00.000Z", "The day after February 28 in a century year that isn't a leap year" },
+        { sys_days{ 2026y / 7 / 1 } + 12h + 123999us, "2026-07-01T12:00:00.123Z", "Microseconds should be cut off, not rounded" },
+        { sys_days{ 1970y / 1 / 1 } - 1ms, "1969-12-31T23:59:59.999Z", "A time before 1970 should fall on the millisecond it is in" },
+    };
+
+    for (const auto& testCase : cases)
+    {
+        // Act
+        char buffer[ASWLog::Time::ISO8601BufferSize];
+        const auto size = ASWLog::Time::WriteISO8601(buffer, testCase.Time);
+
+        // Assert: the string forms are the same text
+        CheckEquals(testCase.Expected, std::string(buffer, size), testCase.What);
+        CheckEquals(testCase.Expected, ASWLog::Time::ToISO8601String(testCase.Time), testCase.What + " (ToISO8601String)");
+        CheckEquals(testCase.Expected.substr(0, 10), ASWLog::Time::ToDateString(testCase.Time), testCase.What + " (ToDateString)");
     }
 }
 //---------------------------------------------------------------------------

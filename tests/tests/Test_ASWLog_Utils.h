@@ -51,6 +51,7 @@ private: // Test methods
     void Test_Time_ToDateString();
     void Test_Time_ToISO8601String();
     void Test_Time_ToLocalISO8601String_IncludesOffset();
+    void Test_Time_WriteISO8601_CalendarEdges();
 
 public:
     TTest_ASWLog_Utils();
