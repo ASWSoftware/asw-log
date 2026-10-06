@@ -59,9 +59,10 @@ struct TASWCrashHandlerOptions
 // When the application crashes, every initialized text logger (TASWTextLogBase: file, console, custom; a multi-log
 // through its loggers) is flushed, after an asynchronous logger's thread has written what was queued, then writes its
 // backtrace, if it keeps one (see TASWBacktraceConfig), and a Critical "Crash: <reason>" line, unless its
-// TASWShutdownConfig::WriteCrashLine is false. A disabled logger (SetEnabled(false)) is only flushed. With the default FlushMode::EveryWrite every entry is in the file already, so the crash line
-// is what is added; with the other flush modes and with asynchronous writing, the entries still in memory are saved
-// too. A file logger syncs the line to disk if TASWFileConfig::SyncToDiskAtLevel is Critical or lower.
+// TASWShutdownConfig::WriteCrashLine is false. A disabled logger (SetEnabled(false)) is only flushed. With the default
+// FlushMode::EveryWrite every entry is in the file already, so the crash line is what is added; with the other flush
+// modes and with asynchronous writing, the entries still in memory are saved too. A file logger syncs the line to disk
+// if TASWFileConfig::SyncToDiskAtLevel is Critical or lower.
 //
 // All of this is best effort, since a crashed process may be in any state:
 // - The line is formatted with the logger's formatter where that is reasonably safe (std::terminate, a Windows
