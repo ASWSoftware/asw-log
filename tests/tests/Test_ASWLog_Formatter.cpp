@@ -218,7 +218,7 @@ void TTest_ASWLog_Formatter::Test_Format_MatchesFormatLine()
     const auto formatted = formatter.Format(record, config);
 
     // Assert
-    CheckEquals(ASWLog::TASWTextFormatter::FormatLine(record, config), formatted, __func__, __LINE__,
+    CheckEquals(ASWLog::TASWTextFormatter::FormatLine(record, config), formatted,
         "A TASWTextFormatter instance should produce the built-in layout");
 }
 //---------------------------------------------------------------------------
@@ -241,7 +241,7 @@ void TTest_ASWLog_Formatter::Test_FormatLine_AllFieldsInOrder()
     // Assert
     const auto expected = std::format("[2026-09-21T14:13:20.123Z][WARN][P:1234][T:5678][{}][{}:{}]: all fields",
         location.function_name(), std::filesystem::path(location.file_name()).filename().string(), location.line());
-    CheckEquals(expected, line, __func__, __LINE__, "Each field should be written from the record, in the documented order");
+    CheckEquals(expected, line, "Each field should be written from the record, in the documented order");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_Formatter::Test_FormatLine_MemoryFields()
@@ -256,9 +256,9 @@ void TTest_ASWLog_Formatter::Test_FormatLine_MemoryFields()
 
     // Assert
     const auto peakPos = line.find("][PWS:");
-    CheckTrue(line.starts_with("[WS:"), __func__, __LINE__, "The working set should come first: " + line);
-    CheckTrue(peakPos != std::string::npos, __func__, __LINE__, "The peak working set should follow: " + line);
-    CheckTrue(line.ends_with("]: memory"), __func__, __LINE__, "The message should follow the fields: " + line);
+    CheckStartsWith(line, "[WS:", "The working set should come first: " + line);
+    CheckTrue(peakPos != std::string::npos, "The peak working set should follow: " + line);
+    CheckEndsWith(line, "]: memory", "The message should follow the fields: " + line);
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_Formatter::Test_FormatLine_NoFields()
@@ -270,7 +270,7 @@ void TTest_ASWLog_Formatter::Test_FormatLine_NoFields()
     const auto line = ASWLog::TASWTextFormatter::FormatLine(MakeRecord("just the message"), config);
 
     // Assert
-    CheckEquals(std::string(": just the message"), line, __func__, __LINE__, "With every field off, only the separator and message remain");
+    CheckEquals(std::string(": just the message"), line, "With every field off, only the separator and message remain");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_Formatter::Test_Formatter_ReceivesRecordFromLoggingThread()
@@ -281,7 +281,7 @@ void TTest_ASWLog_Formatter::Test_Formatter_ReceivesRecordFromLoggingThread()
     config.InitialMinimumLevel = ASWLog::Level::Debug;
     config.Line.Formatter = std::make_shared<TCapturingFormatter>(records);
     TFixedClockFileLog log;
-    CheckTrue(log.Initialize(config), __func__, __LINE__, "Initialize should succeed");
+    CheckTrue(log.Initialize(config), "Initialize should succeed");
 
     // Act
     std::uint32_t workerThreadId = 0;
@@ -295,18 +295,20 @@ void TTest_ASWLog_Formatter::Test_Formatter_ReceivesRecordFromLoggingThread()
     log.Close();
 
     // Assert
-    CheckEquals(static_cast<std::size_t>(1), records.size(), __func__, __LINE__, "The formatter should get one record");
+    CheckEquals(1, records.size(), "The formatter should get one record");
+
     if (records.size() == 1)
     {
         const auto& record = records[0];
-        CheckTrue(record.Timestamp == FixedTime, __func__, __LINE__, "The record's time should come from the logger's NowUTC()");
-        CheckTrue(record.LogLevel == ASWLog::Level::Debug, __func__, __LINE__, "The record should have the entry's level");
-        CheckEquals(std::string("from worker"), record.Message, __func__, __LINE__, "The record should have the message");
-        CheckEquals(loggedLine, record.Line, __func__, __LINE__, "The record should have the caller's source location");
-        CheckEquals(ASWLog::GetCurrentOSProcessId(), record.ProcessId, __func__, __LINE__, "The record should have the process id");
-        CheckEquals(workerThreadId, record.ThreadId, __func__, __LINE__, "The record should have the id of the thread that logged");
+        CheckTrue(record.Timestamp == FixedTime, "The record's time should come from the logger's NowUTC()");
+        CheckTrue(record.LogLevel == ASWLog::Level::Debug, "The record should have the entry's level");
+        CheckEquals(std::string("from worker"), record.Message, "The record should have the message");
+        CheckEquals(loggedLine, record.Line, "The record should have the caller's source location");
+        CheckEquals(ASWLog::GetCurrentOSProcessId(), record.ProcessId, "The record should have the process id");
+        CheckEquals(workerThreadId, record.ThreadId, "The record should have the id of the thread that logged");
     }
-    CheckEquals(std::string("DEBUG|from worker\n"), ReadFileText(TestTempDir / "record.log"), __func__, __LINE__,
+
+    CheckEquals(std::string("DEBUG|from worker\n"), ReadFileText(TestTempDir / "record.log"),
         "The file should get the formatter's line plus the line ending");
 }
 //---------------------------------------------------------------------------
@@ -320,8 +322,8 @@ void TTest_ASWLog_Formatter::Test_Formatter_SharedByTwoLoggers()
     configB.Line.Formatter = formatter;
     ASWLog::TASWFileLog logA;
     ASWLog::TASWFileLog logB;
-    CheckTrue(logA.Initialize(configA), __func__, __LINE__, "Logger A should initialize");
-    CheckTrue(logB.Initialize(configB), __func__, __LINE__, "Logger B should initialize");
+    CheckTrue(logA.Initialize(configA), "Logger A should initialize");
+    CheckTrue(logB.Initialize(configB), "Logger B should initialize");
 
     // Act
     std::thread workerA([&] {
@@ -341,10 +343,10 @@ void TTest_ASWLog_Formatter::Test_Formatter_SharedByTwoLoggers()
     const auto contentsB = ReadFileText(TestTempDir / "shared_b.log");
 
     // Assert
-    CheckEquals(200, formatter->CallCount.load(), __func__, __LINE__, "Both loggers should call the shared formatter for each entry");
-    CheckTrue(contentsA.starts_with("counted|a\n") && contentsA.size() == 100 * std::string("counted|a\n").size(), __func__, __LINE__,
+    CheckEquals(200, formatter->CallCount.load(), "Both loggers should call the shared formatter for each entry");
+    CheckTrue(contentsA.starts_with("counted|a\n") && contentsA.size() == 100 * std::string("counted|a\n").size(),
         "Logger A's file should have its 100 lines in the shared format");
-    CheckTrue(contentsB.starts_with("counted|b\n") && contentsB.size() == 100 * std::string("counted|b\n").size(), __func__, __LINE__,
+    CheckTrue(contentsB.starts_with("counted|b\n") && contentsB.size() == 100 * std::string("counted|b\n").size(),
         "Logger B's file should have its 100 lines in the shared format");
 }
 //---------------------------------------------------------------------------

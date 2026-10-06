@@ -31,12 +31,14 @@ limitations under the License.
 #include <atomic>
 #include <chrono>
 #include <cstddef>
+#include <cstdint>
 #include <format>
 #include <memory>
 #include <mutex>
 #include <source_location>
 #include <string>
 #include <string_view>
+#include <vector>
 //---------------------------------------------------------------------------
 #include "ASWLog_Interface.h"
 #include "ASWLog_Version.h"
@@ -44,6 +46,29 @@ limitations under the License.
 
 namespace ASWLog
 {
+
+//---------------------------------------------------------------------------
+// Internals of the loggers. Not part of the public interface.
+//---------------------------------------------------------------------------
+namespace Detail
+{
+
+/////////////////////////////////////////////////////////////////////////////
+// TMutex
+//
+// A std::mutex that tells ThreadSanitizer when it is destroyed, for the loggers' own locks. libstdc++'s std::mutex
+// never destroys its pthread mutex, so ThreadSanitizer would take a later mutex at the same address (e.g. another
+// logger's, on a reused stack) for this one, and report lock-order inversions between unrelated loggers. Locked as a
+// std::mutex. Its destructor does nothing in other builds.
+/////////////////////////////////////////////////////////////////////////////
+class TMutex : public std::mutex
+{
+public:
+    TMutex() = default;
+    ~TMutex();
+};
+
+} // namespace Detail
 
 /////////////////////////////////////////////////////////////////////////////
 // TASWLogBase
@@ -56,13 +81,58 @@ private:
     typedef IASWLog inherited;
 
 private:
-    std::atomic<Level> m_MinimumLevel{ Level::Info };
+    // The levels packed into m_Levels: the gate level Write() checks first (bits 0-7), the minimum level (8-15) and the
+    // backtrace's lowest level (16-23, Off without a backtrace). The gate is the lower of the two, so an entry the
+    // backtrace keeps gets past it, except that a minimum of Off lets nothing in.
+    static constexpr std::uint32_t PackLevels(Level minimumLevel, Level backtraceLevel) noexcept
+    {
+        const Level gateLevel = minimumLevel == Level::Off || backtraceLevel >= minimumLevel ? minimumLevel : backtraceLevel;
+        return static_cast<std::uint32_t>(gateLevel) | (static_cast<std::uint32_t>(minimumLevel) << 8) |
+            (static_cast<std::uint32_t>(backtraceLevel) << 16);
+    }
+
+    static constexpr Level GateLevelOf(std::uint32_t levels) noexcept
+    {
+        return static_cast<Level>(levels & 0xFF);
+    }
+
+    static constexpr Level MinimumLevelOf(std::uint32_t levels) noexcept
+    {
+        return static_cast<Level>((levels >> 8) & 0xFF);
+    }
+
+    static constexpr Level BacktraceLevelOf(std::uint32_t levels) noexcept
+    {
+        return static_cast<Level>((levels >> 16) & 0xFF);
+    }
+
+private:
+    // See PackLevels(). One atomic, so that SetMinimumLevel() and a new backtrace config can't leave a gate level that
+    // matches neither; read once by each Write().
+    std::atomic<std::uint32_t> m_Levels{ PackLevels(Level::Info, Level::Off) };
     std::atomic<bool> m_IsEnabled{ true };
+
+    // An entry the backtrace keeps (see TASWBacktraceConfig): the record, with its message copied (the record's
+    // Message is empty)
+    struct TBacktraceEntry
+    {
+        TASWLogRecord Record;
+        std::string Message;
+    };
+
+    // The backtrace, guarded by m_BacktraceMutex: at most m_BacktraceCapacity entries, the oldest at m_BacktraceOldest
+    // (0 until it is full, then a new entry replaces it). Lock order: a derived logger's own lock before this one.
+    mutable Detail::TMutex m_BacktraceMutex;
+    std::vector<TBacktraceEntry> m_Backtrace;
+    std::size_t m_BacktraceOldest = 0;
+    std::size_t m_BacktraceCapacity = 0;
+    std::atomic<bool> m_HasBacktrace{ false }; // m_Backtrace isn't empty; read without the lock for each written entry
+    std::atomic<Level> m_BacktraceDumpLevel{ Level::Off }; // TASWBacktraceConfig::DumpAtLevel
 
     // The config, an immutable snapshot that SetConfig() replaces as a whole (never null). The pointer is changed with
     // m_ConfigMutex held, by a thread that also holds the derived logger's own lock; GetConfig() reads it with
     // m_ConfigMutex held, and the derived logger with its own lock held (see GetConfigUnlocked()).
-    mutable std::mutex m_ConfigMutex;
+    mutable Detail::TMutex m_ConfigMutex;
     std::shared_ptr<const TASWLogConfig> m_Config{ std::make_shared<const TASWLogConfig>() };
 
     // When ReportError() last reported each ErrorKind, and how many it left out since (see
@@ -74,10 +144,14 @@ private:
         bool HasReported = false;
     };
 
-    std::mutex m_ErrorReportMutex;
+    Detail::TMutex m_ErrorReportMutex;
     std::array<TErrorReportState, ErrorKindCount> m_ErrorReportStates{};
 
 private:
+    void ApplyBacktraceConfig(const TASWBacktraceConfig& config) noexcept;
+    void KeepInBacktrace(const TASWLogRecord& record);
+    std::vector<TBacktraceEntry> TakeBacktrace() noexcept;
+    void WriteBacktrace();
     void WriteErrorToStdErr(const TASWLogError& error) const;
 
 protected:
@@ -102,16 +176,22 @@ protected:
     // Pure virtual helper so the base class knows what implementation name to print
     virtual std::string_view GetLoggerClassName() const noexcept = 0;
 
+    // Whether this logger keeps a backtrace when its config asks for one (see TASWBacktraceConfig), read by SetConfig().
+    // True by default; a logger that passes its entries on to other loggers, which keep their own (a multi-log),
+    // returns false, and its gate is then its minimum level alone.
+    virtual bool KeepsBacktrace() const noexcept;
+
     // An ErrorKind::Exception error for the exception being handled, so call it in a catch block: 'action' (e.g.
     // "Dropped an entry") followed by the exception's what(). Can throw (e.g. out of memory).
     static TASWLogError MakeExceptionError(std::string_view action);
 
     // This logger's own level check for a non-forced entry, without locking: enabled, 'level' isn't Off, and it meets
-    // the minimum level. Non-virtual, so Write() can check it without another virtual call (see ShouldLog()).
+    // the minimum level or the backtrace keeps it (see TASWBacktraceConfig). Non-virtual, so it costs no virtual call
+    // (see ShouldLog()).
     bool PassesLevelGate(Level level) const noexcept
     {
         return m_IsEnabled.load(std::memory_order_relaxed) && level != Level::Off &&
-            level >= m_MinimumLevel.load(std::memory_order_relaxed);
+            level >= GateLevelOf(m_Levels.load(std::memory_order_relaxed));
     }
 
     // The current time, used for log line timestamps, daily rolling, and backup file names. Override it to control
@@ -143,6 +223,38 @@ protected:
     // Fills in the record's Timestamp (from NowUTC()), ProcessId and ThreadId if they are zero, keeping those already
     // set. Write() calls it; a logger that writes entries of its own (e.g. startup lines) can too.
     void StampRecord(TASWLogRecord& record) const noexcept;
+
+    // For a crash handler (see TASWTextLogBase): if the backtrace's lock is free, calls visit(record, index, count) for
+    // each kept entry, oldest first ('record' is marked Forced, and its Message refers to the kept copy, valid during the
+    // call), then forgets them if 'mustClear', and returns true. Returns false at once if the lock is busy (e.g. the
+    // crashed thread holds it). Allocates nothing itself, except that clearing frees the copies, so with a visitor that
+    // doesn't allocate and 'mustClear' false, it can run in a signal handler.
+    template<typename TVisit>
+    bool VisitBacktraceForCrash(TVisit&& visit, bool mustClear)
+    {
+        std::unique_lock<std::mutex> lock(m_BacktraceMutex, std::try_to_lock);
+        if (!lock.owns_lock())
+            return false;
+
+        const auto count = m_Backtrace.size();
+        for (std::size_t index = 0; index < count; ++index)
+        {
+            const auto& entry = m_Backtrace[(m_BacktraceOldest + index) % count];
+            TASWLogRecord record = entry.Record;
+            record.Message = entry.Message;
+            record.Forced = true;
+            visit(static_cast<const TASWLogRecord&>(record), index, count);
+        }
+
+        if (mustClear)
+        {
+            m_Backtrace.clear();
+            m_BacktraceOldest = 0;
+            m_HasBacktrace.store(false, std::memory_order_relaxed);
+        }
+
+        return true;
+    }
 
     // Called by Write() with each entry this logger writes: it passed the enabled, Level::Off and minimum level checks
     // (see Write()), and has its Timestamp, ProcessId and ThreadId filled in. Called on the logging thread. May throw:
@@ -176,17 +288,25 @@ public:
         m_IsEnabled.store(enabled, std::memory_order_relaxed);
     }
 
+    // Writes and forgets the backtrace, through WriteRecord() like any entry (see IASWLog::DumpBacktrace()). Not final:
+    // a multi-log passes it on instead.
+    void DumpBacktrace() noexcept override;
+
     // Lock-free runtime level gate. Initialize() seeds this from the config's InitialMinimumLevel
     // (Reconfigure() doesn't); afterward this atomic is the authoritative value used by Write()
     // to skip locking entirely for filtered entries.
     Level GetMinimumLevel() const noexcept final
     {
-        return m_MinimumLevel.load(std::memory_order_relaxed);
+        return MinimumLevelOf(m_Levels.load(std::memory_order_relaxed));
     }
 
     void SetMinimumLevel(Level level) noexcept final
     {
-        m_MinimumLevel.store(level, std::memory_order_relaxed);
+        // Keeps the backtrace's level, and recomputes the gate from both
+        auto levels = m_Levels.load(std::memory_order_relaxed);
+        while (!m_Levels.compare_exchange_weak(levels, PackLevels(level, BacktraceLevelOf(levels)), std::memory_order_relaxed))
+        {
+        }
     }
 
     bool ShouldLog(Level level) const noexcept override
@@ -196,8 +316,10 @@ public:
 
 public:
     // Applies this logger's checks (enabled, not Level::Off, and the minimum level unless record.Forced), then stamps
-    // the record (see StampRecord()) and passes it to WriteRecord(). A filtered entry is never stamped. If
-    // WriteRecord() throws, the entry is dropped and reported (see ReportError()).
+    // the record (see StampRecord()) and passes it to WriteRecord(). A filtered entry is never stamped. An entry below
+    // the minimum level that the backtrace keeps (see TASWBacktraceConfig) is stamped and kept instead; one at or above
+    // its DumpAtLevel first passes the kept entries to WriteRecord(), between the two marker lines. If WriteRecord()
+    // throws, the entry is dropped and reported (see ReportError()).
     void Write(const TASWLogRecord& record) noexcept final;
 };
 

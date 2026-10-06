@@ -200,6 +200,10 @@
             <DependentOn>..\..\..\..\ASWLog\ASWLog_ConsoleLog.h</DependentOn>
             <BuildOrder>4</BuildOrder>
         </CppCompile>
+        <CppCompile Include="..\..\..\..\ASWLog\ASWLog_CrashHandler.cpp">
+            <DependentOn>..\..\..\..\ASWLog\ASWLog_CrashHandler.h</DependentOn>
+            <BuildOrder>42</BuildOrder>
+        </CppCompile>
         <CppCompile Include="..\..\..\..\ASWLog\ASWLog_FileLog.cpp">
             <DependentOn>..\..\..\..\ASWLog\ASWLog_FileLog.h</DependentOn>
             <BuildOrder>5</BuildOrder>
@@ -243,6 +247,10 @@
         <CppCompile Include="..\..\..\tests\Test_ASWLog_ConsoleLog.cpp">
             <DependentOn>..\..\..\tests\Test_ASWLog_ConsoleLog.h</DependentOn>
             <BuildOrder>29</BuildOrder>
+        </CppCompile>
+        <CppCompile Include="..\..\..\tests\Test_ASWLog_CrashHandler.cpp">
+            <DependentOn>..\..\..\tests\Test_ASWLog_CrashHandler.h</DependentOn>
+            <BuildOrder>43</BuildOrder>
         </CppCompile>
         <CppCompile Include="..\..\..\tests\Test_ASWLog_FileLog.cpp">
             <DependentOn>..\..\..\tests\Test_ASWLog_FileLog.h</DependentOn>
@@ -315,6 +323,10 @@
             <DependentOn>..\..\..\..\third_party\asw-unit-tests\src\ASWUnitTests_TestBase.h</DependentOn>
             <BuildOrder>18</BuildOrder>
         </CppCompile>
+        <CppCompile Include="..\..\..\..\third_party\asw-unit-tests\src\ASWUnitTests_Utils.cpp">
+            <DependentOn>..\..\..\..\third_party\asw-unit-tests\src\ASWUnitTests_Utils.h</DependentOn>
+            <BuildOrder>40</BuildOrder>
+        </CppCompile>
         <CppCompile Include="..\..\..\..\third_party\asw-unit-tests\src\ASWUnitTests_Version.cpp">
             <DependentOn>..\..\..\..\third_party\asw-unit-tests\src\ASWUnitTests_Version.h</DependentOn>
             <BuildOrder>19</BuildOrder>
@@ -336,6 +348,10 @@
         <CppCompile Include="..\..\..\..\third_party\asw-unit-tests\vcl\gui\src\ASWUnitTests_GUI_RunObserver.cpp">
             <DependentOn>..\..\..\..\third_party\asw-unit-tests\vcl\gui\src\ASWUnitTests_GUI_RunObserver.h</DependentOn>
             <BuildOrder>23</BuildOrder>
+        </CppCompile>
+        <CppCompile Include="..\..\..\..\third_party\asw-unit-tests\vcl\gui\src\ASWUnitTests_GUI_Selection.cpp">
+            <DependentOn>..\..\..\..\third_party\asw-unit-tests\vcl\gui\src\ASWUnitTests_GUI_Selection.h</DependentOn>
+            <BuildOrder>41</BuildOrder>
         </CppCompile>
         <CppCompile Include="..\..\..\..\third_party\asw-unit-tests\vcl\gui\src\ASWUnitTests_GUI_Strings.cpp">
             <DependentOn>..\..\..\..\third_party\asw-unit-tests\vcl\gui\src\ASWUnitTests_GUI_Strings.h</DependentOn>

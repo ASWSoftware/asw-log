@@ -25,6 +25,8 @@ limitations under the License.
 #include "ASWLog_ConsoleLog.h"
 //---------------------------------------------------------------------------
 // System includes here
+#include <cerrno>
+#include <cstddef>
 #include <cstdlib>
 #include <iostream>
 #include <mutex>
@@ -239,6 +241,31 @@ bool TASWConsoleLog::ShouldColorStream(bool isStdErr) const noexcept
 
     const auto& isSupported = isStdErr ? m_StdErrColorSupported : m_StdOutColorSupported;
     return isSupported.load(std::memory_order_acquire) && !m_NoColorRequested.load(std::memory_order_acquire);
+}
+
+//---------------------------------------------------------------------------
+void TASWConsoleLog::WriteCrashLineDirect(std::string_view line) noexcept
+{
+    // To stderr, like every entry at Warn or above, without color. Each line is flushed when written, so nothing waits
+    // in a buffer.
+#if defined(_WIN32)
+    const auto handle = GetStdHandle(STD_ERROR_HANDLE);
+    DWORD written = 0;
+    if (handle != nullptr && handle != INVALID_HANDLE_VALUE)
+        WriteFile(handle, line.data(), static_cast<DWORD>(line.size()), &written, nullptr);
+#else
+    while (!line.empty())
+    {
+        const auto written = write(STDERR_FILENO, line.data(), line.size());
+        if (written < 0 && errno == EINTR)
+            continue;
+
+        if (written <= 0)
+            return;
+
+        line.remove_prefix(static_cast<std::size_t>(written));
+    }
+#endif
 }
 
 //---------------------------------------------------------------------------

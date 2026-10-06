@@ -24,6 +24,8 @@ add_library(ASWLog STATIC
     ASWLog/ASWLog_Config.h
     ASWLog/ASWLog_ConsoleLog.cpp
     ASWLog/ASWLog_ConsoleLog.h
+    ASWLog/ASWLog_CrashHandler.cpp
+    ASWLog/ASWLog_CrashHandler.h
     ASWLog/ASWLog_FileLog.cpp
     ASWLog/ASWLog_FileLog.h
     ASWLog/ASWLog_Formatter.cpp
@@ -52,6 +54,11 @@ if(WIN32)
     # ASWLog_Utils.cpp uses the process memory APIs from psapi.
     target_link_libraries(ASWLog PRIVATE psapi)
 endif()
+
+# TASWTextLogBase runs a std::thread (e.g. for FlushMode::Periodic). Public, since the thread is part of the class
+# layout in the headers.
+find_package(Threads REQUIRED)
+target_link_libraries(ASWLog PUBLIC Threads::Threads)
 
 if(ASWLOG_WARNINGS)
     if(MSVC)

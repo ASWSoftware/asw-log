@@ -35,6 +35,7 @@ add_executable(ASWLogTests
     "${ASWLOG_TESTS_DIR}/Test_ASWLog_Base.cpp"
     "${ASWLOG_TESTS_DIR}/Test_ASWLog_Config.cpp"
     "${ASWLOG_TESTS_DIR}/Test_ASWLog_ConsoleLog.cpp"
+    "${ASWLOG_TESTS_DIR}/Test_ASWLog_CrashHandler.cpp"
     "${ASWLOG_TESTS_DIR}/Test_ASWLog_FileLog.cpp"
     "${ASWLOG_TESTS_DIR}/Test_ASWLog_Formatter.cpp"
     "${ASWLOG_TESTS_DIR}/Test_ASWLog_MultiLog.cpp"

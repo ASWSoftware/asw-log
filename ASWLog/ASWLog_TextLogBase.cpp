@@ -25,14 +25,25 @@ limitations under the License.
 #include "ASWLog_TextLogBase.h"
 //---------------------------------------------------------------------------
 // System includes here
+#include <algorithm>
 #include <format>
 #include <utility>
 //---------------------------------------------------------------------------
+#include "ASWLog_CrashHandler.h"
 #include "ASWLog_Utils.h"
 //---------------------------------------------------------------------------
 
 namespace ASWLog
 {
+
+namespace
+{
+
+// The logger whose worker thread this is (see TASWTextLogBase::RunWorker()), or null on any other thread. On its own
+// worker, a logger never waits for the queue or the worker, which would wait for itself.
+thread_local const TASWTextLogBase* CurrentWorkerLog = nullptr;
+
+} // namespace
 
 //---------------------------------------------------------------------------
 
@@ -41,17 +52,24 @@ namespace ASWLog
 /////////////////////////////////////////////////////////////////////////////
 
 //---------------------------------------------------------------------------
+TASWTextLogBase::~TASWTextLogBase()
+{
+    // Normally Finalize() has done both. Otherwise the derived logger is already destroyed, so neither a crash handler
+    // nor the worker may call its hooks again.
+    Detail::TCrashHandling::Unregister(*this);
+    UpdateWorker(true);
+}
+
+//---------------------------------------------------------------------------
 void TASWTextLogBase::AfterEntryUnlocked()
 {
 }
 
 //---------------------------------------------------------------------------
-void TASWTextLogBase::AppendLineEnding(std::string& line) const
+void TASWTextLogBase::AfterQueuedEntriesUnlocked(bool mustFlush)
 {
-    if (GetConfigUnlocked().Line.Ending == LineEnding::CRLF)
-        line += "\r\n";
-    else
-        line += '\n';
+    if (mustFlush)
+        FlushUnlocked();
 }
 
 //---------------------------------------------------------------------------
@@ -59,6 +77,8 @@ bool TASWTextLogBase::Close() noexcept
 {
     try
     {
+        TWorkerUpdater workerUpdater(*this);
+        WaitForQueuedEntries();
         TDeferredWorkRunner deferredWorkRunner(*this);
         std::lock_guard<std::mutex> lock(m_Mutex);
         return CloseUnlocked();
@@ -107,6 +127,12 @@ void TASWTextLogBase::Finalize() noexcept
     // Called from the destructors, where an exception would terminate the program
     try
     {
+        // Stops the worker, which must not outlive the derived logger, also if the logger is still initialized because
+        // an exception skipped CloseUnlocked()
+        TWorkerUpdater workerUpdater(*this, true);
+        WaitForQueuedEntries(); // So the shutdown line comes after them
+        // Before the lock: a crash handler holds the list's lock while it waits for this logger's lock
+        Detail::TCrashHandling::Unregister(*this);
         TDeferredWorkRunner deferredWorkRunner(*this);
         std::lock_guard<std::mutex> lock(m_Mutex);
         if (!m_IsInitialized.load(std::memory_order_acquire))
@@ -137,6 +163,7 @@ bool TASWTextLogBase::Flush() noexcept
 {
     try
     {
+        WaitForQueuedEntries();
         TDeferredWorkRunner deferredWorkRunner(*this);
         std::lock_guard<std::mutex> lock(m_Mutex);
         return FlushUnlocked();
@@ -148,10 +175,54 @@ bool TASWTextLogBase::Flush() noexcept
 }
 
 //---------------------------------------------------------------------------
+void TASWTextLogBase::FlushForCrashUnlocked() noexcept
+{
+}
+
+//---------------------------------------------------------------------------
+/*
+    TASWTextLogBase::FormatEntry
+
+    The line written for 'record' with 'config': its message as is for a Raw record, otherwise the formatter's line
+    followed by the line ending.
+*/
+std::string TASWTextLogBase::FormatEntry(const TASWLogRecord& record, const TASWLogConfig& config)
+{
+    std::string line;
+
+    if (record.Raw)
+    {
+        line.reserve(record.Message.size() + 2);
+        line.append(record.Message);
+
+        return line;
+    }
+
+    // Without a formatter, calls the built-in layout directly (no default formatter object, which could be destroyed
+    // at exit before a never-destroyed singleton logger writes its shutdown line)
+    const auto* formatter = config.Line.Formatter.get();
+    line = formatter != nullptr ? formatter->Format(record, config) : TASWTextFormatter::FormatLine(record, config);
+
+    if (config.Line.Ending == LineEnding::CRLF)
+        line += "\r\n";
+    else
+        line += '\n';
+
+    return line;
+}
+
+//---------------------------------------------------------------------------
+std::chrono::milliseconds TASWTextLogBase::GetWorkerIntervalUnlocked() const
+{
+    return std::chrono::milliseconds(0);
+}
+
+//---------------------------------------------------------------------------
 bool TASWTextLogBase::Initialize(const TASWLogConfig& config) noexcept
 {
     try
     {
+        TWorkerUpdater workerUpdater(*this);
         TDeferredWorkRunner deferredWorkRunner(*this);
         std::shared_ptr<const TASWLogConfig> previousConfig; // Released after the lock (see SetConfig())
         std::lock_guard<std::mutex> lock(m_Mutex);
@@ -161,12 +232,15 @@ bool TASWTextLogBase::Initialize(const TASWLogConfig& config) noexcept
         }
 
         previousConfig = SetConfig(config);
+        StoreCrashLineSettingsUnlocked();
         SetMinimumLevel(config.InitialMinimumLevel);
 
         if (!InitializeUnlocked())
         {
             return false;
         }
+
+        Detail::TCrashHandling::Register(*this);
 
         // The output is ready, so the startup lines are best effort: if one throws (e.g. a formatter that throws, or
         // out of memory while gathering the system info), the rest are skipped but the logger is still initialized
@@ -201,10 +275,115 @@ bool TASWTextLogBase::IsOpen() const noexcept
 }
 
 //---------------------------------------------------------------------------
+// A line written around the backtrace on a crash (see WriteBacktraceForCrashDirect()), like TASWLogBase's markers
+TASWLogRecord TASWTextLogBase::MakeBacktraceMarker(std::string_view message) const noexcept
+{
+    TASWLogRecord marker;
+    marker.LogLevel = Level::Info;
+    marker.Message = message;
+    marker.Forced = true;
+    StampRecord(marker);
+    return marker;
+}
+
+//---------------------------------------------------------------------------
+/*
+    TASWTextLogBase::OnCrash
+
+    Called by a crash handler for each initialized logger (see Detail::TCrashHandling), on the crashing thread: waits
+    until the worker has written the entries queued before the crash and m_Mutex is free, until 'deadline'. With the
+    lock, it flushes the output, then writes the backtrace (see TASWBacktraceConfig) and 'message' as a Critical line:
+    formatted, or in a POSIX signal handler ('isInSignalHandler') in the fixed layout, written directly (see
+    FlushForCrashUnlocked() and WriteCrashLineDirect()). Without it, it writes only those, in the fixed layout,
+    directly. Nothing if the logger is disabled; no crash line if its config leaves it out. Doesn't rotate the file, and
+    leaves the failures it finds queued (see DeferUnlocked()), so no callback runs in the crashed process.
+*/
+void TASWTextLogBase::OnCrash(std::string_view message, bool isInSignalHandler, std::chrono::steady_clock::time_point deadline) noexcept
+{
+    if (!m_IsInitialized.load(std::memory_order_acquire))
+        return;
+
+    // The worker can't write the queue if this is the worker
+    if (CurrentWorkerLog != this)
+    {
+        const auto lastQueued = m_LastQueuedSequence.load(std::memory_order_acquire);
+        while (m_LastWrittenSequence.load(std::memory_order_acquire) < lastQueued && Detail::PauseBeforeDeadline(deadline))
+        {
+        }
+    }
+
+    TASWLogRecord record;
+    record.LogLevel = Level::Critical;
+    record.Message = message;
+    record.Forced = true;
+    StampRecord(record);
+
+    const bool writesLine = IsEnabled() && m_WritesCrashLine.load(std::memory_order_relaxed);
+    bool isLineWritten = !writesLine;
+
+    std::unique_lock<std::mutex> lock(m_Mutex, std::defer_lock);
+    while (!lock.try_lock() && Detail::PauseBeforeDeadline(deadline))
+    {
+    }
+
+    if (lock.owns_lock() && !isInSignalHandler)
+    {
+        try
+        {
+            // EnsureReadyUnlocked() reopens a file closed between entries (AutoOpenClosePerWrite)
+            if (EnsureReadyUnlocked())
+            {
+                // The entries written so far first, in case formatting the lines fails in the crashed process
+                FlushUnlocked();
+                if (IsEnabled())
+                    WriteBacktraceForCrashUnlocked(deadline);
+
+                if (writesLine)
+                {
+                    const auto line = FormatEntry(record, GetConfigUnlocked());
+                    WriteLineUnlocked(record.LogLevel, line, true);
+                    isLineWritten = true;
+                    FlushUnlocked();
+                }
+
+                AfterEntryUnlocked();
+            }
+
+            isLineWritten = true; // Or the output isn't ready, so a direct write can't reach it either
+        }
+        catch (...)
+        {
+        }
+    }
+    else
+    {
+        if (lock.owns_lock())
+            FlushForCrashUnlocked();
+
+        // Freeing the kept copies isn't async-signal-safe
+        if (IsEnabled())
+            WriteBacktraceForCrashDirect(!isInSignalHandler, deadline);
+    }
+
+    if (!isLineWritten)
+    {
+        Detail::TCrashText line;
+        Detail::AppendCrashLine(line, record, m_CrashLineUsesCRLF.load(std::memory_order_relaxed));
+        WriteCrashLineDirect(line.View());
+    }
+}
+
+//---------------------------------------------------------------------------
+void TASWTextLogBase::OnWorkerWakeUnlocked()
+{
+}
+
+//---------------------------------------------------------------------------
 bool TASWTextLogBase::Open() noexcept
 {
     try
     {
+        TWorkerUpdater workerUpdater(*this);
         TDeferredWorkRunner deferredWorkRunner(*this);
         std::lock_guard<std::mutex> lock(m_Mutex);
         return OpenUnlocked();
@@ -222,10 +401,89 @@ bool TASWTextLogBase::PrepareWriteUnlocked(std::chrono::system_clock::time_point
 }
 
 //---------------------------------------------------------------------------
+/*
+    TASWTextLogBase::QueueRecord
+
+    For an asynchronous logger (see TASWAsyncConfig): formats the entry without m_Mutex, from the current config, and
+    queues it for the worker. A full queue makes the caller wait for room, or drops the entry (DropNewest; counted for
+    the worker to report), except for an entry at or above WaitAtLevel, whose caller also waits until it is written and
+    flushed. On the worker thread itself (e.g. OnLogEntry logging again), the entry is queued without waiting. Returns
+    false, after the entries queued before have been written, if async has been switched off meanwhile: the caller then
+    writes the entry itself.
+*/
+bool TASWTextLogBase::QueueRecord(const TASWLogRecord& record)
+{
+    const bool isOnWorker = CurrentWorkerLog == this;
+    const auto config = GetConfig();
+
+    TQueuedEntry entry;
+    entry.Line = FormatEntry(record, *config);
+    entry.Record = record;
+    entry.Record.Message = {};
+    entry.MustFlush = record.LogLevel >= config->Async.WaitAtLevel;
+
+    if (config->OnLogEntry != nullptr && record.LogLevel >= config->OnLogEntryMinimumLevel)
+    {
+        entry.Message = record.Message;
+        entry.CallbackConfig = config;
+    }
+
+    const bool mustFlush = entry.MustFlush;
+    const auto capacity = std::max<std::size_t>(1, config->Async.QueueCapacity);
+    const bool mayDrop = config->Async.OverflowPolicy == AsyncOverflowPolicy::DropNewest && !mustFlush;
+
+    std::unique_lock<std::mutex> lock(m_QueueMutex);
+
+    if (!isOnWorker)
+    {
+        if (mayDrop && m_IsAsyncActive && m_Queue.size() >= capacity)
+        {
+            ++m_DroppedCount;
+            return true;
+        }
+
+        m_QueueChanged.wait(lock, [this, capacity] {
+                return !m_IsAsyncActive || m_Queue.size() < capacity;
+            });
+    }
+
+    if (!m_IsAsyncActive)
+    {
+        // Switched to synchronous writing: the entries queued before this one are written first, to keep the order
+        if (!isOnWorker)
+        {
+            m_QueueChanged.wait(lock, [this] {
+                    return m_LastWrittenSequence.load(std::memory_order_relaxed) >= m_LastQueuedSequence.load(std::memory_order_relaxed);
+                });
+        }
+
+        return false;
+    }
+
+    // Counted only once queued: a sequence number that never reaches the queue would keep WaitForQueuedEntries() waiting
+    const auto sequence = m_LastQueuedSequence.load(std::memory_order_relaxed) + 1;
+    entry.Sequence = sequence;
+    m_Queue.push_back(std::move(entry));
+    m_LastQueuedSequence.store(sequence, std::memory_order_release);
+    m_WorkerWakeup.notify_one();
+
+    if (mustFlush && !isOnWorker)
+    {
+        m_QueueChanged.wait(lock, [this, sequence] {
+                return m_LastWrittenSequence.load(std::memory_order_relaxed) >= sequence;
+            });
+    }
+
+    return true;
+}
+
+//---------------------------------------------------------------------------
 bool TASWTextLogBase::Reconfigure(const TASWLogConfig& config) noexcept
 {
     try
     {
+        TWorkerUpdater workerUpdater(*this);
+        WaitForQueuedEntries(); // Written with the config they were formatted with (e.g. to the old file)
         TDeferredWorkRunner deferredWorkRunner(*this);
         std::shared_ptr<const TASWLogConfig> previousConfig; // Released after the lock (see SetConfig())
         std::lock_guard<std::mutex> lock(m_Mutex);
@@ -233,6 +491,7 @@ bool TASWTextLogBase::Reconfigure(const TASWLogConfig& config) noexcept
             return false;
 
         previousConfig = SetConfig(config);
+        StoreCrashLineSettingsUnlocked();
         return ReconfigureUnlocked(*previousConfig);
     }
     catch (...)
@@ -313,6 +572,249 @@ void TASWTextLogBase::RunDeferredWork() noexcept
 }
 
 //---------------------------------------------------------------------------
+/*
+    TASWTextLogBase::RunWorker
+
+    The worker thread. Writes the queued entries of an asynchronous logger in batches (see WriteQueuedEntries()), and
+    calls OnWorkerWakeUnlocked() under m_Mutex every m_WorkerInterval, until UpdateWorker() stops it: it then writes
+    what is still queued and ends. It waits on m_QueueMutex, not m_Mutex, so queuing an entry never waits for a write.
+*/
+void TASWTextLogBase::RunWorker() noexcept
+{
+    // Waits at most this long at a time, so that a very long interval can't overflow the clock arithmetic
+    constexpr std::chrono::milliseconds MaxWait = std::chrono::hours(1);
+
+    CurrentWorkerLog = this;
+    auto lastWake = std::chrono::steady_clock::now();
+    for (;;)
+    {
+        try
+        {
+            std::deque<TQueuedEntry> entries;
+            std::size_t droppedCount = 0;
+            bool isStopping = false;
+            bool isWakeDue = false;
+
+            {
+                std::unique_lock<std::mutex> lock(m_QueueMutex);
+                for (;;)
+                {
+                    isStopping = m_IsWorkerStopping;
+                    const auto interval = m_WorkerInterval;
+                    const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - lastWake);
+                    isWakeDue = interval.count() > 0 && elapsed >= interval;
+                    if (isStopping || isWakeDue || !m_Queue.empty() || m_DroppedCount > 0)
+                        break;
+
+                    if (interval.count() > 0)
+                        m_WorkerWakeup.wait_for(lock, std::min(interval - elapsed, MaxWait));
+                    else
+                        m_WorkerWakeup.wait(lock); // Until an entry is queued, a stop, or a new interval
+                }
+
+                // Takes the drop count with the entries: every entry it counts was dropped after these were queued
+                entries.swap(m_Queue);
+                droppedCount = m_DroppedCount;
+                m_DroppedCount = 0;
+                m_QueueChanged.notify_all(); // Room in the queue
+            }
+
+            if (!entries.empty() || droppedCount > 0)
+                WriteQueuedEntries(entries, droppedCount);
+
+            if (isWakeDue)
+            {
+                lastWake = std::chrono::steady_clock::now();
+                TDeferredWorkRunner deferredWorkRunner(*this);
+                std::lock_guard<std::mutex> lock(m_Mutex);
+                OnWorkerWakeUnlocked();
+            }
+
+            if (isStopping)
+                return;
+        }
+        catch (...)
+        {
+            ReportCurrentException("Couldn't do the worker thread's work");
+        }
+    }
+}
+
+//---------------------------------------------------------------------------
+void TASWTextLogBase::SetAsyncActive(bool isActive) noexcept
+{
+    m_IsAsyncActive = isActive;
+
+    // When switched off, m_IsAsync stays set until the queued entries are written (see WriteQueuedEntries()), so that
+    // a caller doesn't write its entry before them
+    if (isActive || m_LastWrittenSequence.load(std::memory_order_relaxed) >= m_LastQueuedSequence.load(std::memory_order_relaxed))
+        m_IsAsync.store(isActive, std::memory_order_release);
+
+    m_QueueChanged.notify_all(); // Callers waiting for room re-check
+}
+
+//---------------------------------------------------------------------------
+void TASWTextLogBase::StoreCrashLineSettingsUnlocked() noexcept
+{
+    const auto& config = GetConfigUnlocked();
+    m_CrashLineUsesCRLF.store(config.Line.Ending == LineEnding::CRLF, std::memory_order_relaxed);
+    m_WritesCrashLine.store(config.Shutdown.WriteCrashLine, std::memory_order_relaxed);
+}
+
+//---------------------------------------------------------------------------
+/*
+    TASWTextLogBase::UpdateWorker
+
+    Starts, wakes or stops the worker thread, as the logger's state says: it runs while the logger is initialized and
+    either GetWorkerIntervalUnlocked() is above 0 or TASWAsyncConfig::Enabled is set, unless 'mustStop' (Finalize() and
+    the destructor). Called without m_Mutex, after the method that changed the state has released it.
+
+    A worker being replaced is joined before the new one starts (it writes what is still queued first), so entries are
+    never written by two workers out of order. m_WorkerMutex is held meanwhile, which the worker never takes: on the
+    worker thread itself (e.g. an OnError handler that calls Close()), UpdateWorkerFromWorker() only changes the state,
+    since the worker can't wait for or join itself.
+*/
+void TASWTextLogBase::UpdateWorker(bool mustStop) noexcept
+{
+    try
+    {
+        if (CurrentWorkerLog == this)
+        {
+            UpdateWorkerFromWorker(mustStop);
+            return;
+        }
+
+        std::lock_guard<std::mutex> workerLock(m_WorkerMutex);
+        for (;;)
+        {
+            bool isWanted = false;
+            bool isAsync = false;
+            std::chrono::milliseconds interval{ 0 };
+            {
+                std::lock_guard<std::mutex> lock(m_Mutex);
+                if (!mustStop && m_IsInitialized.load(std::memory_order_acquire))
+                {
+                    interval = GetWorkerIntervalUnlocked();
+                    isAsync = GetConfigUnlocked().Async.Enabled;
+                    isWanted = interval.count() > 0 || isAsync;
+                }
+
+                std::lock_guard<std::mutex> queueLock(m_QueueMutex);
+                if (m_Worker.joinable() && !m_IsWorkerStopping && isWanted)
+                {
+                    // Keep it, with the new settings
+                    m_WorkerInterval = interval;
+                    SetAsyncActive(isAsync);
+                    m_WorkerWakeup.notify_all();
+                    return;
+                }
+
+                if (m_Worker.joinable())
+                {
+                    // Stop it: it writes what is queued, then ends. Entries logged meanwhile are written by their
+                    // callers, once the queued ones are written (see QueueRecord()).
+                    m_IsWorkerStopping = true;
+                    m_IsWorkerStoppingItself = false;
+                    SetAsyncActive(false);
+                    m_WorkerWakeup.notify_all();
+                }
+                else if (!isWanted)
+                {
+                    return;
+                }
+                else
+                {
+                    m_IsWorkerStopping = false;
+                    m_WorkerInterval = interval;
+                }
+            }
+
+            if (m_Worker.joinable())
+            {
+                // Then decides again, since the state may have changed meanwhile (e.g. its OnError handler reopened
+                // the logger)
+                m_Worker.join();
+                continue;
+            }
+
+            m_Worker = std::thread(&TASWTextLogBase::RunWorker, this);
+
+            std::lock_guard<std::mutex> queueLock(m_QueueMutex);
+            SetAsyncActive(isAsync);
+            return;
+        }
+    }
+    catch (...)
+    {
+        ReportCurrentException("Couldn't start or stop the worker thread");
+    }
+}
+
+//---------------------------------------------------------------------------
+/*
+    TASWTextLogBase::UpdateWorkerFromWorker
+
+    UpdateWorker() on the worker thread itself, e.g. from an OnError handler that calls Close() or Open(). It can't
+    join or replace the worker it runs on, so it only tells it to stop once back in its loop, or, if it is wanted again
+    after it stopped itself, to go on. A stop from another thread, which is joining it, stands. The worker's
+    std::thread is joined by the next UpdateWorker() on another thread, at the latest Finalize().
+*/
+void TASWTextLogBase::UpdateWorkerFromWorker(bool mustStop)
+{
+    std::lock_guard<std::mutex> lock(m_Mutex);
+    std::chrono::milliseconds interval{ 0 };
+    bool isAsync = false;
+
+    if (!mustStop && m_IsInitialized.load(std::memory_order_acquire))
+    {
+        interval = GetWorkerIntervalUnlocked();
+        isAsync = GetConfigUnlocked().Async.Enabled;
+    }
+
+    std::lock_guard<std::mutex> queueLock(m_QueueMutex);
+
+    if (interval.count() > 0 || isAsync)
+    {
+        if (m_IsWorkerStopping && m_IsWorkerStoppingItself)
+            m_IsWorkerStopping = false;
+
+        if (!m_IsWorkerStopping)
+        {
+            m_WorkerInterval = interval;
+            SetAsyncActive(isAsync);
+        }
+    }
+    else if (!m_IsWorkerStopping)
+    {
+        m_IsWorkerStopping = true;
+        m_IsWorkerStoppingItself = true;
+        SetAsyncActive(false);
+    }
+
+    m_WorkerWakeup.notify_all();
+}
+
+//---------------------------------------------------------------------------
+/*
+    TASWTextLogBase::WaitForQueuedEntries
+
+    Waits until the entries queued so far (see TASWAsyncConfig) have been written, so that what the caller does next
+    (flush, close, reconfigure, the shutdown line) comes after them. Doesn't wait on the worker thread itself, which
+    writes them.
+*/
+void TASWTextLogBase::WaitForQueuedEntries()
+{
+    if (CurrentWorkerLog == this)
+        return;
+
+    std::unique_lock<std::mutex> lock(m_QueueMutex);
+    const auto sequence = m_LastQueuedSequence.load(std::memory_order_relaxed);
+    m_QueueChanged.wait(lock, [this, sequence] {
+            return m_LastWrittenSequence.load(std::memory_order_relaxed) >= sequence;
+        });
+}
+
+//---------------------------------------------------------------------------
 void TASWTextLogBase::WriteApplicationInfo()
 {
     auto applicationInfo = std::format("app_exe='{}', app_target=", PathToUTF8String(GetExecutablePath()));
@@ -335,6 +837,75 @@ void TASWTextLogBase::WriteApplicationInfo()
         applicationInfo += std::format(", command_line='{}'", GetCommandLineString());
 
     WriteInfoLine(std::format("App: {}", applicationInfo));
+}
+
+//---------------------------------------------------------------------------
+/*
+    TASWTextLogBase::WriteBacktraceForCrash
+
+    For the two below: passes the begin marker, each kept entry (oldest first) and the end marker to 'writeLine',
+    polling the backtrace's lock until 'deadline' (see VisitBacktraceForCrash()).
+*/
+template<typename TWriteLine>
+void TASWTextLogBase::WriteBacktraceForCrash(const TWriteLine& writeLine, bool mustClear,
+    std::chrono::steady_clock::time_point deadline)
+{
+    const auto visit = [this, &writeLine](const TASWLogRecord& record, std::size_t index, std::size_t count) {
+            if (index == 0)
+            {
+                Detail::TCrashText text;
+                Detail::AppendBacktraceBeginText(text, count);
+                writeLine(MakeBacktraceMarker(text.View()));
+            }
+
+            writeLine(record);
+            if (index + 1 == count)
+                writeLine(MakeBacktraceMarker(Detail::BacktraceEndText));
+        };
+
+    while (!VisitBacktraceForCrash(visit, mustClear) && Detail::PauseBeforeDeadline(deadline))
+    {
+    }
+}
+
+//---------------------------------------------------------------------------
+/*
+    TASWTextLogBase::WriteBacktraceForCrashDirect
+
+    For OnCrash(): writes the backtrace and its markers, each line in the fixed crash-line layout, straight to the
+    output (see WriteCrashLineDirect()), if the backtrace's lock gets free before 'deadline'. Allocates nothing unless
+    'mustClear', so it can run in a POSIX signal handler, with or without m_Mutex.
+*/
+void TASWTextLogBase::WriteBacktraceForCrashDirect(bool mustClear, std::chrono::steady_clock::time_point deadline) noexcept
+{
+    const bool usesCRLF = m_CrashLineUsesCRLF.load(std::memory_order_relaxed);
+    WriteBacktraceForCrash([this, usesCRLF](const TASWLogRecord& record) {
+            Detail::TCrashText line;
+            Detail::AppendCrashLine(line, record, usesCRLF);
+            WriteCrashLineDirect(line.View());
+        }, mustClear, deadline);
+}
+
+//---------------------------------------------------------------------------
+/*
+    TASWTextLogBase::WriteBacktraceForCrashUnlocked
+
+    For OnCrash(), holding m_Mutex in a normal (not signal handler) context: writes the backtrace and its markers
+    through the formatter and WriteLineUnlocked(), then forgets it, if the backtrace's lock gets free before 'deadline'.
+    Can throw (e.g. a formatter, or out of memory in the crashed process).
+*/
+void TASWTextLogBase::WriteBacktraceForCrashUnlocked(std::chrono::steady_clock::time_point deadline)
+{
+    const auto& config = GetConfigUnlocked();
+    WriteBacktraceForCrash([this, &config](const TASWLogRecord& record) {
+            const auto line = FormatEntry(record, config);
+            WriteLineUnlocked(record.LogLevel, line, !record.Raw);
+        }, true, deadline);
+}
+
+//---------------------------------------------------------------------------
+void TASWTextLogBase::WriteCrashLineDirect(std::string_view /*line*/) noexcept
+{
 }
 
 //---------------------------------------------------------------------------
@@ -397,22 +968,7 @@ std::string TASWTextLogBase::WriteLogEntry(const TASWLogRecord& record)
     if (!PrepareWriteUnlocked(record.Timestamp))
         return {};
 
-    std::string line;
-    if (record.Raw)
-    {
-        line.reserve(record.Message.size() + 2);
-        line.append(record.Message);
-    }
-    else
-    {
-        // Without a formatter, calls the built-in layout directly (no default formatter object, which could be
-        // destroyed at exit before a never-destroyed singleton logger writes its shutdown line)
-        const auto& config = GetConfigUnlocked();
-        const auto* formatter = config.Line.Formatter.get();
-        line = formatter != nullptr ? formatter->Format(record, config) : TASWTextFormatter::FormatLine(record, config);
-        AppendLineEnding(line);
-    }
-
+    auto line = FormatEntry(record, GetConfigUnlocked());
     WriteLineUnlocked(record.LogLevel, line, !record.Raw);
     return line;
 }
@@ -431,14 +987,114 @@ void TASWTextLogBase::WriteOSInfo()
 
 //---------------------------------------------------------------------------
 /*
+    TASWTextLogBase::WriteQueuedEntries
+
+    On the worker thread: writes queued entries in order under m_Mutex, through the same hooks as a synchronous entry,
+    then, if the full queue dropped entries, a forced Warn line saying how many (also reported as
+    ErrorKind::EntriesDropped), then lets AfterQueuedEntriesUnlocked() flush them. Then marks them written, which
+    releases the callers waiting for them, and calls OnLogEntry for each one written, outside the lock.
+*/
+void TASWTextLogBase::WriteQueuedEntries(std::deque<TQueuedEntry>& entries, std::size_t droppedCount) noexcept
+{
+    try
+    {
+        TDeferredWorkRunner deferredWorkRunner(*this);
+        std::lock_guard<std::mutex> lock(m_Mutex);
+        bool mustFlush = false;
+        m_IsWritingQueuedEntries = true;
+
+        try
+        {
+            for (auto& entry : entries)
+            {
+                if (!EnsureReadyUnlocked() || !PrepareWriteUnlocked(entry.Record.Timestamp))
+                    continue;
+
+                WriteLineUnlocked(entry.Record.LogLevel, entry.Line, !entry.Record.Raw);
+                AfterEntryUnlocked();
+                entry.IsWritten = true;
+                mustFlush = mustFlush || entry.MustFlush;
+            }
+
+            if (droppedCount > 0)
+            {
+                const auto message = std::format("Dropped {} {}: the asynchronous queue was full", droppedCount,
+                    droppedCount == 1 ? "entry" : "entries");
+
+                TASWLogError error;
+                error.Kind = ErrorKind::EntriesDropped;
+                error.Message = message;
+                ReportErrorUnlocked(std::move(error));
+
+                if (EnsureReadyUnlocked())
+                {
+                    TASWLogRecord record;
+                    record.LogLevel = Level::Warn;
+                    record.Message = message;
+                    record.Forced = true;
+                    StampRecord(record);
+                    WriteLogEntry(record);
+                    AfterEntryUnlocked();
+                }
+            }
+        }
+        catch (...)
+        {
+            ReportCurrentExceptionUnlocked("Dropped queued entries");
+        }
+
+        m_IsWritingQueuedEntries = false;
+        AfterQueuedEntriesUnlocked(mustFlush);
+    }
+    catch (...)
+    {
+        ReportCurrentException("Couldn't write queued entries");
+    }
+
+    try
+    {
+        std::lock_guard<std::mutex> queueLock(m_QueueMutex);
+
+        const auto lastWritten = m_LastWrittenSequence.load(std::memory_order_relaxed);
+        if (!entries.empty() && entries.back().Sequence > lastWritten)
+            m_LastWrittenSequence.store(entries.back().Sequence, std::memory_order_release);
+
+        // Async was switched off, and this was the last of the queue: entries go straight to the output again
+        if (!m_IsAsyncActive && m_LastWrittenSequence.load(std::memory_order_relaxed) >= m_LastQueuedSequence.load(std::memory_order_relaxed))
+            m_IsAsync.store(false, std::memory_order_release);
+
+        m_QueueChanged.notify_all();
+    }
+    catch (...)
+    {
+    }
+
+    for (auto& entry : entries)
+    {
+        if (!entry.IsWritten || entry.CallbackConfig == nullptr)
+            continue;
+
+        auto record = entry.Record;
+        record.Message = entry.Message;
+        DispatchLogCallback(*entry.CallbackConfig, record, entry.Line);
+    }
+}
+
+//---------------------------------------------------------------------------
+/*
     TASWTextLogBase::WriteRecord
 
     Writes one entry passed to Write(), then calls OnLogEntry if it's set and the record's level meets
     OnLogEntryMinimumLevel, then reports the failures the hooks found meanwhile. If writing throws (e.g. out of memory,
-    or a formatter that throws), TASWLogBase::Write() drops and reports the entry.
+    or a formatter that throws), TASWLogBase::Write() drops and reports the entry. An asynchronous logger queues the
+    entry instead (see QueueRecord()).
 */
 void TASWTextLogBase::WriteRecord(const TASWLogRecord& record)
 {
+    // Acquire: once it reads false after async was on, the queued entries have been written (see WriteQueuedEntries())
+    if (m_IsAsync.load(std::memory_order_acquire) && QueueRecord(record))
+        return;
+
     TDeferredWorkRunner deferredWorkRunner(*this);
     std::string writtenLine;
     // Set only if OnLogEntry is called: the callback runs outside the lock, from the config the entry was written with

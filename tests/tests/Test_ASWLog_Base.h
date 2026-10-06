@@ -36,6 +36,14 @@ private:
     typedef TTestGroupBase inherited;
 
 private: // Test methods
+    void Test_Backtrace_CapacityKeepsTheNewest();
+    void Test_Backtrace_DisabledLoggerKeepsAndWritesNothing();
+    void Test_Backtrace_DumpAtLevelOffWritesOnlyOnRequest();
+    void Test_Backtrace_KeptEntriesAreWrittenBeforeTheTrigger();
+    void Test_Backtrace_MinimumLevelChangesKeepTheBacktrace();
+    void Test_Backtrace_OffKeepsNothing();
+    void Test_Backtrace_ReconfigureResizesKeepingTheNewest();
+    void Test_Backtrace_ShouldLogAndFmtIncludeKeptLevels();
     void Test_GetConfig_ReturnsUnchangingSnapshot();
     void Test_GetFullVersionStr_ContainsVersion();
     void Test_Interface_MethodsAreNoexcept();

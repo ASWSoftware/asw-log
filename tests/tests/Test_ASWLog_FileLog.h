@@ -36,6 +36,10 @@ private:
     typedef TTestGroupBase inherited;
 
 private: // Test methods
+    void Test_Async_EntryAtWaitAtLevelIsInTheFileWhenTheCallReturns();
+    void Test_Async_EveryWriteFlushesEachBatch();
+    void Test_Async_PeriodicFlushesOnTheSameThread();
+    void Test_Async_ReconfigureWritesQueuedEntriesToTheOldFile();
     void Test_AutoOpenClose_StaysInitializedBetweenWrites();
     void Test_BackupLimits_ApplyOnlyToThisLogsBackups();
     void Test_BackupLimits_MaxBackupFilesKeepsNewestByLastWrite();
@@ -83,6 +87,15 @@ private: // Test methods
     void Test_OnError_ReportsFullDisk();
     void Test_OnLogEntry_FiresForQualifyingLevelsOnly();
     void Test_OnLogEntry_ReentrantCallbackDoesNotDeadlock();
+    void Test_Periodic_CloseStopsAndOpenRestartsTheThread();
+    void Test_Periodic_CloseStopsTheThreadWithoutWaitingForTheInterval();
+    void Test_Periodic_ConcurrentLoggingAndReconfigure();
+    void Test_Periodic_DestructorStopsTheThreadWithoutWaitingForTheInterval();
+    void Test_Periodic_ErrorHandlerCanCloseAndReopenOnTheThread();
+    void Test_Periodic_FlushesAfterTheLastEntry();
+    void Test_Periodic_ReconfigureAppliesANewInterval();
+    void Test_Periodic_ReconfigureStartsAndStopsTheThread();
+    void Test_Periodic_ZeroIntervalFlushesEveryEntry();
     void Test_Reconfigure_FlushesEntriesBufferedByPreviousMode();
     void Test_Reconfigure_MovesOutputToNewFile();
     void Test_Reconfigure_UnopenableFileFailsButLoggerStaysInitialized();

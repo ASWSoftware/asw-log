@@ -36,6 +36,20 @@ private:
     typedef TTestGroupBase inherited;
 
 private: // Test methods
+    void Test_Async_BacktraceIsTakenWhenTheTriggerIsLogged();
+    void Test_Async_BlockWaitsForRoomInTheQueue();
+    void Test_Async_CallReturnsBeforeTheEntryIsWritten();
+    void Test_Async_DestructorWritesQueuedEntriesBeforeTheShutdownLine();
+    void Test_Async_DropNewestReportsAndMarksDroppedEntries();
+    void Test_Async_EntriesKeepTheirOrderPerThread();
+    void Test_Async_EntryAtWaitAtLevelIsNeverDropped();
+    void Test_Async_EntryAtWaitAtLevelReturnsOnceWrittenAndFlushed();
+    void Test_Async_FlushWaitsForQueuedEntries();
+    void Test_Async_LoggingFromOnLogEntryDoesNotWait();
+    void Test_Async_OnLogEntryRunsOnTheWorkerWithItsOwnCopy();
+    void Test_Async_ReconfigureToSyncWritesQueuedEntriesFirst();
+    void Test_Async_SwitchingOnAndOffKeepsEachThreadsOrder();
+    void Test_Backtrace_IsFormattedAndWrittenBeforeTheTrigger();
     void Test_Finalize_WritesShutdownLineFromDestructor();
     void Test_Flush_CallsHookAndReturnsItsResult();
     void Test_Flush_ThrowingHookDoesNotEscape();

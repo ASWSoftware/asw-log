@@ -46,6 +46,40 @@ namespace ASWLog
 //---------------------------------------------------------------------------
 
 /*
+  AsyncOverflowPolicy enum
+
+  What an asynchronous logger does with a new entry while its queue is full (see TASWAsyncConfig).
+*/
+enum class AsyncOverflowPolicy
+{
+    // The logging call waits until the queue has room, so no entry is lost.
+    Block,
+
+    // The entry is dropped, unless it is at or above TASWAsyncConfig::WaitAtLevel (it then waits for room). The logger
+    // reports the drops (ErrorKind::EntriesDropped) and writes a line saying how many were dropped where they would
+    // have been.
+    DropNewest,
+};
+
+[[nodiscard]] std::optional<AsyncOverflowPolicy> AsyncOverflowPolicy_FromString(std::string_view str) noexcept;
+
+[[nodiscard]] constexpr std::string_view AsyncOverflowPolicy_ToString(AsyncOverflowPolicy policy) noexcept
+{
+    switch (policy)
+    {
+        case AsyncOverflowPolicy::Block:
+            return "BLOCK";
+
+        case AsyncOverflowPolicy::DropNewest:
+            return "DROP_NEWEST";
+    }
+
+    return "UNKNOWN";
+}
+
+//---------------------------------------------------------------------------
+
+/*
   ColorMode enum
 
   Whether TASWConsoleLog wraps its lines in ANSI color codes.
@@ -115,10 +149,14 @@ enum class ErrorKind
 
     // An unexpected exception (e.g. out of memory, or a formatter that throws) dropped an entry or the startup lines.
     Exception,
+
+    // An asynchronous logger's queue was full, so entries were dropped (see AsyncOverflowPolicy::DropNewest). The
+    // message says how many.
+    EntriesDropped,
 };
 
 // Number of error kinds, e.g. for a table indexed by kind. Update this when a kind is added or removed.
-constexpr std::size_t ErrorKindCount = 8;
+constexpr std::size_t ErrorKindCount = 9;
 
 [[nodiscard]] constexpr std::string_view ErrorKind_ToString(ErrorKind errorKind) noexcept
 {
@@ -147,6 +185,9 @@ constexpr std::size_t ErrorKindCount = 8;
 
         case ErrorKind::Exception:
             return "EXCEPTION";
+
+        case ErrorKind::EntriesDropped:
+            return "ENTRIES_DROPPED";
     }
 
     return "UNKNOWN";
