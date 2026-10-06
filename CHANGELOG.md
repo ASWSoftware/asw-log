@@ -10,6 +10,8 @@ see [0.26.1](#0261---2026-09-17) for the initial versioned baseline.
 
 ## [Unreleased]
 
+## [0.75.0] - 2026-10-06
+
 ### Added
 
 - Optional asynchronous writing for the text loggers (file and console),
@@ -22,17 +24,18 @@ see [0.26.1](#0261---2026-09-17) for the initial versioned baseline.
   entries) and `Async.OverflowPolicy` (`AsyncOverflowPolicy::Block`, the
   default, waits for room; `DropNewest` drops the entry) decide what
   happens when the queue is full. A dropped run of entries is reported to
-  `OnError` as the new `ErrorKind::EntriesDropped` and marked in the log
-  by a "Dropped N entries" line where they would have been. An entry at or
-  above `Async.WaitAtLevel` (default `Error`) is never dropped, and its
-  call returns only once it and every entry before it are written and
-  flushed, so errors still reach the file before a crash. `Flush()`,
-  `Close()`, `Reconfigure()` and the destructor first wait for the queued
-  entries. In async mode `OnLogEntry` is called on the logger's thread,
-  after the entry was written; `File.Flush` `EveryWrite` and `OnNewLine`
-  flush once per batch of queued entries. A logger derived from
-  `TASWTextLogBase` gets this without changes; `AfterQueuedEntriesUnlocked()`
-  is a new protected hook for flushing a batch.
+  `OnError` as the new `ErrorKind::EntriesDropped` (`ErrorKindCount` is
+  now 9) and marked in the log by a "Dropped N entries" line where they
+  would have been. An entry at or above `Async.WaitAtLevel` (default
+  `Error`) is never dropped, and its call returns only once it and every
+  entry before it are written and flushed, so errors still reach the file
+  before a crash. `Flush()`, `Close()`, `Reconfigure()` and the destructor
+  first wait for the queued entries. In async mode `OnLogEntry` is called
+  on the logger's thread, after the entry was written; `File.Flush` set to
+  `EveryWrite` or `OnNewLine` flushes once per batch of queued entries. A
+  logger derived from `TASWTextLogBase` gets this without changes;
+  `AfterQueuedEntriesUnlocked()` is a new protected hook for flushing a
+  batch.
 - Optional crash handlers, in the new `ASWLog_CrashHandler.h` (add
   `ASWLog_CrashHandler.cpp` to projects that list the ASWLog sources):
   `ASWLog::InstallCrashHandlers()` hooks `std::terminate()`, SIGABRT
@@ -47,13 +50,15 @@ see [0.26.1](#0261---2026-09-17) for the initial versioned baseline.
   (default 1 s) bounds the wait. In a POSIX signal handler the line has a
   fixed layout, written straight to the file; elsewhere it uses the
   logger's formatter. Best effort: the header lists what isn't handled
-  (e.g. a debugger attached, fast fail, a logger whose lock the crashed
-  thread held). `UninstallCrashHandlers()` restores the previous handlers;
-  `ASWLog::HandleCrash(reason)` does the logging part for an application
-  with its own crash reporter. `Shutdown.WriteCrashLine` (default true)
-  leaves a logger's crash line out; the line is synced to disk if
-  `File.SyncToDiskAtLevel` is Critical or lower. A logger derived from
-  `TASWTextLogBase` is covered without changes; it can override the new
+  (e.g. a debugger attached, fast fail, the process being killed), and a
+  logger whose lock stays busy (e.g. the crashed thread held it) gets only
+  the fixed-layout line, written straight to its output, and loses its
+  buffered entries. `UninstallCrashHandlers()` restores the previous
+  handlers; `ASWLog::HandleCrash(reason)` does the logging part for an
+  application with its own crash reporter. `Shutdown.WriteCrashLine`
+  (default true) leaves a logger's crash line out; the line is synced to
+  disk if `File.SyncToDiskAtLevel` is Critical or lower. A logger derived
+  from `TASWTextLogBase` is covered without changes; it can override the new
   protected hooks `FlushForCrashUnlocked()` and `WriteCrashLineDirect()` to
   get its crash line in a POSIX signal handler, or when its lock stays busy.
 - A backtrace buffer, in the new `TASWLogConfig::Backtrace` group
@@ -82,9 +87,9 @@ see [0.26.1](#0261---2026-09-17) for the initial versioned baseline.
   They used to stay in the buffer until the next entry came after the
   interval, or until the file was closed. Writing an entry no longer reads
   the clock in this mode. The thread runs only while a logger in Periodic
-  mode is initialized (not with `AutoOpenClosePerWrite`, which flushes by
-  closing the file after each entry); `Reconfigure()` starts or stops it or
-  applies a new interval at once, and `Close()`, the destructor and the
+  mode is initialized (not with `File.AutoOpenClosePerWrite`, which flushes
+  by closing the file after each entry); `Reconfigure()` starts or stops it
+  or applies a new interval at once, and `Close()`, the destructor and the
   exit handler of `GetInstance()` stop it without waiting for the interval.
   A failed flush on that thread goes to `OnError` on that thread. A
   `FlushInterval` of 0 or less flushes every entry, as before. ASWLog now
@@ -631,7 +636,8 @@ Everything already present in the logger at this point (`TASWFileLog`,
 and CMake example projects, unit tests, `Deploy.bat`, etc.) is treated as the
 baseline and is not itemized commit-by-commit.
 
-[Unreleased]: https://github.com/ASWSoftware/asw-log/compare/v0.66.0...HEAD
+[Unreleased]: https://github.com/ASWSoftware/asw-log/compare/v0.75.0...HEAD
+[0.75.0]: https://github.com/ASWSoftware/asw-log/compare/v0.66.0...v0.75.0
 [0.66.0]: https://github.com/ASWSoftware/asw-log/compare/v0.65.0...v0.66.0
 [0.65.0]: https://github.com/ASWSoftware/asw-log/compare/v0.45.0...v0.65.0
 [0.45.0]: https://github.com/ASWSoftware/asw-log/compare/v0.43.0...v0.45.0
