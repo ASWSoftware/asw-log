@@ -156,8 +156,8 @@ struct TASWFileConfig
     // After a failed size rotation (e.g. another program holds the file), entries keep going to the current file, and
     // rotating isn't tried again until this long after the failure. 0 = try on every entry.
     std::chrono::milliseconds RotationRetryDelay{ 500 };
-    // Rolls the file over at UTC midnight, and at Initialize() if the file was last written on an earlier UTC day. The
-    // backup is named for the day it holds.
+    // Rolls the file over at midnight, and at Initialize() if the file was last written on an earlier day, both in
+    // Line.TimestampZone (UTC by default). The backup is named for the day it holds.
     bool EnableDailyRolling   = false;
 
     // --- Backup Event ---
@@ -218,8 +218,16 @@ struct TASWLineConfig
     std::shared_ptr<const IASWLogFormatter> Formatter;
     LineEnding Ending = LineEnding::LF; // Added after each line (not after LogRaw entries)
 
+    // The clock and precision of the timestamps, e.g. 2026-09-28T21:02:44.342Z (the defaults) or, with
+    // TimeZone::Local and TimePrecision::Microseconds, 2026-09-28T16:02:44.342519-05:00. The zone also sets when daily
+    // rolling starts a new file (File.EnableDailyRolling), the time in backup names, and the shutdown line's time. A
+    // crash line written in a POSIX signal handler, or when the logger's lock stays busy, is always UTC with
+    // milliseconds (see ASWLog_CrashHandler.h). Local time costs a C runtime call per line (localtime_s/localtime_r).
+    TimeZone TimestampZone = TimeZone::UTC;
+    TimePrecision TimestampPrecision = TimePrecision::Milliseconds;
+
     // The fields TASWTextFormatter writes before the message
-    bool ShowTimestamp      = true; // The entry's time, in UTC
+    bool ShowTimestamp      = true; // The entry's time (see TimestampZone and TimestampPrecision)
     bool ShowLevel          = true;
     bool ShowProcessId      = true;
     bool ShowThreadId       = true;

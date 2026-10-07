@@ -53,6 +53,10 @@ TTest_ASWLog_Types::TTest_ASWLog_Types()
     RegisterTest(&TTest_ASWLog_Types::Test_LineEnding_FromString, "LineEnding_FromString");
     RegisterTest(&TTest_ASWLog_Types::Test_LineEnding_ToString, "LineEnding_ToString");
     RegisterTest(&TTest_ASWLog_Types::Test_LogError_ToString, "LogError_ToString");
+    RegisterTest(&TTest_ASWLog_Types::Test_TimePrecision_FromString, "TimePrecision_FromString");
+    RegisterTest(&TTest_ASWLog_Types::Test_TimePrecision_ToString, "TimePrecision_ToString");
+    RegisterTest(&TTest_ASWLog_Types::Test_TimeZone_FromString, "TimeZone_FromString");
+    RegisterTest(&TTest_ASWLog_Types::Test_TimeZone_ToString, "TimeZone_ToString");
 }
 //---------------------------------------------------------------------------
 TTest_ASWLog_Types::~TTest_ASWLog_Types()
@@ -309,6 +313,55 @@ void TTest_ASWLog_Types::Test_LogError_ToString()
     // Assert
     CheckEquals(std::string("EXCEPTION: Dropped an entry: out of memory"), messageOnlyText, "The empty parts should be left out");
     CheckEquals("OPEN_FAILED: Couldn't open the log file 'logs/app.log': " + code.message() + " (3 more not reported)", everyPartText, "Every part should be in the line");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_Types::Test_TimePrecision_FromString()
+{
+    // Arrange
+    const auto milliseconds = ASWLog::TimePrecision_FromString("MILLISECONDS");
+    const auto microseconds = ASWLog::TimePrecision_FromString("microseconds");
+    const auto nanoseconds = ASWLog::TimePrecision_FromString("NANOSECONDS");
+    const auto msAlias = ASWLog::TimePrecision_FromString("ms");
+    const auto usAlias = ASWLog::TimePrecision_FromString("US");
+    const auto nsAlias = ASWLog::TimePrecision_FromString("NS");
+    const auto unknown = ASWLog::TimePrecision_FromString("seconds");
+
+    // Act & Assert
+    CheckTrue(milliseconds == ASWLog::TimePrecision::Milliseconds, "MILLISECONDS should map to Milliseconds");
+    CheckTrue(microseconds == ASWLog::TimePrecision::Microseconds, "microseconds should map to Microseconds, ignoring case");
+    CheckTrue(nanoseconds == ASWLog::TimePrecision::Nanoseconds, "NANOSECONDS should map to Nanoseconds");
+    CheckTrue(msAlias == ASWLog::TimePrecision::Milliseconds, "ms should map to Milliseconds");
+    CheckTrue(usAlias == ASWLog::TimePrecision::Microseconds, "US should map to Microseconds");
+    CheckTrue(nsAlias == ASWLog::TimePrecision::Nanoseconds, "NS should map to Nanoseconds");
+    CheckFalse(unknown.has_value(), "An unknown precision should not parse");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_Types::Test_TimePrecision_ToString()
+{
+    // Act & Assert
+    CheckEquals(std::string("MILLISECONDS"), std::string(ASWLog::TimePrecision_ToString(ASWLog::TimePrecision::Milliseconds)), "Milliseconds should stringify as MILLISECONDS");
+    CheckEquals(std::string("MICROSECONDS"), std::string(ASWLog::TimePrecision_ToString(ASWLog::TimePrecision::Microseconds)), "Microseconds should stringify as MICROSECONDS");
+    CheckEquals(std::string("NANOSECONDS"), std::string(ASWLog::TimePrecision_ToString(ASWLog::TimePrecision::Nanoseconds)), "Nanoseconds should stringify as NANOSECONDS");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_Types::Test_TimeZone_FromString()
+{
+    // Arrange
+    const auto utc = ASWLog::TimeZone_FromString("UTC");
+    const auto local = ASWLog::TimeZone_FromString("local");
+    const auto unknown = ASWLog::TimeZone_FromString("EST");
+
+    // Act & Assert
+    CheckTrue(utc == ASWLog::TimeZone::UTC, "UTC should map to UTC");
+    CheckTrue(local == ASWLog::TimeZone::Local, "local should map to Local, ignoring case");
+    CheckFalse(unknown.has_value(), "A named time zone should not parse");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_Types::Test_TimeZone_ToString()
+{
+    // Act & Assert
+    CheckEquals(std::string("UTC"), std::string(ASWLog::TimeZone_ToString(ASWLog::TimeZone::UTC)), "UTC should stringify as UTC");
+    CheckEquals(std::string("LOCAL"), std::string(ASWLog::TimeZone_ToString(ASWLog::TimeZone::Local)), "Local should stringify as LOCAL");
 }
 //---------------------------------------------------------------------------
 

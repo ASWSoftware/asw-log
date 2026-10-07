@@ -86,7 +86,7 @@ std::string TASWTextFormatter::FormatLine(const TASWLogRecord& record, const TAS
     {
         char timestamp[Time::ISO8601BufferSize];
         line += '[';
-        line.append(timestamp, Time::WriteISO8601(timestamp, record.Timestamp));
+        line.append(timestamp, Time::WriteISO8601(timestamp, record.Timestamp, config.Line.TimestampZone, config.Line.TimestampPrecision));
         line += ']';
     }
 

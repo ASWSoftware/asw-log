@@ -280,6 +280,10 @@
             <DependentOn>..\..\..\tests\Test_ASWLog_Version.h</DependentOn>
             <BuildOrder>39</BuildOrder>
         </CppCompile>
+        <CppCompile Include="..\..\..\tests\UT_Helper_DateTime.cpp">
+            <DependentOn>..\..\..\tests\UT_Helper_DateTime.h</DependentOn>
+            <BuildOrder>44</BuildOrder>
+        </CppCompile>
         <CppCompile Include="ASWLogTests_VCL_GUI.cpp">
             <BuildOrder>0</BuildOrder>
         </CppCompile>

@@ -45,6 +45,8 @@ limitations under the License.
 #include "ASWLog_Formatter.h"
 #include "ASWLog_Utils.h"
 //---------------------------------------------------------------------------
+#include "UT_Helper_DateTime.h"
+//---------------------------------------------------------------------------
 
 namespace ASWUnitTests
 {
@@ -172,6 +174,7 @@ TTest_ASWLog_Formatter::TTest_ASWLog_Formatter()
     RegisterTest(&TTest_ASWLog_Formatter::Test_FormatLine_LargestIdsAndEachLevel, "FormatLine_LargestIdsAndEachLevel");
     RegisterTest(&TTest_ASWLog_Formatter::Test_FormatLine_MemoryFields, "FormatLine_MemoryFields");
     RegisterTest(&TTest_ASWLog_Formatter::Test_FormatLine_NoFields, "FormatLine_NoFields");
+    RegisterTest(&TTest_ASWLog_Formatter::Test_FormatLine_TimestampFollowsZoneAndPrecision, "FormatLine_TimestampFollowsZoneAndPrecision");
     RegisterTest(&TTest_ASWLog_Formatter::Test_Formatter_ReceivesRecordFromLoggingThread, "Formatter_ReceivesRecordFromLoggingThread");
     RegisterTest(&TTest_ASWLog_Formatter::Test_Formatter_SharedByTwoLoggers, "Formatter_SharedByTwoLoggers");
 }
@@ -308,6 +311,22 @@ void TTest_ASWLog_Formatter::Test_FormatLine_NoFields()
 
     // Assert
     CheckEquals(std::string(": just the message"), line, "With every field off, only the separator and message remain");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_Formatter::Test_FormatLine_TimestampFollowsZoneAndPrecision()
+{
+    // Arrange: FixedTime is 2026-09-21T14:13:20.123Z, during US Eastern daylight time
+    auto config = MakeConfigWithoutFields("unused.log");
+    config.Line.ShowTimestamp = true;
+    config.Line.TimestampZone = ASWLog::TimeZone::Local;
+    config.Line.TimestampPrecision = ASWLog::TimePrecision::Microseconds;
+    const TScopedTimeZone timeZone("EST5EDT");
+
+    // Act
+    const auto line = ASWLog::TASWTextFormatter::FormatLine(MakeRecord("local"), config);
+
+    // Assert
+    CheckEquals(std::string("[2026-09-21T10:13:20.123000-04:00]: local"), line, "The timestamp should be local time with microseconds and the offset");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_Formatter::Test_Formatter_ReceivesRecordFromLoggingThread()

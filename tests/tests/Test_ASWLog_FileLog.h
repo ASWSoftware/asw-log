@@ -49,8 +49,11 @@ private: // Test methods
     void Test_ChildProcess_DoesNotInheritLogFile();
     void Test_DailyRolling_KeepsExistingBackupForSameDate();
     void Test_DailyRolling_KeepsLeftoverLogFromSameDay();
+    void Test_DailyRolling_LocalZoneRollsAtLocalMidnight();
     void Test_DailyRolling_NamesBackupForContentDate();
+    void Test_DailyRolling_ReconfiguredZoneRollsAtItsMidnight();
     void Test_DailyRolling_RotatesLeftoverLogFromEarlierDay();
+    void Test_DailyRolling_RotatesLeftoverLogFromEarlierLocalDay();
     void Test_DailyRolling_SharedLogRollsOverOnce();
     void Test_DeleteOldLogs_AcceptsShortRelativeFolder();
     void Test_DeleteOldLogs_EmptyPatternDeletesNothing();
@@ -102,7 +105,9 @@ private: // Test methods
     void Test_RetentionMaxAge_DefaultDisabledPreservesOldBackups();
     void Test_RetentionMaxAge_DeletesExpiredBackupsAfterRotation();
     void Test_RotateLogFiles_KeepsEveryBackup();
+    void Test_RotateLogFiles_NamesBackupInLocalTime();
     void Test_SetEnabled_FalseStopsAutoOpenCloseLogging();
+    void Test_ShutdownLine_TimeFollowsTimestampZone();
     void Test_SizeRotation_AutoOpenCloseCountsOtherWriters();
     void Test_SizeRotation_CountsExistingFileSize();
     void Test_SizeRotation_RotatesWhenLimitReached();

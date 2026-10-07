@@ -10,6 +10,23 @@ see [0.26.1](#0261---2026-09-17) for the initial versioned baseline.
 
 ## [Unreleased]
 
+### Added
+
+- Local-time and finer timestamps: `Line.TimestampZone` (`TimeZone::UTC`,
+  the default, or `TimeZone::Local`) and `Line.TimestampPrecision`
+  (`TimePrecision::Milliseconds`, the default, `Microseconds` or
+  `Nanoseconds`), e.g. `2026-09-28T16:02:44.342519-05:00` for local time
+  with microseconds. The digits past the system clock's resolution are 0
+  (100 ns with MSVC and MinGW, 1 us with RAD Studio's libc++). The zone also
+  decides when daily rolling starts a new file (local midnight with
+  `Local`), the time in backup names, and the time in the "Logger shutdown"
+  line; a `Reconfigure()` that changes it rolls over next at the new zone's
+  midnight. The fixed-layout crash line (in a POSIX signal handler, or when
+  the logger's lock stays busy) stays UTC with milliseconds. Local time
+  costs a `localtime_s`/`localtime_r` call per line. `Time::WriteISO8601()`
+  and `Time::ToISO8601String()` take the zone and precision too, and
+  `Time::ToDateString()` the zone.
+
 ### Changed
 
 - Writing a formatted line is much faster: the built-in layout now writes

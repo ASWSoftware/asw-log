@@ -89,6 +89,8 @@ void TTest_ASWLog_Config::Test_Defaults_MatchDocumentedValues()
     // Assert: Line
     CheckTrue(config.Line.Formatter == nullptr, "Line.Formatter should default to unset (the built-in layout)");
     CheckTrue(config.Line.Ending == ASWLog::LineEnding::LF, "Line.Ending should default to LF");
+    CheckTrue(config.Line.TimestampZone == ASWLog::TimeZone::UTC, "Line.TimestampZone should default to UTC");
+    CheckTrue(config.Line.TimestampPrecision == ASWLog::TimePrecision::Milliseconds, "Line.TimestampPrecision should default to Milliseconds");
     CheckTrue(config.Line.ShowTimestamp, "Line.ShowTimestamp should default to true");
     CheckTrue(config.Line.ShowLevel, "Line.ShowLevel should default to true");
     CheckTrue(config.Line.ShowProcessId, "Line.ShowProcessId should default to true");

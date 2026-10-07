@@ -48,6 +48,10 @@ private: // Test methods
     void Test_LineEnding_FromString();
     void Test_LineEnding_ToString();
     void Test_LogError_ToString();
+    void Test_TimePrecision_FromString();
+    void Test_TimePrecision_ToString();
+    void Test_TimeZone_FromString();
+    void Test_TimeZone_ToString();
 
 public:
     TTest_ASWLog_Types();

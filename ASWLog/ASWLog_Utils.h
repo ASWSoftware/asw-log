@@ -37,6 +37,8 @@ limitations under the License.
 #include <string_view>
 #include <system_error>
 //---------------------------------------------------------------------------
+#include "ASWLog_Types.h"
+//---------------------------------------------------------------------------
 
 namespace ASWLog
 {
@@ -137,8 +139,9 @@ struct TSystemMemoryUsage
 namespace Time
 {
 
-// The size of the buffer WriteISO8601() writes to
-inline constexpr std::size_t ISO8601BufferSize = 32;
+// The size of the buffer WriteISO8601() writes to: enough for the longest form, a 6-character year with nanoseconds
+// and an offset
+inline constexpr std::size_t ISO8601BufferSize = 40;
 
 //---------------------------------------------------------------------------
 
@@ -154,24 +157,25 @@ inline constexpr std::size_t ISO8601BufferSize = 32;
 /*
     ToISO8601String
 
-    Converts a high-precision system time point into a valid ISO 8601 UTC string.
-        Format: YYYY-MM-DDTHH:mm:ss.mmmZ
+    Converts a system time point into an ISO 8601 string, as WriteISO8601() writes it.
+        Format: YYYY-MM-DDTHH:mm:ss.mmmZ (the defaults)
 */
-[[nodiscard]] std::string ToISO8601String(std::chrono::system_clock::time_point timePoint);
+[[nodiscard]] std::string ToISO8601String(std::chrono::system_clock::time_point timePoint, TimeZone zone = TimeZone::UTC,
+    TimePrecision precision = TimePrecision::Milliseconds);
 
 /*
     ToDateString
 
-    Extracts just the calendar date segment needed for midnight rolling checks.
+    The date part of ToISO8601String(), in 'zone', e.g. for daily rolling.
         Format: YYYY-MM-DD
 */
-[[nodiscard]] std::string ToDateString(std::chrono::system_clock::time_point timePoint);
+[[nodiscard]] std::string ToDateString(std::chrono::system_clock::time_point timePoint, TimeZone zone = TimeZone::UTC);
 
 /*
     ToLocalISO8601String
 
     Converts a system time point into an ISO 8601 local time string with the local time zone's offset from UTC (see
-    GetUTCOffsetMinutes()), with milliseconds like ToISO8601String().
+    GetUTCOffsetMinutes()), with milliseconds: ToISO8601String() with TimeZone::Local.
         Format: YYYY-MM-DDTHH:mm:ss.mmm+hh:mm (e.g. 2026-09-28T21:02:44.123-05:00)
 */
 [[nodiscard]] std::string ToLocalISO8601String(std::chrono::system_clock::time_point timePoint);
@@ -179,12 +183,16 @@ inline constexpr std::size_t ISO8601BufferSize = 32;
 /*
     WriteISO8601
 
-    Writes 'timePoint' as an ISO 8601 UTC string, as ToISO8601String() returns it, into 'buffer', and returns the
-    number of characters written: 24 for the years 0 to 9999, the year written in full outside them. Calendar
-    arithmetic only: allocates nothing and calls no C runtime function, so a crash handler can use it too.
-        Format: YYYY-MM-DDTHH:mm:ss.mmmZ
+    Writes 'timePoint' as an ISO 8601 string into 'buffer' and returns the number of characters written: the date, the
+    time with 3, 6 or 9 digits of the second ('precision'), and "Z" for TimeZone::UTC, or the local time zone's offset
+    from UTC for TimeZone::Local (see GetUTCOffsetMinutes()). A 4-digit year for the years 0 to 9999, the year in full
+    outside them. Allocates nothing. UTC is calendar arithmetic only, so a crash handler can use it, even in a POSIX
+    signal handler; Local calls localtime_s/localtime_r, which isn't safe there, and falls back to UTC if the local
+    time can't be determined.
+        Format: YYYY-MM-DDTHH:mm:ss.mmmZ (the defaults), or e.g. 2026-09-28T16:02:44.342519-05:00
 */
-[[nodiscard]] std::size_t WriteISO8601(char (& buffer)[ISO8601BufferSize], std::chrono::system_clock::time_point timePoint) noexcept;
+[[nodiscard]] std::size_t WriteISO8601(char (& buffer)[ISO8601BufferSize], std::chrono::system_clock::time_point timePoint,
+    TimeZone zone = TimeZone::UTC, TimePrecision precision = TimePrecision::Milliseconds) noexcept;
 
 } // namespace Time
 

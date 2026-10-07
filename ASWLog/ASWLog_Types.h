@@ -330,6 +330,62 @@ enum class LineEnding
 
 //---------------------------------------------------------------------------
 
+// How many digits of the second a timestamp shows (see TASWLineConfig::TimestampPrecision). The digits past the system
+// clock's resolution are 0: with nanoseconds, the last two with MSVC and MinGW on Windows (100 ns), the last three with
+// libc++ (1 us, e.g. RAD Studio).
+enum class TimePrecision
+{
+    Milliseconds, // .mmm
+    Microseconds, // .uuuuuu
+    Nanoseconds,  // .nnnnnnnnn
+};
+
+[[nodiscard]] std::optional<TimePrecision> TimePrecision_FromString(std::string_view str) noexcept;
+
+[[nodiscard]] constexpr std::string_view TimePrecision_ToString(TimePrecision precision) noexcept
+{
+    switch (precision)
+    {
+        case TimePrecision::Milliseconds:
+            return "MILLISECONDS";
+
+        case TimePrecision::Microseconds:
+            return "MICROSECONDS";
+
+        case TimePrecision::Nanoseconds:
+            return "NANOSECONDS";
+    }
+
+    return "UNKNOWN";
+}
+
+//---------------------------------------------------------------------------
+
+// The clock a timestamp is shown in (see TASWLineConfig::TimestampZone)
+enum class TimeZone
+{
+    UTC,   // "Z" suffix, e.g. 2026-09-28T21:02:44.342Z
+    Local, // The local time zone, with its offset from UTC, e.g. 2026-09-28T16:02:44.342-05:00
+};
+
+[[nodiscard]] std::optional<TimeZone> TimeZone_FromString(std::string_view str) noexcept;
+
+[[nodiscard]] constexpr std::string_view TimeZone_ToString(TimeZone zone) noexcept
+{
+    switch (zone)
+    {
+        case TimeZone::UTC:
+            return "UTC";
+
+        case TimeZone::Local:
+            return "LOCAL";
+    }
+
+    return "UNKNOWN";
+}
+
+//---------------------------------------------------------------------------
+
 /////////////////////////////////////////////////////////////////////////////
 // TASWLogError struct
 //

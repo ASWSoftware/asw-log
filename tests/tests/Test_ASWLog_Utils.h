@@ -49,9 +49,12 @@ private: // Test methods
     void Test_RenameWithoutReplacing_KeepsExistingTarget();
     void Test_Time_GetUTCOffsetMinutes_FollowsDaylightSavingTime();
     void Test_Time_ToDateString();
+    void Test_Time_ToDateString_FollowsZone();
     void Test_Time_ToISO8601String();
     void Test_Time_ToLocalISO8601String_IncludesOffset();
     void Test_Time_WriteISO8601_CalendarEdges();
+    void Test_Time_WriteISO8601_LocalTimeWithEachPrecision();
+    void Test_Time_WriteISO8601_UTCWithEachPrecision();
 
 public:
     TTest_ASWLog_Utils();

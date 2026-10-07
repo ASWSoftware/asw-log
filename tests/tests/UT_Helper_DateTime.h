@@ -1,6 +1,8 @@
 /* **************************************************************************
-Test_ASWLog_Formatter.h
+UT_Helper_DateTime.h
 Author: Anthony S. West - ASW Software
+
+Date and time helpers shared by the unit tests.
 
 Copyright 2026 ASW Software
 
@@ -18,44 +20,40 @@ limitations under the License.
 
 ************************************************************************** */
 
-#ifndef Test_ASWLog_FormatterH
-#define Test_ASWLog_FormatterH
+#ifndef UT_Helper_DateTimeH
+#define UT_Helper_DateTimeH
 //---------------------------------------------------------------------------
-#include "ASWUnitTests_TestBase.h"
+#include <string>
 //---------------------------------------------------------------------------
 
 namespace ASWUnitTests
 {
 
 ///////////////////////////////////////////////////////////////////////////
-// TTest_ASWLog_Formatter
+// TScopedTimeZone
+//
+// While alive, sets the C runtime's local time zone through the TZ environment variable (POSIX format, e.g. "EST5EDT",
+// which the Windows C runtime also reads), then restores the previous value. For the tests of local time.
 ///////////////////////////////////////////////////////////////////////////
-class TTest_ASWLog_Formatter : public TTestGroupBase
+class TScopedTimeZone
 {
 private:
-    typedef TTestGroupBase inherited;
+    bool m_HadValue = false;
+    std::string m_PreviousValue;
 
-private: // Test methods
-    void Test_Format_MatchesFormatLine();
-    void Test_FormatLine_AllFieldsInOrder();
-    void Test_FormatLine_LargestIdsAndEachLevel();
-    void Test_FormatLine_MemoryFields();
-    void Test_FormatLine_NoFields();
-    void Test_FormatLine_TimestampFollowsZoneAndPrecision();
-    void Test_Formatter_ReceivesRecordFromLoggingThread();
-    void Test_Formatter_SharedByTwoLoggers();
+private:
+    // Sets TZ to 'value', or removes it if 'value' is null, and makes the C runtime read it again
+    static void Apply(const char* value);
 
 public:
-    TTest_ASWLog_Formatter();
-    ~TTest_ASWLog_Formatter() override;
+    explicit TScopedTimeZone(const char* timeZone);
+    ~TScopedTimeZone();
 
-    void SetUp_Group() override;
-    void SetUp_Test(ITestCase& testCase) override;
-    void TearDown_Group() override;
-    void TearDown_Test(ITestCase& testCase) override;
+    TScopedTimeZone(const TScopedTimeZone&) = delete;
+    TScopedTimeZone& operator=(const TScopedTimeZone&) = delete;
 };
 
 } // ASWUnitTests
 
 //---------------------------------------------------------------------------
-#endif // #ifndef Test_ASWLog_FormatterH
+#endif // #ifndef UT_Helper_DateTimeH

@@ -246,6 +246,10 @@
             <DependentOn>..\tests\Test_ASWLog_Version.h</DependentOn>
             <BuildOrder>31</BuildOrder>
         </CppCompile>
+        <CppCompile Include="..\tests\UT_Helper_DateTime.cpp">
+            <DependentOn>..\tests\UT_Helper_DateTime.h</DependentOn>
+            <BuildOrder>35</BuildOrder>
+        </CppCompile>
         <CppCompile Include="..\..\third_party\asw-unit-tests\src\ASWUnitTests_CLI.cpp">
             <DependentOn>..\..\third_party\asw-unit-tests\src\ASWUnitTests_CLI.h</DependentOn>
             <BuildOrder>8</BuildOrder>

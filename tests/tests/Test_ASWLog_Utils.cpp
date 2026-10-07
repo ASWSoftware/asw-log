@@ -33,6 +33,7 @@ limitations under the License.
 #include <filesystem>
 #include <fstream>
 #include <iterator>
+#include <ratio>
 #include <string>
 #include <system_error>
 #include <thread>
@@ -43,6 +44,8 @@ limitations under the License.
 //---------------------------------------------------------------------------
 #include "ASWUnitTests_Registry.h"
 //---------------------------------------------------------------------------
+#include "UT_Helper_DateTime.h"
+//---------------------------------------------------------------------------
 
 namespace ASWUnitTests
 {
@@ -50,75 +53,11 @@ namespace ASWUnitTests
 namespace
 {
 
-// While alive, sets the C runtime's local time zone through the TZ environment variable (POSIX format, e.g. "EST5EDT",
-// which the Windows C runtime also reads), then restores the previous value.
-class TScopedTimeZone
-{
-private:
-    bool m_HadValue = false;
-    std::string m_PreviousValue;
+// True if system_clock ticks in less than 1 us (100 ns with MSVC and MinGW on Windows, 1 ns with libstdc++ on Linux),
+// false for 1 us (libc++, e.g. RAD Studio)
+constexpr bool HasSubmicrosecondClock = std::ratio_less_v<std::chrono::system_clock::period, std::micro>;
 
-    // Sets TZ to 'value', or removes it if 'value' is null, and makes the C runtime read it again
-    static void Apply(const char* value)
-    {
-#if defined(_WIN32)
-        _putenv_s("TZ", value != nullptr ? value : ""); // An empty value removes the variable
-        _tzset();
-
-        // Once the Windows C runtime has read a system time zone without daylight saving time (e.g. UTC on CI machines,
-        // or Arizona), it keeps that zone's daylight saving bias of 0 even when TZ then names a zone that has daylight
-        // saving time, so summer would be flagged as daylight saving time without moving the clock. TZ can't give the
-        // bias, so set the usual hour.
-        int hasDaylightSavingTime = 0;
-        if (value != nullptr && _get_daylight(&hasDaylightSavingTime) == 0 && hasDaylightSavingTime != 0)
-        {
-            // __dstbias() is deprecated in favor of _get_dstbias(), which can't set it.
-#if defined(_MSC_VER)
-#pragma warning(push)
-#pragma warning(disable : 4996)
-#endif
-            *__dstbias() = -3600;
-#if defined(_MSC_VER)
-#pragma warning(pop)
-#endif
-        }
-#else
-        if (value != nullptr)
-            setenv("TZ", value, 1);
-        else
-            unsetenv("TZ");
-        tzset();
-#endif
-    }
-
-public:
-    explicit TScopedTimeZone(const char* timeZone)
-    {
-#if defined(_WIN32)
-        // _putenv_s also updates the process environment, which GetEnvironmentVariableA reads (avoids getenv(), which
-        // MSVC warns about)
-        char buffer[256]{};
-        const DWORD length = GetEnvironmentVariableA("TZ", buffer, sizeof(buffer));
-        m_HadValue = length > 0 && length < sizeof(buffer);
-        if (m_HadValue)
-            m_PreviousValue.assign(buffer, length);
-#else
-        const char* previous = std::getenv("TZ");
-        m_HadValue = previous != nullptr;
-        if (m_HadValue)
-            m_PreviousValue = previous;
-#endif
-        Apply(timeZone);
-    }
-
-    ~TScopedTimeZone()
-    {
-        Apply(m_HadValue ? m_PreviousValue.c_str() : nullptr);
-    }
-
-    TScopedTimeZone(const TScopedTimeZone&) = delete;
-    TScopedTimeZone& operator=(const TScopedTimeZone&) = delete;
-};
+//---------------------------------------------------------------------------
 
 std::string ReadText(const std::filesystem::path& path)
 {
@@ -147,9 +86,12 @@ TTest_ASWLog_Utils::TTest_ASWLog_Utils()
     RegisterTest(&TTest_ASWLog_Utils::Test_RenameWithoutReplacing_KeepsExistingTarget, "RenameWithoutReplacing_KeepsExistingTarget");
     RegisterTest(&TTest_ASWLog_Utils::Test_Time_GetUTCOffsetMinutes_FollowsDaylightSavingTime, "Time_GetUTCOffsetMinutes_FollowsDaylightSavingTime");
     RegisterTest(&TTest_ASWLog_Utils::Test_Time_ToDateString, "Time_ToDateString");
+    RegisterTest(&TTest_ASWLog_Utils::Test_Time_ToDateString_FollowsZone, "Time_ToDateString_FollowsZone");
     RegisterTest(&TTest_ASWLog_Utils::Test_Time_ToISO8601String, "Time_ToISO8601String");
     RegisterTest(&TTest_ASWLog_Utils::Test_Time_ToLocalISO8601String_IncludesOffset, "Time_ToLocalISO8601String_IncludesOffset");
     RegisterTest(&TTest_ASWLog_Utils::Test_Time_WriteISO8601_CalendarEdges, "Time_WriteISO8601_CalendarEdges");
+    RegisterTest(&TTest_ASWLog_Utils::Test_Time_WriteISO8601_LocalTimeWithEachPrecision, "Time_WriteISO8601_LocalTimeWithEachPrecision");
+    RegisterTest(&TTest_ASWLog_Utils::Test_Time_WriteISO8601_UTCWithEachPrecision, "Time_WriteISO8601_UTCWithEachPrecision");
 }
 //---------------------------------------------------------------------------
 TTest_ASWLog_Utils::~TTest_ASWLog_Utils()
@@ -466,6 +408,22 @@ void TTest_ASWLog_Utils::Test_Time_ToDateString()
     CheckContains(date, "-", "Date string should include date separators");
 }
 //---------------------------------------------------------------------------
+void TTest_ASWLog_Utils::Test_Time_ToDateString_FollowsZone()
+{
+    // Arrange: 02:00 UTC is still the evening before in US Eastern time
+    using namespace std::chrono_literals;
+    const auto time = std::chrono::sys_days{ 2026y / 7 / 1 } + 2h;
+    const TScopedTimeZone timeZone("EST5EDT");
+
+    // Act
+    const auto utcDate = ASWLog::Time::ToDateString(time);
+    const auto localDate = ASWLog::Time::ToDateString(time, ASWLog::TimeZone::Local);
+
+    // Assert
+    CheckEquals(std::string("2026-07-01"), utcDate, "The UTC date should be the default");
+    CheckEquals(std::string("2026-06-30"), localDate, "The local date should be the day before, 4 hours behind UTC");
+}
+//---------------------------------------------------------------------------
 void TTest_ASWLog_Utils::Test_Time_ToISO8601String()
 {
     // Arrange
@@ -538,6 +496,64 @@ void TTest_ASWLog_Utils::Test_Time_WriteISO8601_CalendarEdges()
         CheckEquals(testCase.Expected, std::string(buffer, size), testCase.What);
         CheckEquals(testCase.Expected, ASWLog::Time::ToISO8601String(testCase.Time), testCase.What + " (ToISO8601String)");
         CheckEquals(testCase.Expected.substr(0, 10), ASWLog::Time::ToDateString(testCase.Time), testCase.What + " (ToDateString)");
+    }
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_Utils::Test_Time_WriteISO8601_LocalTimeWithEachPrecision()
+{
+    // Arrange: a winter noon UTC, with a fraction whose 7th digit only a clock finer than 1 us keeps
+    using namespace std::chrono_literals;
+    const auto time = std::chrono::sys_days{ 2026y / 1 / 15 } + 12h + std::chrono::duration_cast<std::chrono::system_clock::duration>(7000400ns);
+    const std::string nanosecondDigits = HasSubmicrosecondClock ? "007000400" : "007000000";
+
+    const auto write = [&](ASWLog::TimePrecision precision) {
+            char buffer[ASWLog::Time::ISO8601BufferSize];
+            return std::string(buffer, ASWLog::Time::WriteISO8601(buffer, time, ASWLog::TimeZone::Local, precision));
+        };
+
+    // Act & Assert
+    {
+        const TScopedTimeZone timeZone("EST5EDT");
+        CheckEquals(std::string("2026-01-15T07:00:00.007-05:00"), write(ASWLog::TimePrecision::Milliseconds), "Milliseconds should come before the offset");
+        CheckEquals(std::string("2026-01-15T07:00:00.007000-05:00"), write(ASWLog::TimePrecision::Microseconds), "Microseconds should come before the offset");
+        CheckEquals("2026-01-15T07:00:00." + nanosecondDigits + "-05:00", write(ASWLog::TimePrecision::Nanoseconds), "Nanoseconds should come before the offset");
+        CheckEquals(std::string("2026-01-15T07:00:00.007000-05:00"), ASWLog::Time::ToISO8601String(time, ASWLog::TimeZone::Local, ASWLog::TimePrecision::Microseconds), "ToISO8601String should pass the zone and precision on");
+    }
+    {
+        const TScopedTimeZone timeZone("IST-5:30");
+        CheckEquals("2026-01-15T17:30:00." + nanosecondDigits + "+05:30", write(ASWLog::TimePrecision::Nanoseconds), "A zone ahead of UTC should show a '+' offset with its minutes");
+    }
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_Utils::Test_Time_WriteISO8601_UTCWithEachPrecision()
+{
+    // Arrange: a fraction with a digit in each place, the 7th only kept by a clock finer than 1 us
+    using namespace std::chrono_literals;
+    const auto time = std::chrono::sys_days{ 2026y / 7 / 1 } + 12h + std::chrono::duration_cast<std::chrono::system_clock::duration>(123456700ns);
+
+    struct TCase
+    {
+        ASWLog::TimePrecision Precision;
+        std::string Expected;
+        std::string What;
+    };
+
+    const TCase cases[] = {
+        { ASWLog::TimePrecision::Milliseconds, "2026-07-01T12:00:00.123Z", "Milliseconds should show 3 digits" },
+        { ASWLog::TimePrecision::Microseconds, "2026-07-01T12:00:00.123456Z", "Microseconds should show 6 digits, cut off rather than rounded" },
+        { ASWLog::TimePrecision::Nanoseconds, HasSubmicrosecondClock ? "2026-07-01T12:00:00.123456700Z" : "2026-07-01T12:00:00.123456000Z",
+          "Nanoseconds should show 9 digits, as far as the clock holds them" },
+    };
+
+    for (const auto& testCase : cases)
+    {
+        // Act
+        char buffer[ASWLog::Time::ISO8601BufferSize];
+        const auto size = ASWLog::Time::WriteISO8601(buffer, time, ASWLog::TimeZone::UTC, testCase.Precision);
+
+        // Assert
+        CheckEquals(testCase.Expected, std::string(buffer, size), testCase.What);
+        CheckEquals(testCase.Expected, ASWLog::Time::ToISO8601String(time, ASWLog::TimeZone::UTC, testCase.Precision), testCase.What + " (ToISO8601String)");
     }
 }
 //---------------------------------------------------------------------------

@@ -622,12 +622,144 @@ namespace Time
 namespace
 {
 
-// The characters after the date in WriteISO8601()'s text: "THH:mm:ss.mmmZ"
-constexpr std::size_t ISO8601TimeOfDaySize = 14;
+// The calendar fields WriteISO8601() writes
+struct TDateAndTime
+{
+    int Year = 0;
+    std::uint32_t Month = 0;
+    std::uint32_t Day = 0;
+    std::uint32_t Hour = 0;
+    std::uint32_t Minute = 0;
+    std::uint32_t Second = 0;
+    std::uint32_t Nanosecond = 0;
+};
 
 //---------------------------------------------------------------------------
 
-// Writes the lowest 'digitCount' decimal digits of 'value', with leading zeros, and returns the end of what it wrote
+int GetOffsetMinutes(const std::tm& localTime, std::chrono::sys_seconds time) noexcept;
+bool ToLocalCalendarTime(std::time_t timeValue, std::tm& localTime) noexcept;
+bool ToLocalDateAndTime(std::chrono::system_clock::time_point timePoint, TDateAndTime& dateAndTime, int& offsetMinutes) noexcept;
+TDateAndTime ToUTCDateAndTime(std::chrono::system_clock::time_point timePoint) noexcept;
+char* WriteDateAndTime(char* out, char* end, const TDateAndTime& dateAndTime) noexcept;
+char* WriteDigits(char* out, std::uint32_t value, int digitCount) noexcept;
+char* WriteFraction(char* out, std::uint32_t nanoseconds, TimePrecision precision) noexcept;
+
+//---------------------------------------------------------------------------
+
+/*
+  GetOffsetMinutes
+
+  How many minutes 'localTime', the local calendar fields of 'time', is ahead of UTC: the local date and time read as
+  if they were UTC, minus the actual time. Not mktime(), which would read UTC fields as local time and apply this
+  zone's daylight saving rules to them.
+*/
+int GetOffsetMinutes(const std::tm& localTime, std::chrono::sys_seconds time) noexcept
+{
+    const std::chrono::sys_days localDate = std::chrono::year(localTime.tm_year + 1900) / (localTime.tm_mon + 1) / localTime.tm_mday;
+    const auto localAsUTC = localDate + std::chrono::hours(localTime.tm_hour) + std::chrono::minutes(localTime.tm_min) +
+        std::chrono::seconds(localTime.tm_sec);
+
+    return static_cast<int>(std::chrono::duration_cast<std::chrono::minutes>(localAsUTC - time).count());
+}
+
+/*
+  ToLocalCalendarTime
+
+  Converts 'timeValue' to the local time zone's calendar fields. Returns false if it can't (e.g. a time before 1970 on
+  Windows).
+*/
+bool ToLocalCalendarTime(std::time_t timeValue, std::tm& localTime) noexcept
+{
+#if defined(_WIN32)
+    return localtime_s(&localTime, &timeValue) == 0;
+#else
+    return localtime_r(&timeValue, &localTime) != nullptr;
+#endif
+}
+
+/*
+  ToLocalDateAndTime
+
+  The calendar fields of 'timePoint' in the local time zone, and the zone's offset from UTC then. Returns false if the
+  local time can't be determined (see ToLocalCalendarTime()).
+*/
+bool ToLocalDateAndTime(std::chrono::system_clock::time_point timePoint, TDateAndTime& dateAndTime, int& offsetMinutes) noexcept
+{
+    // Floored, so a time before 1970 falls on the second it is in
+    const auto seconds = std::chrono::floor<std::chrono::seconds>(timePoint);
+    std::tm localTime{};
+
+    if (!ToLocalCalendarTime(std::chrono::system_clock::to_time_t(seconds), localTime))
+        return false;
+
+    dateAndTime.Year = localTime.tm_year + 1900;
+    dateAndTime.Month = static_cast<std::uint32_t>(localTime.tm_mon + 1);
+    dateAndTime.Day = static_cast<std::uint32_t>(localTime.tm_mday);
+    dateAndTime.Hour = static_cast<std::uint32_t>(localTime.tm_hour);
+    dateAndTime.Minute = static_cast<std::uint32_t>(localTime.tm_min);
+    dateAndTime.Second = static_cast<std::uint32_t>(localTime.tm_sec);
+    dateAndTime.Nanosecond = static_cast<std::uint32_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(timePoint - seconds).count());
+    offsetMinutes = GetOffsetMinutes(localTime, seconds);
+
+    return true;
+}
+
+/*
+  ToUTCDateAndTime
+
+  The calendar fields of 'timePoint' in UTC. Calendar arithmetic only.
+*/
+TDateAndTime ToUTCDateAndTime(std::chrono::system_clock::time_point timePoint) noexcept
+{
+    // Floored, so a time before 1970 falls on the day it is in; the time of day is then never negative
+    const auto day = std::chrono::floor<std::chrono::days>(timePoint);
+    const std::chrono::year_month_day date{ day };
+    const auto timeOfDay = timePoint - day;
+    const auto seconds = std::chrono::duration_cast<std::chrono::seconds>(timeOfDay);
+    const auto secondOfDay = static_cast<std::uint32_t>(seconds.count());
+
+    TDateAndTime dateAndTime;
+    dateAndTime.Year = static_cast<int>(date.year());
+    dateAndTime.Month = static_cast<unsigned>(date.month());
+    dateAndTime.Day = static_cast<unsigned>(date.day());
+    dateAndTime.Hour = secondOfDay / 3600;
+    dateAndTime.Minute = secondOfDay / 60 % 60;
+    dateAndTime.Second = secondOfDay % 60;
+    dateAndTime.Nanosecond = static_cast<std::uint32_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(timeOfDay - seconds).count());
+
+    return dateAndTime;
+}
+
+/*
+  WriteDateAndTime
+
+  Writes "YYYY-MM-DDTHH:mm:ss" (a 4-digit year for the years 0 to 9999, the year in full outside them) and returns the
+  end of what it wrote
+*/
+char* WriteDateAndTime(char* out, char* end, const TDateAndTime& dateAndTime) noexcept
+{
+    if (dateAndTime.Year >= 0 && dateAndTime.Year <= 9999)
+        out = WriteDigits(out, static_cast<std::uint32_t>(dateAndTime.Year), 4);
+    else
+        out = std::to_chars(out, end, dateAndTime.Year).ptr;
+
+    *out++ = '-';
+    out = WriteDigits(out, dateAndTime.Month, 2);
+    *out++ = '-';
+    out = WriteDigits(out, dateAndTime.Day, 2);
+    *out++ = 'T';
+    out = WriteDigits(out, dateAndTime.Hour, 2);
+    *out++ = ':';
+    out = WriteDigits(out, dateAndTime.Minute, 2);
+    *out++ = ':';
+    return WriteDigits(out, dateAndTime.Second, 2);
+}
+
+/*
+  WriteDigits
+
+  Writes the lowest 'digitCount' decimal digits of 'value', with leading zeros, and returns the end of what it wrote
+*/
 char* WriteDigits(char* out, std::uint32_t value, int digitCount) noexcept
 {
     for (int index = digitCount - 1; index >= 0; --index)
@@ -639,105 +771,93 @@ char* WriteDigits(char* out, std::uint32_t value, int digitCount) noexcept
     return out + digitCount;
 }
 
+/*
+  WriteFraction
+
+  Writes '.' and the fraction of the second, 'nanoseconds' (0 to 999999999), with the digits of 'precision', cut off
+  rather than rounded, and returns the end of what it wrote
+*/
+char* WriteFraction(char* out, std::uint32_t nanoseconds, TimePrecision precision) noexcept
+{
+    *out++ = '.';
+
+    switch (precision)
+    {
+        case TimePrecision::Microseconds:
+            return WriteDigits(out, nanoseconds / 1000, 6);
+
+        case TimePrecision::Nanoseconds:
+            return WriteDigits(out, nanoseconds, 9);
+
+        case TimePrecision::Milliseconds:
+            break;
+    }
+
+    return WriteDigits(out, nanoseconds / 1000000, 3);
+}
+
 } // namespace
 
 //---------------------------------------------------------------------------
 int GetUTCOffsetMinutes(std::chrono::system_clock::time_point timePoint)
 {
-    const auto timeValue = std::chrono::system_clock::to_time_t(timePoint);
+    const auto seconds = std::chrono::floor<std::chrono::seconds>(timePoint);
     std::tm localTime{};
-#if defined(_WIN32)
-    if (localtime_s(&localTime, &timeValue) != 0)
-        return 0;
-#else
-    if (localtime_r(&timeValue, &localTime) == nullptr)
-        return 0;
-#endif
 
-    // The local date and time read as if they were UTC, minus the actual time. Not mktime(), which would read UTC
-    // fields as local time and apply this zone's daylight saving rules to them.
-    const std::chrono::sys_days localDate = std::chrono::year(localTime.tm_year + 1900) / (localTime.tm_mon + 1) / localTime.tm_mday;
-    const auto localAsUTC = localDate + std::chrono::hours(localTime.tm_hour) + std::chrono::minutes(localTime.tm_min) +
-        std::chrono::seconds(localTime.tm_sec);
-    const auto actualTime = std::chrono::time_point_cast<std::chrono::seconds>(std::chrono::system_clock::from_time_t(timeValue));
+    if (!ToLocalCalendarTime(std::chrono::system_clock::to_time_t(seconds), localTime))
+        return 0;
 
-    return static_cast<int>(std::chrono::duration_cast<std::chrono::minutes>(localAsUTC - actualTime).count());
+    return GetOffsetMinutes(localTime, seconds);
 }
 
 //---------------------------------------------------------------------------
-std::string ToISO8601String(std::chrono::system_clock::time_point timePoint)
+std::string ToISO8601String(std::chrono::system_clock::time_point timePoint, TimeZone zone, TimePrecision precision)
 {
     char buffer[ISO8601BufferSize];
-    return std::string(buffer, WriteISO8601(buffer, timePoint));
+    return std::string(buffer, WriteISO8601(buffer, timePoint, zone, precision));
 }
 
 //---------------------------------------------------------------------------
-std::string ToDateString(std::chrono::system_clock::time_point timePoint)
+std::string ToDateString(std::chrono::system_clock::time_point timePoint, TimeZone zone)
 {
     char buffer[ISO8601BufferSize];
-    return std::string(buffer, WriteISO8601(buffer, timePoint) - ISO8601TimeOfDaySize);
+    const std::string_view text(buffer, WriteISO8601(buffer, timePoint, zone));
+    return std::string(text.substr(0, text.find('T')));
 }
 
 //---------------------------------------------------------------------------
 std::string ToLocalISO8601String(std::chrono::system_clock::time_point timePoint)
 {
-    const auto timeValue = std::chrono::system_clock::to_time_t(timePoint);
-    std::tm localTime{};
-#if defined(_WIN32)
-    localtime_s(&localTime, &timeValue);
-#else
-    localtime_r(&timeValue, &localTime);
-#endif
-
-    const auto durationSinceEpoch = timePoint.time_since_epoch();
-    const auto secondsSinceEpoch = std::chrono::duration_cast<std::chrono::seconds>(durationSinceEpoch);
-    const auto millisecondsFraction = std::chrono::duration_cast<std::chrono::milliseconds>(durationSinceEpoch - secondsSinceEpoch).count();
-
-    const auto offsetMinutes = GetUTCOffsetMinutes(timePoint);
-    const auto absoluteOffsetMinutes = offsetMinutes < 0 ? -offsetMinutes : offsetMinutes;
-
-    return std::format("{:04}-{:02}-{:02}T{:02}:{:02}:{:02}.{:03}{}{:02}:{:02}",
-        localTime.tm_year + 1900,
-        localTime.tm_mon + 1,
-        localTime.tm_mday,
-        localTime.tm_hour,
-        localTime.tm_min,
-        localTime.tm_sec,
-        millisecondsFraction,
-        offsetMinutes < 0 ? '-' : '+',
-        absoluteOffsetMinutes / 60,
-        absoluteOffsetMinutes % 60);
+    return ToISO8601String(timePoint, TimeZone::Local);
 }
 
 //---------------------------------------------------------------------------
-std::size_t WriteISO8601(char (& buffer)[ISO8601BufferSize], std::chrono::system_clock::time_point timePoint) noexcept
+std::size_t WriteISO8601(char (& buffer)[ISO8601BufferSize], std::chrono::system_clock::time_point timePoint, TimeZone zone,
+    TimePrecision precision) noexcept
 {
-    // Floored, so a time before 1970 falls on the day and millisecond it is in
-    const auto day = std::chrono::floor<std::chrono::days>(timePoint);
-    const std::chrono::year_month_day date{ day };
-    const auto milliseconds = static_cast<std::uint32_t>(std::chrono::floor<std::chrono::milliseconds>(timePoint - day).count());
-    const int year = static_cast<int>(date.year());
+    // Each helper is called once, so the compiler can inline the UTC path into one function
+    TDateAndTime dateAndTime;
+    int offsetMinutes = 0;
+    const bool isLocal = zone == TimeZone::Local && ToLocalDateAndTime(timePoint, dateAndTime, offsetMinutes);
 
-    char* out = buffer;
+    if (!isLocal)
+        dateAndTime = ToUTCDateAndTime(timePoint);
 
-    if (year >= 0 && year <= 9999)
-        out = WriteDigits(out, static_cast<std::uint32_t>(year), 4);
+    char* out = WriteDateAndTime(buffer, buffer + ISO8601BufferSize, dateAndTime);
+    out = WriteFraction(out, dateAndTime.Nanosecond, precision);
+
+    if (isLocal)
+    {
+        const auto absoluteOffsetMinutes = static_cast<std::uint32_t>(offsetMinutes < 0 ? -offsetMinutes : offsetMinutes);
+        *out++ = offsetMinutes < 0 ? '-' : '+';
+        out = WriteDigits(out, absoluteOffsetMinutes / 60, 2);
+        *out++ = ':';
+        out = WriteDigits(out, absoluteOffsetMinutes % 60, 2);
+    }
     else
-        out = std::to_chars(out, buffer + ISO8601BufferSize, year).ptr;
-
-    *out++ = '-';
-    out = WriteDigits(out, static_cast<unsigned>(date.month()), 2);
-    *out++ = '-';
-    out = WriteDigits(out, static_cast<unsigned>(date.day()), 2);
-    *out++ = 'T';
-    out = WriteDigits(out, milliseconds / 3600000, 2);
-    *out++ = ':';
-    out = WriteDigits(out, milliseconds / 60000 % 60, 2);
-    *out++ = ':';
-    out = WriteDigits(out, milliseconds / 1000 % 60, 2);
-    *out++ = '.';
-    out = WriteDigits(out, milliseconds % 1000, 3);
-    *out++ = 'Z';
+    {
+        *out++ = 'Z';
+    }
 
     return static_cast<std::size_t>(out - buffer);
 }

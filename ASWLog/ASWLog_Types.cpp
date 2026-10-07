@@ -141,6 +141,33 @@ std::optional<LineEnding> LineEnding_FromString(std::string_view str) noexcept
 }
 
 //---------------------------------------------------------------------------
+std::optional<TimePrecision> TimePrecision_FromString(std::string_view str) noexcept
+{
+    if (iequals(str, "MILLISECONDS") || iequals(str, "MS"))
+        return TimePrecision::Milliseconds;
+
+    if (iequals(str, "MICROSECONDS") || iequals(str, "US"))
+        return TimePrecision::Microseconds;
+
+    if (iequals(str, "NANOSECONDS") || iequals(str, "NS"))
+        return TimePrecision::Nanoseconds;
+
+    return std::nullopt;
+}
+
+//---------------------------------------------------------------------------
+std::optional<TimeZone> TimeZone_FromString(std::string_view str) noexcept
+{
+    if (iequals(str, "UTC"))
+        return TimeZone::UTC;
+
+    if (iequals(str, "LOCAL"))
+        return TimeZone::Local;
+
+    return std::nullopt;
+}
+
+//---------------------------------------------------------------------------
 
 /////////////////////////////////////////////////////////////////////////////
 // TASWLogError

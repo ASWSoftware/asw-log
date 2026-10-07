@@ -70,7 +70,8 @@ struct TASWCrashHandlerOptions
 //   costs at most the line.
 // - A POSIX signal handler may only do async-signal-safe work, so there the line has a fixed layout,
 //   "[<UTC time>][CRITICAL][P:<pid>][T:<tid>]: Crash: <reason>", built without allocating and written straight to the
-//   file. The buffered entries are flushed only if the logger's lock is free (fflush isn't on POSIX's list of
+//   file. Its time is UTC with milliseconds whatever TASWLineConfig::TimestampZone and TimestampPrecision say, since
+//   converting to local time isn't async-signal-safe. The buffered entries are flushed only if the logger's lock is free (fflush isn't on POSIX's list of
 //   async-signal-safe functions, but no other thread can use the file then). The backtrace's lines get the same
 //   layout, with their own level, and only if the backtrace's lock is free.
 // - If a logger's lock stays busy until WaitTimeout has passed (e.g. the crash happened while that thread was

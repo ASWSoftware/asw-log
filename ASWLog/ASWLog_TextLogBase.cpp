@@ -142,7 +142,8 @@ void TASWTextLogBase::Finalize() noexcept
         // AutoOpenClosePerWrite)
         if (GetConfigUnlocked().Shutdown.WriteLine && EnsureReadyUnlocked())
         {
-            std::string msg = "Logger shutdown: " + Time::ToISO8601String(NowUTC());
+            const auto& line = GetConfigUnlocked().Line;
+            std::string msg = "Logger shutdown: " + Time::ToISO8601String(NowUTC(), line.TimestampZone, line.TimestampPrecision);
 
             if (!GetConfigUnlocked().Shutdown.Banner.empty())
                 msg += ", " + GetConfigUnlocked().Shutdown.Banner;
