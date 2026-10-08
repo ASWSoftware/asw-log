@@ -25,6 +25,7 @@ limitations under the License.
 #include <string>
 #include <string_view>
 //---------------------------------------------------------------------------
+#include "ASWLog_CategoryLog.h"
 #include "ASWLog_ConsoleLog.h"
 #include "ASWLog_CrashHandler.h"
 #include "ASWLog_FileLog.h"
@@ -202,6 +203,16 @@ int main(int argc, char* argv[])
     multiLogger.SetMinimumLevel(ASWLog::Level::Error);
     multiLogger.LogWarn("This Warn is suppressed by the composite gate before reaching either sink.");
     multiLogger.LogError("This Error clears the composite gate and reaches both sinks.");
+
+    // Example of categories: each entry shows its category after the level, e.g. "[Db]", and a category with a level
+    // of its own uses it instead of the wrapped logger's (Trace here)
+    std::cout << "Testing category loggers...\n";
+    ASWLog::TASWCategoryLog netLogger("Net", globalLogger);
+    ASWLog::TASWCategoryLog dbLogger("Db", globalLogger);
+    dbLogger.SetMinimumLevel(ASWLog::Level::Warn);
+    netLogger.LogDebug("This Net entry follows the file logger's level, so it is written.");
+    dbLogger.LogInfo("This Db entry is below the Db category's own level (Warn), so it is skipped.");
+    dbLogger.LogWarn("This Db entry is at the Db category's own level, so it is written.");
 
     globalLogger.LogInfo("Application terminated naturally via main exit block.");
     std::cout << "Execution completed.\n";

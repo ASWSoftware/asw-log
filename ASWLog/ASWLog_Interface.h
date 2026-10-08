@@ -204,8 +204,9 @@ public:
     virtual bool IsEnabled() const noexcept = 0;
     virtual void SetEnabled(bool enabled) noexcept = 0;
 
-    // The level an entry needs to be written by Log()/LogRaw() (LogForce*() ignores it). Seeded by Initialize() from
-    // TASWLogConfig::InitialMinimumLevel. Lock-free, so it can be changed from any thread at any time.
+    // The level an entry needs to be written by Log()/LogRaw() (LogForce*() ignores it; a category's own level replaces
+    // it, see TASWCategoryLog). Seeded by Initialize() from TASWLogConfig::InitialMinimumLevel. Lock-free, so it can be
+    // changed from any thread at any time.
     virtual Level GetMinimumLevel() const noexcept = 0;
     virtual void SetMinimumLevel(Level level) noexcept = 0;
 
@@ -214,12 +215,16 @@ public:
     // accept it). The *Fmt methods use it to skip formatting an entry that wouldn't be used; use it the same way to
     // skip building an expensive message.
     virtual bool ShouldLog(Level level) const noexcept = 0;
+    // True if Write() would use 'record': like ShouldLog(Level) for its level, with record.CategoryLevel in place of
+    // the minimum level if set, and only the enabled and Level::Off checks if record.Forced. A category logger (see
+    // TASWCategoryLog) asks the logger it wraps this way.
+    virtual bool ShouldLog(const TASWLogRecord& record) const noexcept = 0;
 
     // Receives every entry: from the logging methods below, or passed on by another logger (e.g. a multi-log). Writes
-    // it unless the logger is disabled, its level is Off, or it is below the minimum level and not record.Forced (the
-    // backtrace may keep such an entry, see TASWBacktraceConfig). A logger that writes or keeps it first fills in the
-    // record's Timestamp, ProcessId and ThreadId if they are still zero, on the calling thread (see TASWLogRecord). An
-    // entry that can't be written (e.g. out of memory) is dropped.
+    // it unless the logger is disabled, its level is Off, or it is below the minimum level (record.CategoryLevel if
+    // set) and not record.Forced (the backtrace may keep such an entry, see TASWBacktraceConfig). A logger that writes
+    // or keeps it first fills in the record's Timestamp, ProcessId and ThreadId if they are still zero, on the calling
+    // thread (see TASWLogRecord). An entry that can't be written (e.g. out of memory) is dropped.
     virtual void Write(const TASWLogRecord& record) noexcept = 0;
 
     // --- Non-virtual Inline Logging Methods ---

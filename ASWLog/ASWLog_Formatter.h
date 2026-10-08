@@ -65,9 +65,10 @@ public:
 // TASWTextFormatter
 //
 // The built-in text layout, used when TASWLogConfig::Line.Formatter is empty:
-// "[time][LEVEL][P:pid][T:tid][WS:bytes][PWS:bytes][function][file:line]: message", where each bracketed field is
-// written only if its TASWLineConfig option is on (ShowTimestamp, ShowLevel, ShowProcessId, ShowThreadId,
-// ShowWorkingSet, ShowPeakWorkingSet, ShowFunctionName, ShowSourceLine).
+// "[time][LEVEL][category][P:pid][T:tid][WS:bytes][PWS:bytes][function][file:line]: message", where each bracketed
+// field is written only if its TASWLineConfig option is on (ShowTimestamp, ShowLevel, ShowCategory, ShowProcessId,
+// ShowThreadId, ShowWorkingSet, ShowPeakWorkingSet, ShowFunctionName, ShowSourceLine), and the category only if the
+// entry has one.
 /////////////////////////////////////////////////////////////////////////////
 class TASWTextFormatter : public IASWLogFormatter
 {

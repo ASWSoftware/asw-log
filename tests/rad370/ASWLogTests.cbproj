@@ -154,6 +154,10 @@
             <DependentOn>..\..\ASWLog\ASWLog_Base.h</DependentOn>
             <BuildOrder>0</BuildOrder>
         </CppCompile>
+        <CppCompile Include="..\..\ASWLog\ASWLog_CategoryLog.cpp">
+            <DependentOn>..\..\ASWLog\ASWLog_CategoryLog.h</DependentOn>
+            <BuildOrder>36</BuildOrder>
+        </CppCompile>
         <CppCompile Include="..\..\ASWLog\ASWLog_Config.cpp">
             <DependentOn>..\..\ASWLog\ASWLog_Config.h</DependentOn>
             <BuildOrder>1</BuildOrder>
@@ -205,6 +209,10 @@
         <CppCompile Include="..\tests\Test_ASWLog_Base.cpp">
             <DependentOn>..\tests\Test_ASWLog_Base.h</DependentOn>
             <BuildOrder>19</BuildOrder>
+        </CppCompile>
+        <CppCompile Include="..\tests\Test_ASWLog_CategoryLog.cpp">
+            <DependentOn>..\tests\Test_ASWLog_CategoryLog.h</DependentOn>
+            <BuildOrder>37</BuildOrder>
         </CppCompile>
         <CppCompile Include="..\tests\Test_ASWLog_Config.cpp">
             <DependentOn>..\tests\Test_ASWLog_Config.h</DependentOn>

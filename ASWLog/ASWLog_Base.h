@@ -112,12 +112,13 @@ private:
     std::atomic<std::uint32_t> m_Levels{ PackLevels(Level::Info, Level::Off) };
     std::atomic<bool> m_IsEnabled{ true };
 
-    // An entry the backtrace keeps (see TASWBacktraceConfig): the record, with its message copied (the record's
-    // Message is empty)
+    // An entry the backtrace keeps (see TASWBacktraceConfig): the record, with its message and category copied (the
+    // record's Message and Category are empty)
     struct TBacktraceEntry
     {
         TASWLogRecord Record;
         std::string Message;
+        std::string Category;
     };
 
     // The backtrace, guarded by m_BacktraceMutex: at most m_BacktraceCapacity entries, the oldest at m_BacktraceOldest
@@ -176,6 +177,13 @@ protected:
     // Pure virtual helper so the base class knows what implementation name to print
     virtual std::string_view GetLoggerClassName() const noexcept = 0;
 
+    // The minimum level 'record' needs: its category's level if set (see TASWLogRecord::CategoryLevel), else this
+    // logger's
+    Level GetMinimumLevelFor(const TASWLogRecord& record) const noexcept
+    {
+        return record.CategoryLevel ? *record.CategoryLevel : GetMinimumLevel();
+    }
+
     // Whether this logger keeps a backtrace when its config asks for one (see TASWBacktraceConfig), read by SetConfig().
     // True by default; a logger that passes its entries on to other loggers, which keep their own (a multi-log),
     // returns false, and its gate is then its minimum level alone.
@@ -192,6 +200,23 @@ protected:
     {
         return m_IsEnabled.load(std::memory_order_relaxed) && level != Level::Off &&
             level >= GateLevelOf(m_Levels.load(std::memory_order_relaxed));
+    }
+
+    // This logger's check for 'record', as Write() makes it (see ShouldLog(const TASWLogRecord&)): a forced entry
+    // needs only to be enabled and not Off; a category's level, if set, takes the minimum level's place, and the
+    // backtrace's level still lets in what it keeps.
+    bool PassesLevelGate(const TASWLogRecord& record) const noexcept
+    {
+        if (record.Forced)
+            return record.LogLevel != Level::Off && IsEnabled();
+
+        if (!record.CategoryLevel)
+            return PassesLevelGate(record.LogLevel);
+
+        const Level backtraceLevel = BacktraceLevelOf(m_Levels.load(std::memory_order_relaxed));
+
+        return m_IsEnabled.load(std::memory_order_relaxed) && record.LogLevel != Level::Off &&
+            record.LogLevel >= GateLevelOf(PackLevels(*record.CategoryLevel, backtraceLevel));
     }
 
     // The current time, used for log line timestamps, daily rolling, and backup file names. Override it to control
@@ -225,10 +250,10 @@ protected:
     void StampRecord(TASWLogRecord& record) const noexcept;
 
     // For a crash handler (see TASWTextLogBase): if the backtrace's lock is free, calls visit(record, index, count) for
-    // each kept entry, oldest first ('record' is marked Forced, and its Message refers to the kept copy, valid during the
-    // call), then forgets them if 'mustClear', and returns true. Returns false at once if the lock is busy (e.g. the
-    // crashed thread holds it). Allocates nothing itself, except that clearing frees the copies, so with a visitor that
-    // doesn't allocate and 'mustClear' false, it can run in a signal handler.
+    // each kept entry, oldest first ('record' is marked Forced, and its Message and Category refer to the kept copies,
+    // valid during the call), then forgets them if 'mustClear', and returns true. Returns false at once if the lock is
+    // busy (e.g. the crashed thread holds it). Allocates nothing itself, except that clearing frees the copies, so with
+    // a visitor that doesn't allocate and 'mustClear' false, it can run in a signal handler.
     template<typename TVisit>
     bool VisitBacktraceForCrash(TVisit&& visit, bool mustClear)
     {
@@ -242,6 +267,7 @@ protected:
             const auto& entry = m_Backtrace[(m_BacktraceOldest + index) % count];
             TASWLogRecord record = entry.Record;
             record.Message = entry.Message;
+            record.Category = entry.Category;
             record.Forced = true;
             visit(static_cast<const TASWLogRecord&>(record), index, count);
         }
@@ -314,12 +340,17 @@ public:
         return PassesLevelGate(level);
     }
 
+    bool ShouldLog(const TASWLogRecord& record) const noexcept override
+    {
+        return PassesLevelGate(record);
+    }
+
 public:
-    // Applies this logger's checks (enabled, not Level::Off, and the minimum level unless record.Forced), then stamps
-    // the record (see StampRecord()) and passes it to WriteRecord(). A filtered entry is never stamped. An entry below
-    // the minimum level that the backtrace keeps (see TASWBacktraceConfig) is stamped and kept instead; one at or above
-    // its DumpAtLevel first passes the kept entries to WriteRecord(), between the two marker lines. If WriteRecord()
-    // throws, the entry is dropped and reported (see ReportError()).
+    // Applies this logger's checks (enabled, not Level::Off, and the minimum level, or record.CategoryLevel if set,
+    // unless record.Forced), then stamps the record (see StampRecord()) and passes it to WriteRecord(). A filtered
+    // entry is never stamped. An entry below that minimum level that the backtrace keeps (see TASWBacktraceConfig) is
+    // stamped and kept instead; one at or above its DumpAtLevel first passes the kept entries to WriteRecord(), between
+    // the two marker lines. If WriteRecord() throws, the entry is dropped and reported (see ReportError()).
     void Write(const TASWLogRecord& record) noexcept final;
 };
 

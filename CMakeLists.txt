@@ -20,6 +20,8 @@ set_property(CACHE ASWLOG_SANITIZE PROPERTY STRINGS "" thread address)
 add_library(ASWLog STATIC
     ASWLog/ASWLog_Base.cpp
     ASWLog/ASWLog_Base.h
+    ASWLog/ASWLog_CategoryLog.cpp
+    ASWLog/ASWLog_CategoryLog.h
     ASWLog/ASWLog_Config.cpp
     ASWLog/ASWLog_Config.h
     ASWLog/ASWLog_ConsoleLog.cpp

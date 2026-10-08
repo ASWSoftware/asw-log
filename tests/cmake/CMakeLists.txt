@@ -33,6 +33,7 @@ endif()
 add_executable(ASWLogTests
     ${ASWUNITTESTS_SOURCES}
     "${ASWLOG_TESTS_DIR}/Test_ASWLog_Base.cpp"
+    "${ASWLOG_TESTS_DIR}/Test_ASWLog_CategoryLog.cpp"
     "${ASWLOG_TESTS_DIR}/Test_ASWLog_Config.cpp"
     "${ASWLOG_TESTS_DIR}/Test_ASWLog_ConsoleLog.cpp"
     "${ASWLOG_TESTS_DIR}/Test_ASWLog_CrashHandler.cpp"

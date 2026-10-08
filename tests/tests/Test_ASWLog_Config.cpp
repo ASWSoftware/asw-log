@@ -93,6 +93,7 @@ void TTest_ASWLog_Config::Test_Defaults_MatchDocumentedValues()
     CheckEquals(ASWLog::TimePrecision::Milliseconds, config.Line.TimestampPrecision, "Line.TimestampPrecision should default to Milliseconds");
     CheckTrue(config.Line.ShowTimestamp, "Line.ShowTimestamp should default to true");
     CheckTrue(config.Line.ShowLevel, "Line.ShowLevel should default to true");
+    CheckTrue(config.Line.ShowCategory, "Line.ShowCategory should default to true");
     CheckTrue(config.Line.ShowProcessId, "Line.ShowProcessId should default to true");
     CheckTrue(config.Line.ShowThreadId, "Line.ShowThreadId should default to true");
     CheckFalse(config.Line.ShowWorkingSet, "Line.ShowWorkingSet should default to false");

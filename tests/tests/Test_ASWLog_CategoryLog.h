@@ -1,5 +1,5 @@
 /* **************************************************************************
-Test_ASWLog_Formatter.h
+Test_ASWLog_CategoryLog.h
 Author: Anthony S. West - ASW Software
 
 Copyright 2026 ASW Software
@@ -18,8 +18,10 @@ limitations under the License.
 
 ************************************************************************** */
 
-#ifndef Test_ASWLog_FormatterH
-#define Test_ASWLog_FormatterH
+#pragma once
+
+#ifndef Test_ASWLog_CategoryLogH
+#define Test_ASWLog_CategoryLogH
 //---------------------------------------------------------------------------
 #include "ASWUnitTests_TestBase.h"
 //---------------------------------------------------------------------------
@@ -28,27 +30,32 @@ namespace ASWUnitTests
 {
 
 ///////////////////////////////////////////////////////////////////////////
-// TTest_ASWLog_Formatter
+// TTest_ASWLog_CategoryLog
 ///////////////////////////////////////////////////////////////////////////
-class TTest_ASWLog_Formatter : public TTestGroupBase
+class TTest_ASWLog_CategoryLog : public TTestGroupBase
 {
 private:
     typedef TTestGroupBase inherited;
 
 private: // Test methods
-    void Test_Format_MatchesFormatLine();
-    void Test_FormatLine_AllFieldsInOrder();
-    void Test_FormatLine_CategoryOnlyWhenSetAndShown();
-    void Test_FormatLine_LargestIdsAndEachLevel();
-    void Test_FormatLine_MemoryFields();
-    void Test_FormatLine_NoFields();
-    void Test_FormatLine_TimestampFollowsZoneAndPrecision();
-    void Test_Formatter_ReceivesRecordFromLoggingThread();
-    void Test_Formatter_SharedByTwoLoggers();
+    void Test_Async_KeepsItsOwnCopyOfTheName();
+    void Test_Backtrace_KeepsEntriesBelowTheCategoryLevel();
+    void Test_Backtrace_KeepsItsOwnCopyOfTheName();
+    void Test_FileLog_WritesTheCategoryAfterTheLevel();
+    void Test_GetMinimumLevel_FollowsTheWrappedLoggerUntilSet();
+    void Test_Lifecycle_LeavesTheWrappedLoggerAlone();
+    void Test_MultiLog_CategoryLevelReplacesOnlyTheCompositeLevel();
+    void Test_Nesting_JoinsNamesAndInheritsLevels();
+    void Test_SetEnabled_SilencesOnlyTheCategory();
+    void Test_SetMinimumLevel_OffSilencesAllButForcedEntries();
+    void Test_SetMinimumLevel_ReplacesTheWrappedLoggersLevel();
+    void Test_ShouldLog_MatchesWhatIsWritten();
+    void Test_Write_KeepsACategoryAlreadySet();
+    void Test_Write_StampsTheNameAndOwnLevel();
 
 public:
-    TTest_ASWLog_Formatter();
-    ~TTest_ASWLog_Formatter() override;
+    TTest_ASWLog_CategoryLog();
+    ~TTest_ASWLog_CategoryLog() override;
 
     void SetUp_Group() override;
     void SetUp_Test(ITestCase& testCase) override;
@@ -59,4 +66,4 @@ public:
 } // ASWUnitTests
 
 //---------------------------------------------------------------------------
-#endif // #ifndef Test_ASWLog_FormatterH
+#endif // #ifndef Test_ASWLog_CategoryLogH

@@ -415,21 +415,29 @@ struct TASWLogError
 // callback. The Log* methods fill in the level, message, location and flags. Timestamp, ProcessId and ThreadId stay
 // zero until a logger knows it will write the entry: TASWLogBase::Write() then fills in those still zero, on the
 // calling thread before taking any lock, so they record the moment and thread of the call. A record passed on (e.g.
-// by a multi-log to its loggers) keeps them.
+// by a multi-log to its loggers) keeps them. A category logger (see TASWCategoryLog) fills in Category and, if it has
+// a level of its own, CategoryLevel.
 //
-// Message and Location refer to the caller's data, so they are only valid during the call; a logger, formatter or
-// callback that keeps a record beyond it must copy them.
+// Message, Category and Location refer to the caller's data, so they are only valid during the call; a logger,
+// formatter or callback that keeps a record beyond it must copy them.
 /////////////////////////////////////////////////////////////////////////////
 struct TASWLogRecord
 {
+    // The small fields are together, so a logging call, which builds a record even when its logger filters the entry
+    // out, fills them in with few stores
     std::chrono::system_clock::time_point Timestamp; // UTC (a system_clock time point counts from the UTC epoch)
     Level LogLevel = Level::Info;
+    // The category's own level, which the logger receiving the entry uses in place of its minimum level; empty if the
+    // category has none, or there is no category (see TASWCategoryLog::SetMinimumLevel()). A multi-log uses it for its
+    // own check and empties it before passing the entry on, since its loggers apply their own minimum levels.
+    std::optional<Level> CategoryLevel;
+    bool Raw = false; // Written as is, without the line layout or a line ending (LogRaw(), LogForceRaw())
+    bool Forced = false; // Written whatever the minimum level (LogForce(), LogForceRaw())
     std::string_view Message;
+    std::string_view Category; // The category's name, e.g. "Net" or "Net.Http"; empty if none (see TASWCategoryLog)
     std::source_location Location; // Where the entry was logged
     std::uint32_t ProcessId = 0; // The OS process id (see GetCurrentOSProcessId())
     std::uint32_t ThreadId = 0; // The OS id of the thread that logged the entry (see GetCurrentOSThreadId())
-    bool Raw = false; // Written as is, without the line layout or a line ending (LogRaw(), LogForceRaw())
-    bool Forced = false; // Written whatever the minimum level (LogForce(), LogForceRaw())
 };
 
 //---------------------------------------------------------------------------

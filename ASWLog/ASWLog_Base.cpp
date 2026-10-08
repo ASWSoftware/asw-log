@@ -173,18 +173,23 @@ void TASWLogBase::KeepInBacktrace(const TASWLogRecord& record)
 
     if (m_Backtrace.size() < m_BacktraceCapacity)
     {
-        // The message is copied first, so a failed copy leaves no empty entry behind
-        TBacktraceEntry entry{ record, std::string(record.Message) };
+        // The texts are copied first, so a failed copy leaves no empty entry behind
+        TBacktraceEntry entry{ record, std::string(record.Message), std::string(record.Category) };
         entry.Record.Message = {};
+        entry.Record.Category = {};
         m_Backtrace.push_back(std::move(entry));
     }
     else
     {
-        // Replaces the oldest, reusing its message's memory
+        // Replaces the oldest, reusing its message's memory. The category is copied first and swapped in last, so a
+        // failed copy leaves the oldest entry as it was.
         auto& entry = m_Backtrace[m_BacktraceOldest];
+        std::string category(record.Category);
         entry.Message.assign(record.Message);
+        entry.Category.swap(category);
         entry.Record = record;
         entry.Record.Message = {};
+        entry.Record.Category = {};
         m_BacktraceOldest = (m_BacktraceOldest + 1) % m_BacktraceCapacity;
     }
 
@@ -333,8 +338,7 @@ void TASWLogBase::Write(const TASWLogRecord& record) noexcept
 {
     // Off isn't a severity and a disabled logger writes nothing, even when forced; a forced entry ignores only the
     // minimum level. Checked before stamping, so a filtered entry costs no clock or thread id read.
-    const bool isAccepted = record.Forced ? record.LogLevel != Level::Off && IsEnabled() : PassesLevelGate(record.LogLevel);
-    if (!isAccepted)
+    if (!PassesLevelGate(record))
         return;
 
     // Stamped now, on the calling thread and before any lock, so the time is the moment of the call
@@ -347,7 +351,7 @@ void TASWLogBase::Write(const TASWLogRecord& record) noexcept
     {
         // Let in only for the backtrace. Read again: if the minimum level changed since the gate, the entry is kept or
         // written as if it had been logged just before or after the change.
-        if (!record.Forced && record.LogLevel < GetMinimumLevel())
+        if (!record.Forced && record.LogLevel < GetMinimumLevelFor(record))
         {
             KeepInBacktrace(stampedRecord);
             return;
@@ -396,6 +400,7 @@ void TASWLogBase::WriteBacktrace()
     {
         auto record = entry.Record;
         record.Message = entry.Message;
+        record.Category = entry.Category;
         record.Forced = true;
         WriteRecord(record);
     }

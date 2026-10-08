@@ -26,6 +26,31 @@ see [0.26.1](#0261---2026-09-17) for the initial versioned baseline.
   costs a `localtime_s`/`localtime_r` call per line. `Time::WriteISO8601()`
   and `Time::ToISO8601String()` take the zone and precision too, and
   `Time::ToDateString()` the zone.
+- Categories with their own levels: `TASWCategoryLog` (new
+  `ASWLog_CategoryLog.h`) wraps any logger, e.g.
+  `static ASWLog::TASWCategoryLog NetLog("Net", ASWLog::TASWFileLog::GetInstance());`,
+  and passes its entries on with the category's name, which the built-in
+  layout shows after the level (`[2026-10-08T14:31:00.217Z][DEBUG][Net]...`;
+  hide it with the new `Line.ShowCategory`). Entries without a category
+  are written as before. A category follows the wrapped logger's minimum
+  level until `SetMinimumLevel()` gives it one of its own, which then
+  replaces the wrapped logger's for that category's entries, both ways: with
+  the file logger at Info, a `Net` category at Debug writes its Debug
+  entries and a `Db` category at Warn skips its Info entries (the backtrace
+  still keeps them; behind a multi-log, each logger still applies its own
+  level). `ResetMinimumLevel()` makes it follow again, and
+  `SetEnabled(false)` silences only that category. A category wrapping
+  another one is named after both, e.g. `Net.Http`, and inherits its level.
+  `GetConfig()`, `Flush()`, `IsOpen()` and `DumpBacktrace()` pass on to the
+  wrapped logger; `Initialize()`, `Reconfigure()`, `Open()` and `Close()` do
+  nothing and return false. `TASWLogRecord` gains `Category` and
+  `CategoryLevel`, which `OnLogEntry` and custom formatters see, and the
+  fixed-layout crash and backtrace lines show the category too. Breaking
+  for a class that implements `IASWLog` directly: it must now implement
+  `ShouldLog(const TASWLogRecord&)` (classes derived from `TASWLogBase` get
+  it), which tells a category whether an entry with its level would be
+  written. `TASWLogRecord`'s `Raw` and `Forced` now come right after
+  `LogLevel`, so designated initializers must follow the new order.
 
 ### Changed
 

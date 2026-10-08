@@ -262,15 +262,29 @@ bool TASWMultiLog::RemoveLogger(IASWLog& logger) noexcept
 //---------------------------------------------------------------------------
 bool TASWMultiLog::ShouldLog(Level level) const noexcept
 {
-    if (!PassesLevelGate(level))
+    TASWLogRecord record;
+    record.LogLevel = level;
+
+    return ShouldLog(record);
+}
+
+//---------------------------------------------------------------------------
+bool TASWMultiLog::ShouldLog(const TASWLogRecord& record) const noexcept
+{
+    if (!PassesLevelGate(record))
         return false;
 
+    // As WriteRecord() passes it on: the sinks apply their own minimum levels
+    TASWLogRecord sinkRecord = record;
+    sinkRecord.CategoryLevel.reset();
+
     // Iterates under the lock instead of copying the list, which could throw. A sink's ShouldLog() must not call back
-    // into this composite (the built-in loggers' ShouldLog() only reads their own level and enabled flag).
+    // into this composite (the built-in loggers' ShouldLog() only reads their own level and enabled flag; a category
+    // logger asks the logger it wraps, which must not be this composite).
     std::lock_guard<std::mutex> lock(m_ListMutex);
     for (const auto* sink : m_Sinks)
     {
-        if (sink->ShouldLog(level))
+        if (sink->ShouldLog(sinkRecord))
             return true;
     }
 
@@ -289,12 +303,16 @@ std::vector<IASWLog*> TASWMultiLog::SnapshotSinks() const
     TASWMultiLog::WriteRecord
 
     Each sink's Write() is noexcept, so a failing sink can't stop the others from getting the entry. If copying the
-    sink list throws (out of memory), TASWLogBase::Write() drops the entry.
+    sink list throws (out of memory), TASWLogBase::Write() drops the entry. A category's level replaced only this
+    composite's minimum level (see TASWLogRecord::CategoryLevel), so the sinks get the record without it.
 */
 void TASWMultiLog::WriteRecord(const TASWLogRecord& record)
 {
+    TASWLogRecord sinkRecord = record;
+    sinkRecord.CategoryLevel.reset();
+
     for (auto* sink : SnapshotSinks())
-        sink->Write(record);
+        sink->Write(sinkRecord);
 }
 
 //---------------------------------------------------------------------------

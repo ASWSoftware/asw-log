@@ -32,6 +32,7 @@ limitations under the License.
 #include <initializer_list>
 #include <iterator>
 #include <memory>
+#include <optional>
 #include <source_location>
 #include <stdexcept>
 #include <string>
@@ -310,6 +311,7 @@ TTest_ASWLog_Base::TTest_ASWLog_Base()
     RegisterTest(&TTest_ASWLog_Base::Test_ReportError_ThrowingHandlerDoesNotEscape, "ReportError_ThrowingHandlerDoesNotEscape");
     RegisterTest(&TTest_ASWLog_Base::Test_ReportError_WritesToStdErrWithoutHandler, "ReportError_WritesToStdErrWithoutHandler");
     RegisterTest(&TTest_ASWLog_Base::Test_SetGetMinimumLevel_RoundTrips, "SetGetMinimumLevel_RoundTrips");
+    RegisterTest(&TTest_ASWLog_Base::Test_ShouldLog_RecordFollowsWritesChecks, "ShouldLog_RecordFollowsWritesChecks");
     RegisterTest(&TTest_ASWLog_Base::Test_ShouldLog_ReflectsEnabledAndLevel, "ShouldLog_ReflectsEnabledAndLevel");
     RegisterTest(&TTest_ASWLog_Base::Test_Write_AppliesEnabledOffAndLevelChecks, "Write_AppliesEnabledOffAndLevelChecks");
     RegisterTest(&TTest_ASWLog_Base::Test_Write_KeepsFieldsAlreadyStamped, "Write_KeepsFieldsAlreadyStamped");
@@ -1031,6 +1033,50 @@ void TTest_ASWLog_Base::Test_SetGetMinimumLevel_RoundTrips()
 
     // Assert
     CheckEquals(ASWLog::Level::Trace, logger.GetMinimumLevel(), "SetMinimumLevel should update the value returned by GetMinimumLevel immediately");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_Base::Test_ShouldLog_RecordFollowsWritesChecks()
+{
+    // Arrange: a logger at Warn keeping a backtrace from Debug, asked through the interface
+    TTestLogger testLogger;
+    ASWLog::TASWLogConfig config;
+    config.InitialMinimumLevel = ASWLog::Level::Warn;
+    config.Backtrace.Capacity = 5;
+    config.Backtrace.LowestLevel = ASWLog::Level::Debug;
+    testLogger.Initialize(config);
+    ASWLog::IASWLog& logger = testLogger;
+
+    const auto makeRecord = [](ASWLog::Level level, std::optional<ASWLog::Level> categoryLevel, bool forced) {
+            ASWLog::TASWLogRecord record;
+            record.LogLevel = level;
+            record.CategoryLevel = categoryLevel;
+            record.Forced = forced;
+            return record;
+        };
+
+    // Act
+    const bool info = logger.ShouldLog(makeRecord(ASWLog::Level::Info, std::nullopt, false));
+    const bool trace = logger.ShouldLog(makeRecord(ASWLog::Level::Trace, std::nullopt, false));
+    const bool forcedTrace = logger.ShouldLog(makeRecord(ASWLog::Level::Trace, std::nullopt, true));
+    const bool forcedOff = logger.ShouldLog(makeRecord(ASWLog::Level::Off, std::nullopt, true));
+    const bool traceAtTraceCategory = logger.ShouldLog(makeRecord(ASWLog::Level::Trace, ASWLog::Level::Trace, false));
+    const bool traceAtErrorCategory = logger.ShouldLog(makeRecord(ASWLog::Level::Trace, ASWLog::Level::Error, false));
+    const bool warnAtOffCategory = logger.ShouldLog(makeRecord(ASWLog::Level::Warn, ASWLog::Level::Off, false));
+
+    logger.SetEnabled(false);
+    const bool forcedWhileDisabled = logger.ShouldLog(makeRecord(ASWLog::Level::Error, std::nullopt, true));
+    const bool categoryWhileDisabled = logger.ShouldLog(makeRecord(ASWLog::Level::Error, ASWLog::Level::Trace, false));
+
+    // Assert
+    CheckTrue(info, "An entry the backtrace keeps should be used");
+    CheckFalse(trace, "An entry below the minimum and backtrace levels should not be used");
+    CheckTrue(forcedTrace, "A forced entry should be used whatever its level");
+    CheckFalse(forcedOff, "A forced entry at Off should not be used");
+    CheckTrue(traceAtTraceCategory, "A category's level should replace the minimum level");
+    CheckFalse(traceAtErrorCategory, "Below a category's level and the backtrace's, an entry should not be used");
+    CheckFalse(warnAtOffCategory, "A category at Off should let nothing in, not even for the backtrace");
+    CheckFalse(forcedWhileDisabled, "A disabled logger should use no entry, not even a forced one");
+    CheckFalse(categoryWhileDisabled, "A disabled logger should use no entry of a category");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_Base::Test_ShouldLog_ReflectsEnabledAndLevel()

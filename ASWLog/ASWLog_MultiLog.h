@@ -53,7 +53,9 @@ namespace ASWLog
 // acts as an optional composite-level pre-filter gate, checked before fanning
 // Log()/LogRaw() out (default Trace = no extra filtering); LogForce()/
 // LogForceRaw() bypass it, matching force semantics elsewhere. Each sink
-// still applies its own level independently. SetEnabled(false) on the
+// still applies its own level independently. A category logger wrapping
+// this composite (see TASWCategoryLog) with a level of its own replaces this
+// composite's level, not the sinks'. SetEnabled(false) on the
 // composite stops all fan-out, forced entries included. All other
 // settings in this class's config (Line, Startup, Shutdown, File,
 // OnLogEntry) are inert, since the composite performs no I/O of its own.
@@ -87,7 +89,8 @@ protected:
     // TASWBacktraceConfig)
     bool KeepsBacktrace() const noexcept override;
 
-    // Passes the record, stamped once by Write(), to every registered sink's Write(), so they all show the same time
+    // Passes the record, stamped once by Write(), to every registered sink's Write(), so they all show the same time.
+    // Its CategoryLevel is left out: a category's level replaces this composite's minimum level, not the sinks'.
     void WriteRecord(const TASWLogRecord& record) override;
 
 public:
@@ -127,6 +130,9 @@ public:
     // True if this composite's own gate passes (enabled, not Off, minimum level) and at least one registered sink's
     // ShouldLog() is true (false if none are registered).
     bool ShouldLog(Level level) const noexcept override;
+    // The same for a record: its CategoryLevel, if set, replaces this composite's minimum level, and the sinks are
+    // asked without it (see WriteRecord())
+    bool ShouldLog(const TASWLogRecord& record) const noexcept override;
 };
 
 } // namespace ASWLog

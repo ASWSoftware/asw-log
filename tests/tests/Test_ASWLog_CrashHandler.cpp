@@ -519,6 +519,7 @@ TTest_ASWLog_CrashHandler::TTest_ASWLog_CrashHandler()
     : inherited("ASWLog_CrashHandler_Tests")
 {
     RegisterTest(&TTest_ASWLog_CrashHandler::Test_AppendCrashLine_CutsALongMessageButKeepsTheEnding, "AppendCrashLine_CutsALongMessageButKeepsTheEnding");
+    RegisterTest(&TTest_ASWLog_CrashHandler::Test_AppendCrashLine_ShowsTheCategory, "AppendCrashLine_ShowsTheCategory");
     RegisterTest(&TTest_ASWLog_CrashHandler::Test_AppendCrashLine_UsesTheFixedLayout, "AppendCrashLine_UsesTheFixedLayout");
     RegisterTest(&TTest_ASWLog_CrashHandler::Test_CrashProcess_AbortWritesTheCrashLine, "CrashProcess_AbortWritesTheCrashLine");
     RegisterTest(&TTest_ASWLog_CrashHandler::Test_CrashProcess_AsyncQueueIsWrittenBeforeTheCrashLine, "CrashProcess_AsyncQueueIsWrittenBeforeTheCrashLine");
@@ -613,6 +614,27 @@ void TTest_ASWLog_CrashHandler::Test_AppendCrashLine_UsesTheFixedLayout()
         "The line should end with the configured line ending");
     CheckStartsWith(std::string(lfLine.View()), "[" + ASWLog::Time::ToISO8601String(record.Timestamp) + "]",
         "The time should be written like the formatter writes it");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_CrashHandler::Test_AppendCrashLine_ShowsTheCategory()
+{
+    // Arrange: a backtrace entry from a category, as a crash handler writes it in the fixed layout
+    using namespace std::chrono;
+    ASWLog::TASWLogRecord record;
+    record.Timestamp = sys_days{ year{ 2026 } / 10 / 8 } + hours(1) + minutes(2) + seconds(3) + milliseconds(4);
+    record.LogLevel = ASWLog::Level::Debug;
+    record.Category = "Net.Http";
+    record.Message = "kept";
+    record.ProcessId = 12;
+    record.ThreadId = 345;
+
+    // Act
+    ASWLog::Detail::TCrashText line;
+    ASWLog::Detail::AppendCrashLine(line, record, false);
+
+    // Assert
+    CheckEquals(std::string("[2026-10-08T01:02:03.004Z][DEBUG][Net.Http][P:12][T:345]: kept\n"), std::string(line.View()),
+        "The category should follow the level, as in the built-in layout");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_CrashHandler::Test_CrashProcess_AbortWritesTheCrashLine()

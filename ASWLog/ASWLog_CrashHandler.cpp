@@ -700,6 +700,13 @@ void AppendCrashLine(TCrashText& line, const TASWLogRecord& record, bool usesCRL
     line.AppendISO8601(record.Timestamp);
     line.Append("][");
     line.Append(Level_ToString(record.LogLevel));
+
+    if (!record.Category.empty())
+    {
+        line.Append("][");
+        line.Append(record.Category);
+    }
+
     line.Append("][P:");
     line.AppendDecimal(record.ProcessId);
     line.Append("][T:");

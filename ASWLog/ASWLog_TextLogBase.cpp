@@ -421,11 +421,13 @@ bool TASWTextLogBase::QueueRecord(const TASWLogRecord& record)
     entry.Line = FormatEntry(record, *config);
     entry.Record = record;
     entry.Record.Message = {};
+    entry.Record.Category = {};
     entry.MustFlush = record.LogLevel >= config->Async.WaitAtLevel;
 
     if (config->OnLogEntry != nullptr && record.LogLevel >= config->OnLogEntryMinimumLevel)
     {
         entry.Message = record.Message;
+        entry.Category = record.Category;
         entry.CallbackConfig = config;
     }
 
@@ -963,7 +965,7 @@ void TASWTextLogBase::WriteInitializationInfo()
 */
 std::string TASWTextLogBase::WriteLogEntry(const TASWLogRecord& record)
 {
-    if (!IsEnabled() || (!record.Forced && record.LogLevel < GetMinimumLevel()))
+    if (!IsEnabled() || (!record.Forced && record.LogLevel < GetMinimumLevelFor(record)))
         return {};
 
     if (!PrepareWriteUnlocked(record.Timestamp))
@@ -1077,6 +1079,7 @@ void TASWTextLogBase::WriteQueuedEntries(std::deque<TQueuedEntry>& entries, std:
 
         auto record = entry.Record;
         record.Message = entry.Message;
+        record.Category = entry.Category;
         DispatchLogCallback(*entry.CallbackConfig, record, entry.Line);
     }
 }

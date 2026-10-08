@@ -97,6 +97,13 @@ std::string TASWTextFormatter::FormatLine(const TASWLogRecord& record, const TAS
         line += ']';
     }
 
+    if (config.Line.ShowCategory && !record.Category.empty())
+    {
+        line += '[';
+        line.append(record.Category);
+        line += ']';
+    }
+
     if (config.Line.ShowProcessId)
         AppendNumberField(line, "P:", record.ProcessId);
 

@@ -9,6 +9,9 @@ ASWLog is a thread-safe light-weight C++ logging tool for Windows and Linux proj
 - Configurable log levels, metadata, line endings, flushing, file paths, and rotation.
 - ISO 8601 timestamps in UTC (the default) or local time with its offset, to the millisecond, microsecond or
   nanosecond (`Line.TimestampZone`, `Line.TimestampPrecision`); daily rolling and backup names follow the same clock.
+- Categories (`ASWLog::TASWCategoryLog`, in `ASWLog_CategoryLog.h`): a named logger for one part of an application,
+  e.g. `Net`, that wraps any logger and marks its entries `[Net]`. Give one a level of its own to see that part's
+  Debug entries while the rest of the log stays at Info.
 - Formatted, raw, forced, and force-raw logging APIs with source-location support. Format strings are checked
   against their arguments at compile time; wrap one built at run time in `ASWLog::RuntimeFormat()`.
 - Runtime `Open()`, `Close()`, `Flush()` and log rotation controls, and `Reconfigure()` to change settings safely

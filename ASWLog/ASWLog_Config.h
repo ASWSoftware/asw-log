@@ -229,6 +229,7 @@ struct TASWLineConfig
     // The fields TASWTextFormatter writes before the message
     bool ShowTimestamp      = true; // The entry's time (see TimestampZone and TimestampPrecision)
     bool ShowLevel          = true;
+    bool ShowCategory       = true; // The entry's category, if it has one (see TASWCategoryLog)
     bool ShowProcessId      = true;
     bool ShowThreadId       = true;
     bool ShowWorkingSet     = false; // The process's memory use

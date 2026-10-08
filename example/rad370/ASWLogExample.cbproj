@@ -139,6 +139,10 @@
             <DependentOn>..\..\ASWLog\ASWLog_Base.h</DependentOn>
             <BuildOrder>2</BuildOrder>
         </CppCompile>
+        <CppCompile Include="..\..\ASWLog\ASWLog_CategoryLog.cpp">
+            <DependentOn>..\..\ASWLog\ASWLog_CategoryLog.h</DependentOn>
+            <BuildOrder>14</BuildOrder>
+        </CppCompile>
         <CppCompile Include="..\..\ASWLog\ASWLog_Config.cpp">
             <DependentOn>..\..\ASWLog\ASWLog_Config.h</DependentOn>
             <BuildOrder>3</BuildOrder>

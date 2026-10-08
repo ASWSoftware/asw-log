@@ -171,6 +171,7 @@ TTest_ASWLog_Formatter::TTest_ASWLog_Formatter()
 {
     RegisterTest(&TTest_ASWLog_Formatter::Test_Format_MatchesFormatLine, "Format_MatchesFormatLine");
     RegisterTest(&TTest_ASWLog_Formatter::Test_FormatLine_AllFieldsInOrder, "FormatLine_AllFieldsInOrder");
+    RegisterTest(&TTest_ASWLog_Formatter::Test_FormatLine_CategoryOnlyWhenSetAndShown, "FormatLine_CategoryOnlyWhenSetAndShown");
     RegisterTest(&TTest_ASWLog_Formatter::Test_FormatLine_LargestIdsAndEachLevel, "FormatLine_LargestIdsAndEachLevel");
     RegisterTest(&TTest_ASWLog_Formatter::Test_FormatLine_MemoryFields, "FormatLine_MemoryFields");
     RegisterTest(&TTest_ASWLog_Formatter::Test_FormatLine_NoFields, "FormatLine_NoFields");
@@ -238,15 +239,37 @@ void TTest_ASWLog_Formatter::Test_FormatLine_AllFieldsInOrder()
     config.Line.ShowFunctionName = true;
     config.Line.ShowSourceLine = true;
     const auto location = std::source_location::current();
-    const auto record = MakeRecord("all fields", location);
+    auto record = MakeRecord("all fields", location);
+    record.Category = "Net";
 
     // Act
     const auto line = ASWLog::TASWTextFormatter::FormatLine(record, config);
 
     // Assert
-    const auto expected = std::format("[2026-09-21T14:13:20.123Z][WARN][P:1234][T:5678][{}][{}:{}]: all fields",
+    const auto expected = std::format("[2026-09-21T14:13:20.123Z][WARN][Net][P:1234][T:5678][{}][{}:{}]: all fields",
         location.function_name(), std::filesystem::path(location.file_name()).filename().string(), location.line());
     CheckEquals(expected, line, "Each field should be written from the record, in the documented order");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_Formatter::Test_FormatLine_CategoryOnlyWhenSetAndShown()
+{
+    // Arrange: the level and the category only
+    auto config = MakeConfigWithoutFields("unused.log");
+    config.Line.ShowLevel = true;
+    auto categorized = MakeRecord("categorized");
+    categorized.Category = "Net.Http";
+    const auto uncategorized = MakeRecord("uncategorized");
+
+    // Act
+    const auto categorizedLine = ASWLog::TASWTextFormatter::FormatLine(categorized, config);
+    const auto uncategorizedLine = ASWLog::TASWTextFormatter::FormatLine(uncategorized, config);
+    config.Line.ShowCategory = false;
+    const auto hiddenLine = ASWLog::TASWTextFormatter::FormatLine(categorized, config);
+
+    // Assert
+    CheckEquals(std::string("[WARN][Net.Http]: categorized"), categorizedLine, "The category should follow the level");
+    CheckEquals(std::string("[WARN]: uncategorized"), uncategorizedLine, "An entry without a category should show no field for it");
+    CheckEquals(std::string("[WARN]: categorized"), hiddenLine, "ShowCategory false should hide the category");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_Formatter::Test_FormatLine_LargestIdsAndEachLevel()

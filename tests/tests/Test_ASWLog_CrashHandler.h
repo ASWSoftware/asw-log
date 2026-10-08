@@ -41,6 +41,7 @@ private:
 
 private: // Test methods
     void Test_AppendCrashLine_CutsALongMessageButKeepsTheEnding();
+    void Test_AppendCrashLine_ShowsTheCategory();
     void Test_AppendCrashLine_UsesTheFixedLayout();
     void Test_CrashProcess_AbortWritesTheCrashLine();
     void Test_CrashProcess_AsyncQueueIsWrittenBeforeTheCrashLine();
