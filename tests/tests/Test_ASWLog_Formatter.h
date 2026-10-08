@@ -45,6 +45,14 @@ private: // Test methods
     void Test_FormatLine_TimestampFollowsZoneAndPrecision();
     void Test_Formatter_ReceivesRecordFromLoggingThread();
     void Test_Formatter_SharedByTwoLoggers();
+    void Test_PatternFormatter_AffixesOnlyAroundAValue();
+    void Test_PatternFormatter_BracesAndPlainText();
+    void Test_PatternFormatter_DefaultLayoutMatchesTextFormatter();
+    void Test_PatternFormatter_EachPlaceholder();
+    void Test_PatternFormatter_FileLoggerWritesItsLines();
+    void Test_PatternFormatter_InvalidPatternThrows();
+    void Test_PatternFormatter_MemoryFields();
+    void Test_PatternFormatter_WidthPadsShortValues();
 
 public:
     TTest_ASWLog_Formatter();

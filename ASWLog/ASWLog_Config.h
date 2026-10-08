@@ -214,7 +214,8 @@ struct TASWFileConfig
 struct TASWLineConfig
 {
     // Formats each entry's line (not LogRaw entries). Empty: TASWTextFormatter's layout, from the Show* options below.
-    // One formatter can be shared by several loggers.
+    // For a layout of your own, assign a TASWPatternFormatter (e.g. "{time} {level:5} {message}") or your own
+    // formatter. One formatter can be shared by several loggers.
     std::shared_ptr<const IASWLogFormatter> Formatter;
     LineEnding Ending = LineEnding::LF; // Added after each line (not after LogRaw entries)
 
@@ -226,7 +227,7 @@ struct TASWLineConfig
     TimeZone TimestampZone = TimeZone::UTC;
     TimePrecision TimestampPrecision = TimePrecision::Milliseconds;
 
-    // The fields TASWTextFormatter writes before the message
+    // The fields TASWTextFormatter writes before the message (a TASWPatternFormatter's pattern decides its own)
     bool ShowTimestamp      = true; // The entry's time (see TimestampZone and TimestampPrecision)
     bool ShowLevel          = true;
     bool ShowCategory       = true; // The entry's category, if it has one (see TASWCategoryLog)

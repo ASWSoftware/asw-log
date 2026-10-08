@@ -51,6 +51,20 @@ see [0.26.1](#0261---2026-09-17) for the initial versioned baseline.
   it), which tells a category whether an entry with its level would be
   written. `TASWLogRecord`'s `Raw` and `Forced` now come right after
   `LogLevel`, so designated initializers must follow the new order.
+- Line patterns: `TASWPatternFormatter` writes each line from a pattern,
+  e.g. `config.Line.Formatter = std::make_shared<const ASWLog::TASWPatternFormatter>("{time} {level:5} {[category] }{message}");`
+  for `2026-10-08T14:31:00.217Z DEBUG [Net] connected`. The placeholders are
+  `{time}` (in `Line.TimestampZone` and `Line.TimestampPrecision`),
+  `{level}`, `{category}`, `{pid}`, `{tid}`, `{ws}`, `{pws}`, `{function}`,
+  `{file}` (the name without folders), `{line}` and `{message}`; `{{` and
+  `}}` write a brace. `{level:5}` pads a field to a minimum width. Text
+  inside the braces around the name is written only when the field isn't
+  empty: punctuation and spaces as they are (`{[category] }`), anything else
+  in single quotes, with `''` for a quote (`{'cat=' category ' '}`). The
+  pattern is parsed once, when the formatter is made, and an invalid one
+  throws `std::invalid_argument` naming the problem and where it is. The
+  `Line.Show*` options don't apply to a pattern, and the logger still adds
+  `Line.Ending` after each line.
 
 ### Changed
 

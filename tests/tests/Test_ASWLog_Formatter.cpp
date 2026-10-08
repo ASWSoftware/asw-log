@@ -35,12 +35,15 @@ limitations under the License.
 #include <limits>
 #include <memory>
 #include <source_location>
+#include <stdexcept>
 #include <string>
+#include <string_view>
 #include <thread>
 #include <vector>
 //---------------------------------------------------------------------------
 #include "ASWUnitTests_Registry.h"
 //---------------------------------------------------------------------------
+#include "ASWLog_CategoryLog.h"
 #include "ASWLog_FileLog.h"
 #include "ASWLog_Formatter.h"
 #include "ASWLog_Utils.h"
@@ -178,6 +181,14 @@ TTest_ASWLog_Formatter::TTest_ASWLog_Formatter()
     RegisterTest(&TTest_ASWLog_Formatter::Test_FormatLine_TimestampFollowsZoneAndPrecision, "FormatLine_TimestampFollowsZoneAndPrecision");
     RegisterTest(&TTest_ASWLog_Formatter::Test_Formatter_ReceivesRecordFromLoggingThread, "Formatter_ReceivesRecordFromLoggingThread");
     RegisterTest(&TTest_ASWLog_Formatter::Test_Formatter_SharedByTwoLoggers, "Formatter_SharedByTwoLoggers");
+    RegisterTest(&TTest_ASWLog_Formatter::Test_PatternFormatter_AffixesOnlyAroundAValue, "PatternFormatter_AffixesOnlyAroundAValue");
+    RegisterTest(&TTest_ASWLog_Formatter::Test_PatternFormatter_BracesAndPlainText, "PatternFormatter_BracesAndPlainText");
+    RegisterTest(&TTest_ASWLog_Formatter::Test_PatternFormatter_DefaultLayoutMatchesTextFormatter, "PatternFormatter_DefaultLayoutMatchesTextFormatter");
+    RegisterTest(&TTest_ASWLog_Formatter::Test_PatternFormatter_EachPlaceholder, "PatternFormatter_EachPlaceholder");
+    RegisterTest(&TTest_ASWLog_Formatter::Test_PatternFormatter_FileLoggerWritesItsLines, "PatternFormatter_FileLoggerWritesItsLines");
+    RegisterTest(&TTest_ASWLog_Formatter::Test_PatternFormatter_InvalidPatternThrows, "PatternFormatter_InvalidPatternThrows");
+    RegisterTest(&TTest_ASWLog_Formatter::Test_PatternFormatter_MemoryFields, "PatternFormatter_MemoryFields");
+    RegisterTest(&TTest_ASWLog_Formatter::Test_PatternFormatter_WidthPadsShortValues, "PatternFormatter_WidthPadsShortValues");
 }
 //---------------------------------------------------------------------------
 TTest_ASWLog_Formatter::~TTest_ASWLog_Formatter()
@@ -415,6 +426,208 @@ void TTest_ASWLog_Formatter::Test_Formatter_SharedByTwoLoggers()
         "Logger A's file should have its 100 lines in the shared format");
     CheckTrue(contentsB.starts_with("counted|b\n") && contentsB.size() == 100 * std::string("counted|b\n").size(),
         "Logger B's file should have its 100 lines in the shared format");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_Formatter::Test_PatternFormatter_AffixesOnlyAroundAValue()
+{
+    // Arrange: one record with a category and a function, one without (a default source location has empty names)
+    auto withValues = MakeRecord("msg");
+    withValues.Category = "Net";
+    auto withoutValues = MakeRecord("msg");
+    withoutValues.Location = std::source_location();
+    const ASWLog::TASWLogConfig config;
+
+    const auto formatBoth = [&](std::string_view pattern) {
+            const ASWLog::TASWPatternFormatter formatter(pattern);
+            return std::format("{}|{}", formatter.Format(withValues, config), formatter.Format(withoutValues, config));
+        };
+
+    // Act & Assert
+    CheckEquals(std::string("[Net] msg|msg"), formatBoth("{[category] }{message}"), "Unquoted punctuation and spaces should be written only with a value");
+    CheckEquals(std::string("cat=Net msg|msg"), formatBoth("{'cat=' category ' '}{message}"), "Quoted text should be written only with a value");
+    CheckEquals(std::string("it's Net|"), formatBoth("{'it''s ' category}"), "'' should write a quote inside quoted text");
+    CheckEquals(std::string("[cat:Net] msg|msg"), formatBoth("{['cat:'category] }{message}"), "Quoted and unquoted text should mix");
+    CheckEquals(std::string("Net | msg|msg"), formatBoth("{category ' | '}{message}"), "Spaces next to quoted text should only separate it");
+    CheckEquals(std::string(" | Net msg|msg"), formatBoth("{ | category }{message}"), "Unquoted spaces away from quotes should be written");
+    CheckEquals(std::format("({}) msg|msg", withValues.Location.function_name()), formatBoth("{(function) }{message}"),
+        "A field without a value, like an empty function name, should write nothing at all");
+    CheckEquals(std::string("[Net]msg|[]msg"), formatBoth("[{category}]{message}"), "Text outside the braces should always be written");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_Formatter::Test_PatternFormatter_BracesAndPlainText()
+{
+    // Arrange
+    const ASWLog::TASWLogConfig config;
+    const auto record = MakeRecord("msg");
+
+    // Act
+    const auto escaped = ASWLog::TASWPatternFormatter("{{{level}}} }} {{").Format(record, config);
+    const auto plain = ASWLog::TASWPatternFormatter("plain text").Format(record, config);
+    const auto empty = ASWLog::TASWPatternFormatter("").Format(record, config);
+
+    // Assert
+    CheckEquals(std::string("{WARN} } {"), escaped, "{{ and }} should write a brace");
+    CheckEquals(std::string("plain text"), plain, "A pattern without placeholders should write its text");
+    CheckEmpty(empty, "An empty pattern should write an empty line");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_Formatter::Test_PatternFormatter_DefaultLayoutMatchesTextFormatter()
+{
+    // Arrange: the patterns spelling the built-in layout, with the default fields and with every field but memory use
+    const ASWLog::TASWPatternFormatter defaultFields("[{time}][{level}]{[category]}[P:{pid}][T:{tid}]: {message}");
+    const ASWLog::TASWPatternFormatter allFields("[{time}][{level}]{[category]}[P:{pid}][T:{tid}][{function}][{file}:{line}]: {message}");
+
+    ASWLog::TASWLogConfig defaultConfig;
+    ASWLog::TASWLogConfig localConfig;
+    localConfig.Line.TimestampZone = ASWLog::TimeZone::Local;
+    localConfig.Line.TimestampPrecision = ASWLog::TimePrecision::Microseconds;
+    ASWLog::TASWLogConfig allConfig;
+    allConfig.Line.ShowFunctionName = true;
+    allConfig.Line.ShowSourceLine = true;
+
+    std::vector<ASWLog::TASWLogRecord> records;
+
+    for (int level = 0; level < static_cast<int>(ASWLog::LevelCount); ++level)
+    {
+        auto record = MakeRecord("entry");
+        record.LogLevel = static_cast<ASWLog::Level>(level);
+        records.push_back(record);
+    }
+
+    auto categorized = MakeRecord("categorized");
+    categorized.Category = "Net.Http";
+    records.push_back(categorized);
+    auto largestIds = MakeRecord("largest ids");
+    largestIds.ProcessId = 4294967295;
+    largestIds.ThreadId = 0;
+    records.push_back(largestIds);
+
+    // Act & Assert
+    for (const auto& record : records)
+    {
+        const auto what = std::format(" ({} {})", ASWLog::Level_ToString(record.LogLevel), record.Message);
+        CheckEquals(ASWLog::TASWTextFormatter::FormatLine(record, defaultConfig), defaultFields.Format(record, defaultConfig),
+            "The default layout's pattern should write the same line" + what);
+        CheckEquals(ASWLog::TASWTextFormatter::FormatLine(record, localConfig), defaultFields.Format(record, localConfig),
+            "{time} should follow the configured zone and precision, as the default layout does" + what);
+        CheckEquals(ASWLog::TASWTextFormatter::FormatLine(record, allConfig), allFields.Format(record, allConfig),
+            "The pattern with the function and source line should write the same line" + what);
+    }
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_Formatter::Test_PatternFormatter_EachPlaceholder()
+{
+    // Arrange
+    const std::string pattern = "{time}|{level}|{category}|{pid}|{tid}|{function}|{file}|{line}|{message}";
+    const ASWLog::TASWPatternFormatter formatter(pattern);
+    const auto location = std::source_location::current();
+    auto record = MakeRecord("the message", location);
+    record.Category = "Net";
+
+    // Act
+    const auto line = formatter.Format(record, ASWLog::TASWLogConfig());
+
+    // Assert
+    const auto expected = std::format("2026-09-21T14:13:20.123Z|WARN|Net|1234|5678|{}|{}|{}|the message", location.function_name(),
+        std::filesystem::path(location.file_name()).filename().string(), location.line());
+    CheckEquals(expected, line, "Each placeholder should write its field");
+    CheckEquals(pattern, std::string(formatter.GetPattern()), "GetPattern should return the pattern");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_Formatter::Test_PatternFormatter_FileLoggerWritesItsLines()
+{
+    // Arrange: CRLF, so the line ending shows that the logger still adds it
+    auto config = MakeConfigWithoutFields("pattern.log");
+    config.Line.Ending = ASWLog::LineEnding::CRLF;
+    config.Line.ShowLevel = true; // Ignored by the pattern
+    config.Line.Formatter = std::make_shared<const ASWLog::TASWPatternFormatter>("{level:5} {[category] }{message}");
+    ASWLog::TASWFileLog logger;
+    const bool initialized = logger.Initialize(config);
+    ASWLog::TASWCategoryLog netLog("Net", logger);
+
+    // Act
+    netLog.LogWarn("from_net");
+    logger.LogInfo("plain");
+    logger.LogRaw(ASWLog::Level::Info, "raw\n");
+    logger.Close();
+
+    // Assert
+    CheckTrue(initialized, "Initialize should succeed");
+    CheckEquals(std::string("WARN  [Net] from_net\r\nINFO  plain\r\nraw\n"), ReadFileText(TestTempDir / "pattern.log"),
+        "Each line should follow the pattern, then the line ending; a raw entry is written as is");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_Formatter::Test_PatternFormatter_InvalidPatternThrows()
+{
+    // Arrange: each pattern, and the start of the error message it should give
+    struct TCase
+    {
+        std::string Pattern;
+        std::string Error;
+    };
+
+    const std::vector<TCase> cases{
+        { "{time} {lvl}", "Unknown placeholder name 'lvl' at index 8 of the line pattern \"{time} {lvl}\"" },
+        { "{time", "Unclosed '{' at index 0" },
+        { "[{level]", "Unclosed '{' at index 1" },
+        { "a } b", "Unmatched '}' at index 2" },
+        { "{{level}", "Unmatched '}' at index 7" },
+        { "{'x category}", "Unclosed quote at index 1" },
+        { "{}", "Missing placeholder name at index 0" },
+        { "{ [ ] }", "Missing placeholder name at index 0" },
+        { "{category x}", "Letters around a placeholder name must be in quotes at index 10" },
+        { "{level level}", "Letters around a placeholder name must be in quotes at index 7" },
+        { "{2 level}", "'2' around a placeholder name must be in quotes at index 1" },
+        { "{a{level}", "Unknown placeholder name 'a' at index 1" },
+        { "{[{level}", "'{' around a placeholder name must be in quotes at index 2" },
+        { "{:level}", "':' around a placeholder name must be in quotes at index 1" },
+        { "{level:}", "A width must be 1 to 1000 at index 7" },
+        { "{level:0}", "A width must be 1 to 1000 at index 7" },
+        { "{level:1001}", "A width must be 1 to 1000 at index 7" },
+        { "{level:99999999999999999999}", "A width must be 1 to 1000 at index 7" }
+    };
+
+    // Act & Assert
+    for (const auto& testCase : cases)
+    {
+        CheckThrows<std::invalid_argument>([&] {
+                [[maybe_unused]] const ASWLog::TASWPatternFormatter formatter(testCase.Pattern);
+            }, "The pattern " + testCase.Pattern + " should be rejected", testCase.Error);
+    }
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_Formatter::Test_PatternFormatter_MemoryFields()
+{
+    // Arrange
+    const ASWLog::TASWPatternFormatter formatter("{ws} {pws}: {message}");
+
+    // Act
+    const auto line = formatter.Format(MakeRecord("memory"), ASWLog::TASWLogConfig());
+
+    // Assert
+    CheckMatches(line, "[1-9][0-9]* [1-9][0-9]*: memory", "The working set and peak working set should be read, as decimal numbers");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_Formatter::Test_PatternFormatter_WidthPadsShortValues()
+{
+    // Arrange
+    const ASWLog::TASWLogConfig config;
+    const ASWLog::TASWPatternFormatter padded("{level:5}|");
+    const ASWLog::TASWPatternFormatter withAffixes("{[level:6]}|");
+    const ASWLog::TASWPatternFormatter emptyField("{category:8}|");
+    auto info = MakeRecord("msg");
+    info.LogLevel = ASWLog::Level::Info;
+    auto error = MakeRecord("msg");
+    error.LogLevel = ASWLog::Level::Error;
+    auto critical = MakeRecord("msg");
+    critical.LogLevel = ASWLog::Level::Critical;
+
+    // Act & Assert
+    CheckEquals(std::string("INFO |"), padded.Format(info, config), "A shorter value should be padded on the right");
+    CheckEquals(std::string("ERROR|"), padded.Format(error, config), "A value of the width should be written as is");
+    CheckEquals(std::string("CRITICAL|"), padded.Format(critical, config), "A longer value should not be cut");
+    CheckEquals(std::string("[INFO  ]|"), withAffixes.Format(info, config), "The affixes should go around the padded value");
+    CheckEquals(std::string("|"), emptyField.Format(info, config), "An empty field should not be padded");
 }
 //---------------------------------------------------------------------------
 
