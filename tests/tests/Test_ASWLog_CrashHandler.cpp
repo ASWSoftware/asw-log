@@ -881,7 +881,7 @@ void TTest_ASWLog_CrashHandler::Test_HandleCrash_SyncsTheLineAtSyncToDiskAtLevel
     CheckEquals(0, reportsWithoutSync, "A logger whose SyncToDiskAtLevel is above Critical shouldn't sync the crash line");
     CheckEquals(1, reports.size(), "The crash line should be synced once");
     if (reports.size() == 1)
-        CheckTrue(reports[0] == ASWLog::ErrorKind::SyncFailed, "The report should be SyncFailed");
+        CheckEquals(ASWLog::ErrorKind::SyncFailed, reports[0], "The report should be SyncFailed");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_CrashHandler::Test_HandleCrash_ThrowingFormatterGetsTheFixedLayoutLine()

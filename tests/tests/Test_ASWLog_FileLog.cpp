@@ -1153,20 +1153,13 @@ void TTest_ASWLog_FileLog::Test_DeleteOldLogs_MatchesNonASCIIFileNames()
 
     const std::string utf8Pattern = "\xCE\xBB_*example.log"; // U+03BB in UTF-8, then "_*example.log"
     std::size_t deletedCount = 0;
-    bool threw = false;
 
     // Act
-    try
-    {
-        deletedCount = ASWLog::TASWFileLog::DeleteOldLogs(TestTempDir, utf8Pattern, std::chrono::hours(1));
-    }
-    catch (...)
-    {
-        threw = true;
-    }
+    CheckNoThrow([&] {
+            deletedCount = ASWLog::TASWFileLog::DeleteOldLogs(TestTempDir, utf8Pattern, std::chrono::hours(1));
+        }, "DeleteOldLogs should not throw for a file name the ANSI code page can't represent");
 
     // Assert
-    CheckFalse(threw, "DeleteOldLogs should not throw for a file name the ANSI code page can't represent");
     CheckEquals(1, deletedCount, "DeleteOldLogs should match UTF-8 patterns against UTF-8 file names");
     CheckFalse(std::filesystem::exists(oldFile), "The matching old file should be removed");
 }
@@ -1448,7 +1441,7 @@ void TTest_ASWLog_FileLog::Test_GetInstance_ReturnsSameInstance()
     auto& second = ASWLog::TASWFileLog::GetInstance();
 
     // Assert
-    CheckTrue(&first == &second, "GetInstance should return the same logger on every call");
+    CheckSame(&first, &second, "GetInstance should return the same logger on every call");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_FileLog::Test_InitializeAndLogInfo_WritesText()
@@ -1788,7 +1781,7 @@ void TTest_ASWLog_FileLog::Test_MultiThreadedStress_WritesAllMessagesToDisk()
 
     // Assert
     CheckTrue(initialized, "Initialize should succeed");
-    CheckTrue(!contents.empty(), "Stress log file should contain at least one entry");
+    CheckNotEmpty(contents, "Stress log file should contain at least one entry");
     for (const auto& message : expectedMessages)
     {
         CheckContains(contents, message,
@@ -1855,7 +1848,7 @@ void TTest_ASWLog_FileLog::Test_MultiThreadedStress_WritesAllMessagesToDisk_Open
 
     // Assert
     CheckTrue(initialized, "Initialize should succeed");
-    CheckTrue(!contents.empty(), "Stress log file should contain at least one entry");
+    CheckNotEmpty(contents, "Stress log file should contain at least one entry");
     for (const auto& message : expectedMessages)
     {
         CheckContains(contents, message,
@@ -1920,7 +1913,7 @@ void TTest_ASWLog_FileLog::Test_OnBackupCreated_LeavesARenamedBackupToTheApp()
     // Assert
     CheckTrue(initialized, "Initialize should succeed");
     CheckTrue(rotated, "RotateLogFiles should succeed");
-    CheckFalse(compressedPath.empty(), "OnBackupCreated should be called");
+    CheckNotEmpty(compressedPath, "OnBackupCreated should be called");
     CheckTrue(std::filesystem::exists(compressedPath), "The cleanup should leave a file renamed out of the backup form to the application");
 }
 //---------------------------------------------------------------------------
@@ -2045,22 +2038,15 @@ void TTest_ASWLog_FileLog::Test_OnBackupCreated_ThrowingCallbackStillCleansUp()
     logger.LogInfo("entry");
 
     // Act
-    bool threw = false;
     bool rotated = false;
-    try
-    {
-        rotated = logger.RotateLogFiles("manual");
-    }
-    catch (...)
-    {
-        threw = true;
-    }
+    CheckNoThrow([&] {
+            rotated = logger.RotateLogFiles("manual");
+        }, "An exception from OnBackupCreated should not escape");
     logger.LogInfo("after");
     logger.Close();
 
     // Assert
     CheckTrue(initialized, "Initialize should succeed");
-    CheckFalse(threw, "An exception from OnBackupCreated should not escape");
     CheckTrue(rotated, "RotateLogFiles should succeed");
     CheckFalse(backupPath.empty() || std::filesystem::exists(backupPath), "The cleanup should still run after the callback threw");
     CheckEquals(std::string(": after\n"), ReadFileText(logFile), "Logging should go on");
@@ -2096,13 +2082,13 @@ void TTest_ASWLog_FileLog::Test_OnError_ReportsFailedDelete()
 
     // Assert
     CheckTrue(initialized, "Initialize should succeed");
-    CheckTrue(otherHandle != nullptr, "The test should be able to hold the backup open");
+    CheckNotNull(otherHandle, "The test should be able to hold the backup open");
     CheckTrue(rotated, "The rotation itself should succeed");
     CheckEquals(1, reports.size(), "The backup that couldn't be deleted should be reported once");
     if (reports.empty())
         return;
 
-    CheckTrue(reports[0].Kind == ASWLog::ErrorKind::DeleteFailed, "The failure should be reported as DeleteFailed");
+    CheckEquals(ASWLog::ErrorKind::DeleteFailed, reports[0].Kind, "The failure should be reported as DeleteFailed");
     CheckTrue(reports[0].Path.filename() == heldBackup.filename(), "The report should name the backup");
     CheckTrue(static_cast<bool>(reports[0].Code), "The report should carry the operating system's error");
 #else
@@ -2132,7 +2118,7 @@ void TTest_ASWLog_FileLog::Test_OnError_ReportsFailedOpen()
     if (reports.empty())
         return;
 
-    CheckTrue(reports[0].Kind == ASWLog::ErrorKind::OpenFailed, "The failure should be reported as OpenFailed");
+    CheckEquals(ASWLog::ErrorKind::OpenFailed, reports[0].Kind, "The failure should be reported as OpenFailed");
     CheckTrue(reports[0].Path == config.File.ResolvePath().parent_path(), "The report should name the folder that couldn't be created");
     CheckTrue(static_cast<bool>(reports[0].Code), "The report should carry the operating system's error");
 }
@@ -2175,14 +2161,14 @@ void TTest_ASWLog_FileLog::Test_OnError_ReportsFailedRotationAndReopen()
     if (reports.size() != 3)
         return;
 
-    CheckTrue(reports[0].Kind == ASWLog::ErrorKind::RotationFailed, "The failed rename should be reported as RotationFailed");
+    CheckEquals(ASWLog::ErrorKind::RotationFailed, reports[0].Kind, "The failed rename should be reported as RotationFailed");
     CheckTrue(reports[0].Path == config.File.ResolvePath(), "The rotation report should name the log file");
     CheckTrue(static_cast<bool>(reports[0].Code), "The rotation report should carry the operating system's error");
-    CheckTrue(reports[1].Kind == ASWLog::ErrorKind::OpenFailed, "The failed reopen should be reported as OpenFailed");
+    CheckEquals(ASWLog::ErrorKind::OpenFailed, reports[1].Kind, "The failed reopen should be reported as OpenFailed");
     CheckTrue(reports[1].Path == config.File.ResolvePath(), "The open report should name the log file");
     CheckTrue(static_cast<bool>(reports[1].Code), "The open report should carry the operating system's error");
     CheckEquals(0, reports[1].SuppressedCount, "Nothing was left out before the first open report");
-    CheckTrue(reports[2].Kind == ASWLog::ErrorKind::OpenFailed, "The failed open after the interval should be reported");
+    CheckEquals(ASWLog::ErrorKind::OpenFailed, reports[2].Kind, "The failed open after the interval should be reported");
     CheckEquals(2, reports[2].SuppressedCount, "The report should count the failed opens left out");
 }
 //---------------------------------------------------------------------------
@@ -2219,7 +2205,7 @@ void TTest_ASWLog_FileLog::Test_OnError_ReportsFailedSync()
     CheckEquals(1, reports.size(), "The failed sync should be reported once");
     if (reports.size() == 1)
     {
-        CheckTrue(reports[0].Kind == ASWLog::ErrorKind::SyncFailed, "The report should be SyncFailed");
+        CheckEquals(ASWLog::ErrorKind::SyncFailed, reports[0].Kind, "The report should be SyncFailed");
         CheckTrue(reports[0].Path == config.File.ResolvePath(), "The report should name the log file");
         CheckTrue(static_cast<bool>(reports[0].Code), "The report should carry the operating system's error");
     }
@@ -2313,9 +2299,9 @@ void TTest_ASWLog_FileLog::Test_OnLogEntry_FiresForQualifyingLevelsOnly()
     CheckEquals(2, callbackMessages.size(), "OnLogEntry should only fire for entries at or above OnLogEntryMinimumLevel");
     if (callbackMessages.size() == 2)
     {
-        CheckEquals(static_cast<int32_t>(ASWLog::Level::Error), static_cast<int32_t>(callbackLevels[0]), "First callback should report the Error entry's level");
+        CheckEquals(ASWLog::Level::Error, callbackLevels[0], "First callback should report the Error entry's level");
         CheckContains(callbackMessages[0], "at_threshold", "Callback should receive the same formatted line written to disk");
-        CheckEquals(static_cast<int32_t>(ASWLog::Level::Critical), static_cast<int32_t>(callbackLevels[1]), "Second callback should report the Critical entry's level");
+        CheckEquals(ASWLog::Level::Critical, callbackLevels[1], "Second callback should report the Critical entry's level");
         CheckContains(callbackMessages[1], "above_threshold", "Callback should receive the same formatted line written to disk");
         CheckEquals(std::string("at_threshold"), callbackRecordMessages[0], "Callback should receive the entry's record, with the unformatted message");
         CheckTrue(callbackRecords[0].Timestamp != std::chrono::system_clock::time_point{}, "The callback's record should be stamped with its time");
@@ -2545,7 +2531,7 @@ void TTest_ASWLog_FileLog::Test_Periodic_ErrorHandlerCanCloseAndReopenOnTheThrea
     CheckTrue(wasReported, "The failed flush should be reported");
     if (wasReported)
     {
-        CheckEquals(static_cast<int>(ASWLog::ErrorKind::FlushFailed), static_cast<int>(reportedKind), "The report should be a FlushFailed");
+        CheckEquals(ASWLog::ErrorKind::FlushFailed, reportedKind, "The report should be a FlushFailed");
         CheckTrue(reportThreadId != std::this_thread::get_id(), "The flush thread should report its own failure");
         CheckTrue(closedInHandler, "Close should succeed from OnError on the flush thread");
         CheckTrue(reopenedInHandler, "Open should succeed from OnError on the flush thread");

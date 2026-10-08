@@ -124,7 +124,7 @@ void TTest_ASWLog_Utils::Test_GenerateLogFileName_ContainsExpectedFields()
     const std::string logName = ASWLog::GenerateLogFileName("", "ExampleLog.txt");
 
     // Act & Assert
-    AssertTrue(!logName.empty(), "Generated log file name should not be empty");
+    AssertNotEmpty(logName, "Generated log file name should not be empty");
 
     CheckContains(logName, "_PID", "Generated file name should include process id");
     CheckContains(logName, "_TID", "Generated file name should include thread id");
@@ -153,7 +153,7 @@ void TTest_ASWLog_Utils::Test_GenerateLogFileName_PrefixAndPostfixAreOptional()
     CheckNotStartsWith(postfixOnly, "_", "An empty prefix should not leave a leading separator");
     CheckContains(postfixOnly, "ExampleLog.txt", "The postfix should still be included when the prefix is empty");
 
-    CheckFalse(neither.empty(), "The name should still contain the timestamp/PID/TID segments when both are empty");
+    CheckNotEmpty(neither, "The name should still contain the timestamp/PID/TID segments when both are empty");
     CheckNotStartsWith(neither, "_", "An empty prefix should not leave a leading separator when the postfix is also empty");
     CheckNotEndsWith(neither, "_", "An empty postfix should not leave a trailing separator when the prefix is also empty");
 }
@@ -193,7 +193,7 @@ void TTest_ASWLog_Utils::Test_GetCurrentOSThreadId_IdentifiesCallingThread()
 #if defined(_WIN32)
     // The id should name a live thread of this process
     const HANDLE thread = OpenThread(THREAD_QUERY_LIMITED_INFORMATION, FALSE, mainThreadId);
-    CheckTrue(thread != nullptr, "The id should open a thread");
+    CheckNotNull(thread, "The id should open a thread");
     if (thread != nullptr)
     {
         CheckEquals(static_cast<std::uint32_t>(GetCurrentProcessId()), static_cast<std::uint32_t>(GetProcessIdOfThread(thread)), "The thread should belong to this process");
@@ -221,10 +221,10 @@ void TTest_ASWLog_Utils::Test_GetOSInfoString_ContainsEdition()
         osInfo.find("Server") != std::string::npos ||
         osInfo.find("Ultimate") != std::string::npos;
 
-    CheckTrue(!osInfo.empty(), "OS info string should not be empty");
+    CheckNotEmpty(osInfo, "OS info string should not be empty");
     CheckTrue(hasEdition, "Windows OS info should include the edition name (Home, Pro, Enterprise, etc.)");
 #else
-    CheckTrue(!osInfo.empty(), "OS info string should not be empty");
+    CheckNotEmpty(osInfo, "OS info string should not be empty");
 #endif
 }
 //---------------------------------------------------------------------------
@@ -319,7 +319,7 @@ void TTest_ASWLog_Utils::Test_IsRootFolder_ResolvesRelativePaths()
     const auto relativeRoot = std::filesystem::relative(currentPath.root_path(), currentPath);
 
     // Act & Assert
-    CheckFalse(relativeRoot.empty(), "The relative path to the root should be found");
+    CheckNotEmpty(relativeRoot, "The relative path to the root should be found");
     CheckTrue(ASWLog::IsRootFolder(relativeRoot), "A relative path that leads to a root should be a root folder");
     if (currentPath != currentPath.root_path())
         CheckFalse(ASWLog::IsRootFolder("."), "\".\" should not be a root folder when the current folder isn't one");

@@ -617,7 +617,7 @@ void TTest_ASWLog_TextLogBase::Test_Async_DropNewestReportsAndMarksDroppedEntrie
     CheckEquals(1, errors.size(), "The drop should be reported once");
     if (errors.size() == 1)
     {
-        CheckEquals(static_cast<int>(ASWLog::ErrorKind::EntriesDropped), static_cast<int>(errors[0].Kind), "The report should be EntriesDropped");
+        CheckEquals(ASWLog::ErrorKind::EntriesDropped, errors[0].Kind, "The report should be EntriesDropped");
         CheckContains(errors[0].Message, "Dropped 3 entries", "The report should say how many were dropped");
     }
 }
@@ -1056,22 +1056,15 @@ void TTest_ASWLog_TextLogBase::Test_Initialize_ThrowingFormatterStillInitializes
 
     TMemoryTextLog log(output);
     bool initialized = false;
-    bool threw = false;
 
     // Act
-    try
-    {
-        initialized = log.Initialize(config);
-        log.LogInfo("formatted"); // Dropped, since its line can't be formatted
-        log.LogRaw(ASWLog::Level::Info, "raw"); // Written: raw entries don't use the formatter
-    }
-    catch (...)
-    {
-        threw = true;
-    }
+    CheckNoThrow([&] {
+            initialized = log.Initialize(config);
+            log.LogInfo("formatted"); // Dropped, since its line can't be formatted
+            log.LogRaw(ASWLog::Level::Info, "raw"); // Written: raw entries don't use the formatter
+        }, "A throwing formatter should not throw out of Initialize() or the Log* methods");
 
     // Assert
-    CheckFalse(threw, "A throwing formatter should not throw out of Initialize() or the Log* methods");
     CheckTrue(initialized, "Initialize() should succeed: the startup lines are best effort once the output is open");
     CheckTrue(log.IsOpen(), "The logger should be open");
     CheckTrue(output.Lines == std::vector<std::string>{ "raw" }, "Only the raw entry should be written");
@@ -1167,7 +1160,7 @@ void TTest_ASWLog_TextLogBase::Test_Log_DroppedWhenNotReadyOrNotPrepared()
     log.LogInfo("after_close");
 
     // Assert
-    CheckTrue(output.Lines.empty(), "No entry should be written");
+    CheckEmpty(output.Lines, "No entry should be written");
     CheckEquals(0, callbackCount, "OnLogEntry should not be called for a dropped entry");
     CheckEquals(afterEntryCountAtStart + 1, output.AfterEntryCount,
         "AfterEntryUnlocked should be skipped when EnsureReadyUnlocked fails, but called when only PrepareWriteUnlocked drops the line");
@@ -1229,7 +1222,7 @@ void TTest_ASWLog_TextLogBase::Test_Log_MinimumLevelOffAllowsOnlyForcedEntries()
 
     // Assert
     CheckTrue(initialized, "Initialize should succeed");
-    CheckTrue(log.GetMinimumLevel() == ASWLog::Level::Off, "InitialMinimumLevel should seed the minimum level");
+    CheckEquals(ASWLog::Level::Off, log.GetMinimumLevel(), "InitialMinimumLevel should seed the minimum level");
     CheckEquals(0, linesAfterInitialize,
         "With the minimum level at Off, Initialize should write no startup lines");
     CheckTrue(output.Lines == std::vector<std::string>{ "[INFO]: forced\n", "forced_raw\n" },
@@ -1251,22 +1244,15 @@ void TTest_ASWLog_TextLogBase::Test_Log_ThrowingWriteDoesNotEscape()
     CheckTrue(log.Initialize(config), "Initialize should succeed");
 
     // Act
-    bool threw = false;
     log.ThrowsOnWrite = true;
-    try
-    {
-        log.LogInfo("write_throws");
-        log.LogForceRaw(ASWLog::Level::Error, "write_throws_raw");
-    }
-    catch (...)
-    {
-        threw = true;
-    }
+    CheckNoThrow([&] {
+            log.LogInfo("write_throws");
+            log.LogForceRaw(ASWLog::Level::Error, "write_throws_raw");
+        }, "An exception from WriteLineUnlocked should not reach the caller");
     log.ThrowsOnWrite = false;
     log.LogInfo("after_throw"); // Would deadlock if the throw had left the mutex locked
 
     // Assert
-    CheckFalse(threw, "An exception from WriteLineUnlocked should not reach the caller");
     CheckTrue(output.Lines == std::vector<std::string>{ "[INFO]: after_throw\n" }, "Logging should work after a failed write");
     CheckTrue(reportedMessages == std::vector<std::string>{ "Dropped an entry: write failed", "Dropped an entry: write failed" },
         "Each dropped entry should be reported");
@@ -1349,7 +1335,7 @@ void TTest_ASWLog_TextLogBase::Test_Reconfigure_AppliesNewConfigButKeepsLevel()
     CheckTrue(reconfigured, "Reconfigure() should succeed once initialized");
     CheckTrue(output.Lines == std::vector<std::string>{ "[INFO]: first\n", "[DEBUG]: before\n", ": after\n" },
         "Entries after Reconfigure() should use the new line layout, and Reconfigure() should write no startup lines");
-    CheckEquals(static_cast<int>(ASWLog::Level::Debug), static_cast<int>(log.GetMinimumLevel()),
+    CheckEquals(ASWLog::Level::Debug, log.GetMinimumLevel(),
         "Reconfigure() should keep the minimum level set with SetMinimumLevel(), not apply InitialMinimumLevel");
     CheckTrue(log.ReconfiguredFromBanners == std::vector<std::string>{ "first", "second" },
         "ReconfigureUnlocked() should get the config it replaced (and not be called before Initialize())");

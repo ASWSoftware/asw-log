@@ -96,9 +96,9 @@ void TTest_ASWLog_Types::Test_AsyncOverflowPolicy_FromString()
     CheckTrue(dropNewest.has_value(), "DROP_NEWEST should parse");
     CheckTrue(dropNewestAlias_mixedCase.has_value(), "DropNewest should parse");
     CheckFalse(unknown.has_value(), "An unknown string should not parse");
-    CheckEquals(static_cast<int32_t>(ASWLog::AsyncOverflowPolicy::Block), static_cast<int32_t>(*block), "BLOCK should map to Block");
-    CheckEquals(static_cast<int32_t>(ASWLog::AsyncOverflowPolicy::DropNewest), static_cast<int32_t>(*dropNewest), "DROP_NEWEST should map to DropNewest");
-    CheckEquals(static_cast<int32_t>(ASWLog::AsyncOverflowPolicy::DropNewest), static_cast<int32_t>(*dropNewestAlias_mixedCase), "DropNewest should map to DropNewest");
+    CheckEquals(ASWLog::AsyncOverflowPolicy::Block, *block, "BLOCK should map to Block");
+    CheckEquals(ASWLog::AsyncOverflowPolicy::DropNewest, *dropNewest, "DROP_NEWEST should map to DropNewest");
+    CheckEquals(ASWLog::AsyncOverflowPolicy::DropNewest, *dropNewestAlias_mixedCase, "DropNewest should map to DropNewest");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_Types::Test_AsyncOverflowPolicy_ToString()
@@ -123,10 +123,10 @@ void TTest_ASWLog_Types::Test_ColorMode_FromString()
     CheckTrue(never.has_value(), "NEVER should parse");
     CheckTrue(never_mixedCase.has_value(), "Never mixed case should parse");
     CheckFalse(unknown.has_value(), "An unknown string should not parse");
-    CheckEquals(static_cast<int32_t>(ASWLog::ColorMode::Auto), static_cast<int32_t>(*autoMode), "AUTO should map to Auto");
-    CheckEquals(static_cast<int32_t>(ASWLog::ColorMode::Always), static_cast<int32_t>(*always), "ALWAYS should map to Always");
-    CheckEquals(static_cast<int32_t>(ASWLog::ColorMode::Never), static_cast<int32_t>(*never), "NEVER should map to Never");
-    CheckEquals(static_cast<int32_t>(ASWLog::ColorMode::Never), static_cast<int32_t>(*never_mixedCase), "Never should map to Never");
+    CheckEquals(ASWLog::ColorMode::Auto, *autoMode, "AUTO should map to Auto");
+    CheckEquals(ASWLog::ColorMode::Always, *always, "ALWAYS should map to Always");
+    CheckEquals(ASWLog::ColorMode::Never, *never, "NEVER should map to Never");
+    CheckEquals(ASWLog::ColorMode::Never, *never_mixedCase, "Never should map to Never");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_Types::Test_ColorMode_ToString()
@@ -174,12 +174,12 @@ void TTest_ASWLog_Types::Test_FlushMode_FromString()
     CheckTrue(onNewLineAlias_mixed.has_value(), "OnNewLine should parse");
     CheckTrue(manual.has_value(), "MANUAL should parse");
     CheckTrue(periodic.has_value(), "PERIODIC should parse");
-    CheckEquals(static_cast<int32_t>(ASWLog::FlushMode::EveryWrite), static_cast<int32_t>(*everyWrite), "EVERY_WRITE should map to EveryWrite");
-    CheckEquals(static_cast<int32_t>(ASWLog::FlushMode::EveryWrite), static_cast<int32_t>(*everyWriteAlias), "EVERYWRITE should map to EveryWrite");
-    CheckEquals(static_cast<int32_t>(ASWLog::FlushMode::OnNewLine), static_cast<int32_t>(*onNewLine), "ON_NEW_LINE should map to OnNewLine");
-    CheckEquals(static_cast<int32_t>(ASWLog::FlushMode::OnNewLine), static_cast<int32_t>(*onNewLineAlias_mixed), "OnNewLine should map to OnNewLine");
-    CheckEquals(static_cast<int32_t>(ASWLog::FlushMode::Manual), static_cast<int32_t>(*manual), "MANUAL should map to Manual");
-    CheckEquals(static_cast<int32_t>(ASWLog::FlushMode::Periodic), static_cast<int32_t>(*periodic), "PERIODIC should map to Periodic");
+    CheckEquals(ASWLog::FlushMode::EveryWrite, *everyWrite, "EVERY_WRITE should map to EveryWrite");
+    CheckEquals(ASWLog::FlushMode::EveryWrite, *everyWriteAlias, "EVERYWRITE should map to EveryWrite");
+    CheckEquals(ASWLog::FlushMode::OnNewLine, *onNewLine, "ON_NEW_LINE should map to OnNewLine");
+    CheckEquals(ASWLog::FlushMode::OnNewLine, *onNewLineAlias_mixed, "OnNewLine should map to OnNewLine");
+    CheckEquals(ASWLog::FlushMode::Manual, *manual, "MANUAL should map to Manual");
+    CheckEquals(ASWLog::FlushMode::Periodic, *periodic, "PERIODIC should map to Periodic");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_Types::Test_FlushMode_ToString()
@@ -222,15 +222,15 @@ void TTest_ASWLog_Types::Test_Level_FromString()
     CheckTrue(error.has_value(), "ERROR should parse");
     CheckTrue(critical.has_value(), "CRITICAL should parse");
     CheckTrue(criticalAlias.has_value(), "FATAL should parse");
-    CheckEquals(static_cast<int32_t>(ASWLog::Level::Trace), static_cast<int32_t>(*trace), "TRACE should map to Trace");
-    CheckEquals(static_cast<int32_t>(ASWLog::Level::Debug), static_cast<int32_t>(*debug), "DEBUG should map to Debug");
-    CheckEquals(static_cast<int32_t>(ASWLog::Level::Info), static_cast<int32_t>(*info), "INFO should map to Info");
-    CheckEquals(static_cast<int32_t>(ASWLog::Level::Info), static_cast<int32_t>(*info_mixedCase), "Info should map to Info");
-    CheckEquals(static_cast<int32_t>(ASWLog::Level::Warn), static_cast<int32_t>(*warn), "WARN should map to Warn");
-    CheckEquals(static_cast<int32_t>(ASWLog::Level::Warn), static_cast<int32_t>(*warnAlias), "WARNING should map to Warn");
-    CheckEquals(static_cast<int32_t>(ASWLog::Level::Error), static_cast<int32_t>(*error), "ERROR should map to Error");
-    CheckEquals(static_cast<int32_t>(ASWLog::Level::Critical), static_cast<int32_t>(*critical), "CRITICAL should map to Critical");
-    CheckEquals(static_cast<int32_t>(ASWLog::Level::Critical), static_cast<int32_t>(*criticalAlias), "FATAL should map to Critical");
+    CheckEquals(ASWLog::Level::Trace, *trace, "TRACE should map to Trace");
+    CheckEquals(ASWLog::Level::Debug, *debug, "DEBUG should map to Debug");
+    CheckEquals(ASWLog::Level::Info, *info, "INFO should map to Info");
+    CheckEquals(ASWLog::Level::Info, *info_mixedCase, "Info should map to Info");
+    CheckEquals(ASWLog::Level::Warn, *warn, "WARN should map to Warn");
+    CheckEquals(ASWLog::Level::Warn, *warnAlias, "WARNING should map to Warn");
+    CheckEquals(ASWLog::Level::Error, *error, "ERROR should map to Error");
+    CheckEquals(ASWLog::Level::Critical, *critical, "CRITICAL should map to Critical");
+    CheckEquals(ASWLog::Level::Critical, *criticalAlias, "FATAL should map to Critical");
     CheckTrue(off.has_value() && *off == ASWLog::Level::Off, "OFF should map to Off");
     CheckTrue(offAlias.has_value() && *offAlias == ASWLog::Level::Off, "none (NONE alias, any case) should map to Off");
 }
@@ -273,11 +273,11 @@ void TTest_ASWLog_Types::Test_LineEnding_FromString()
     CheckTrue(lf_lower.has_value(), "lf should parse");
     CheckTrue(crlf.has_value(), "CRLF should parse");
     CheckTrue(crlfAlias.has_value(), "WINDOWS should parse");
-    CheckEquals(static_cast<int32_t>(ASWLog::LineEnding::LF), static_cast<int32_t>(*lf), "LF should map to LF");
-    CheckEquals(static_cast<int32_t>(ASWLog::LineEnding::LF), static_cast<int32_t>(*lfAlias), "LINUX should map to LF");
-    CheckEquals(static_cast<int32_t>(ASWLog::LineEnding::LF), static_cast<int32_t>(*lf_lower), "lf should map to LF");
-    CheckEquals(static_cast<int32_t>(ASWLog::LineEnding::CRLF), static_cast<int32_t>(*crlf), "CRLF should map to CRLF");
-    CheckEquals(static_cast<int32_t>(ASWLog::LineEnding::CRLF), static_cast<int32_t>(*crlfAlias), "WINDOWS should map to CRLF");
+    CheckEquals(ASWLog::LineEnding::LF, *lf, "LF should map to LF");
+    CheckEquals(ASWLog::LineEnding::LF, *lfAlias, "LINUX should map to LF");
+    CheckEquals(ASWLog::LineEnding::LF, *lf_lower, "lf should map to LF");
+    CheckEquals(ASWLog::LineEnding::CRLF, *crlf, "CRLF should map to CRLF");
+    CheckEquals(ASWLog::LineEnding::CRLF, *crlfAlias, "WINDOWS should map to CRLF");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_Types::Test_LineEnding_ToString()

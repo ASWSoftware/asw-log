@@ -357,6 +357,14 @@
             <DependentOn>..\..\..\..\third_party\asw-unit-tests\vcl\gui\src\ASWUnitTests_GUI_Selection.h</DependentOn>
             <BuildOrder>41</BuildOrder>
         </CppCompile>
+        <CppCompile Include="..\..\..\..\third_party\asw-unit-tests\vcl\gui\src\ASWUnitTests_GUI_Shuffle.cpp">
+            <DependentOn>..\..\..\..\third_party\asw-unit-tests\vcl\gui\src\ASWUnitTests_GUI_Shuffle.h</DependentOn>
+            <BuildOrder>45</BuildOrder>
+        </CppCompile>
+        <CppCompile Include="..\..\..\..\third_party\asw-unit-tests\vcl\gui\src\ASWUnitTests_GUI_ShuffleSeedDialog.cpp">
+            <DependentOn>..\..\..\..\third_party\asw-unit-tests\vcl\gui\src\ASWUnitTests_GUI_ShuffleSeedDialog.h</DependentOn>
+            <BuildOrder>46</BuildOrder>
+        </CppCompile>
         <CppCompile Include="..\..\..\..\third_party\asw-unit-tests\vcl\gui\src\ASWUnitTests_GUI_Strings.cpp">
             <DependentOn>..\..\..\..\third_party\asw-unit-tests\vcl\gui\src\ASWUnitTests_GUI_Strings.h</DependentOn>
             <BuildOrder>24</BuildOrder>

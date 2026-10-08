@@ -365,7 +365,7 @@ void TTest_ASWLog_ConsoleLog::Test_ColorModeAuto_ColorsOnlyStreamsThatSupportIt(
 
     // Assert
     CheckTrue(initialized, "Initialize should succeed");
-    CheckTrue(logger.GetColorMode() == ASWLog::ColorMode::Auto, "ColorMode should default to Auto");
+    CheckEquals(ASWLog::ColorMode::Auto, logger.GetColorMode(), "ColorMode should default to Auto");
     CheckContains(outContents, "\x1b[", "Auto should color a stream that shows colors");
     CheckNotContains(errContents, "\x1b[", "Auto should not color a stream that doesn't show colors, such as a file or a pipe");
     CheckContains(errContents, "stderr_message", "The uncolored message should still be written");
@@ -479,17 +479,17 @@ void TTest_ASWLog_ConsoleLog::Test_GetColorMode_ReflectsSetColorMode()
     ASWLog::TASWConsoleLog logger;
 
     // Assert
-    CheckTrue(logger.GetColorMode() == ASWLog::ColorMode::Auto, "ColorMode should default to Auto");
+    CheckEquals(ASWLog::ColorMode::Auto, logger.GetColorMode(), "ColorMode should default to Auto");
 
     // Act & Assert
     logger.SetColorMode(ASWLog::ColorMode::Always);
-    CheckTrue(logger.GetColorMode() == ASWLog::ColorMode::Always, "SetColorMode(Always) should be reflected by GetColorMode()");
+    CheckEquals(ASWLog::ColorMode::Always, logger.GetColorMode(), "SetColorMode(Always) should be reflected by GetColorMode()");
 
     logger.SetColorMode(ASWLog::ColorMode::Never);
-    CheckTrue(logger.GetColorMode() == ASWLog::ColorMode::Never, "SetColorMode(Never) should be reflected by GetColorMode()");
+    CheckEquals(ASWLog::ColorMode::Never, logger.GetColorMode(), "SetColorMode(Never) should be reflected by GetColorMode()");
 
     logger.SetColorMode(ASWLog::ColorMode::Auto);
-    CheckTrue(logger.GetColorMode() == ASWLog::ColorMode::Auto, "SetColorMode(Auto) should be reflected by GetColorMode()");
+    CheckEquals(ASWLog::ColorMode::Auto, logger.GetColorMode(), "SetColorMode(Auto) should be reflected by GetColorMode()");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_ConsoleLog::Test_GetInstance_ReturnsSameInstance()
@@ -499,7 +499,7 @@ void TTest_ASWLog_ConsoleLog::Test_GetInstance_ReturnsSameInstance()
     auto& second = ASWLog::TASWConsoleLog::GetInstance();
 
     // Assert
-    CheckTrue(&first == &second, "GetInstance should return the same logger on every call");
+    CheckSame(&first, &second, "GetInstance should return the same logger on every call");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_ConsoleLog::Test_GetLevelColor_OffHasNoColor()
@@ -514,7 +514,7 @@ void TTest_ASWLog_ConsoleLog::Test_GetLevelColor_OffHasNoColor()
     const auto offColor = logger.GetLevelColor(ASWLog::Level::Off);
 
     // Assert
-    CheckTrue(offColor.empty(), "Off isn't a severity, so it should have no color, and setting one should be ignored");
+    CheckEmpty(offColor, "Off isn't a severity, so it should have no color, and setting one should be ignored");
     CheckEquals(defaultCriticalColor, logger.GetLevelColor(ASWLog::Level::Critical),
         "Setting or resetting Off's color should not change another level's color");
 }
@@ -749,7 +749,7 @@ void TTest_ASWLog_ConsoleLog::Test_OnError_ReportsOnlyTheWriteThatFailedTheStrea
     if (reports.empty())
         return;
 
-    CheckTrue(reports[0].Kind == ASWLog::ErrorKind::WriteFailed, "A failed console write should be reported as WriteFailed");
+    CheckEquals(ASWLog::ErrorKind::WriteFailed, reports[0].Kind, "A failed console write should be reported as WriteFailed");
     CheckEquals(std::string("Couldn't write to stdout"), reports[0].Message, "The report should name the stream");
 }
 //---------------------------------------------------------------------------
@@ -864,7 +864,7 @@ void TTest_ASWLog_ConsoleLog::Test_SetLevelColor_OverridesDefaultColor()
 
     // Assert
     CheckTrue(initialized, "Initialize should succeed");
-    CheckFalse(defaultInfoColor.empty(), "GetLevelColor should return a non-empty default color for Info");
+    CheckNotEmpty(defaultInfoColor, "GetLevelColor should return a non-empty default color for Info");
     CheckEquals(customColor, updatedColor, "GetLevelColor should reflect the color set via SetLevelColor");
     CheckContains(contents, customColor, "WriteLogEntry should use the custom color for Info");
     CheckNotContains(contents, defaultInfoColor, "The default color should no longer appear for Info once overridden");

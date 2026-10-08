@@ -440,7 +440,7 @@ void TTest_ASWLog_MultiLog::Test_Close_AllowsInitializeAgain()
     // Assert
     CheckTrue(firstInitialize, "The first Initialize should succeed");
     CheckTrue(secondInitialize, "Initialize after Close should succeed");
-    CheckTrue(levelAfterSecondInitialize == ASWLog::Level::Error, "Initialize after Close should seed the level from the new config");
+    CheckEquals(ASWLog::Level::Error, levelAfterSecondInitialize, "Initialize after Close should seed the level from the new config");
     CheckContains(ReadFileText(fileA), "after_reinitialize", "Initialize after Close should initialize the sinks again");
 }
 //---------------------------------------------------------------------------
@@ -736,7 +736,7 @@ void TTest_ASWLog_MultiLog::Test_Log_AtLevelOffIsNotFannedOut()
     multiLog.LogForceRaw(ASWLog::Level::Info, "forced_raw");
 
     // Assert
-    CheckTrue(callsAtOffLevel.empty(), "A message at Off should not reach any sink, even when forced");
+    CheckEmpty(callsAtOffLevel, "A message at Off should not reach any sink, even when forced");
     CheckTrue(sink.Calls == std::vector<std::string>{ "LogForce:forced", "LogForceRaw:forced_raw" },
         "With the composite's minimum level at Off, only forced entries should be fanned out");
 }
@@ -787,25 +787,17 @@ void TTest_ASWLog_MultiLog::Test_Log_ThrowingSinkDoesNotStopOtherSinks()
     multiLog.AddLogger(throwingSink);
     multiLog.AddLogger(fileSink);
 
-    bool threw = false;
-
     // Act
-    try
-    {
-        multiLog.LogInfo("log_message");
-        multiLog.LogRaw(ASWLog::Level::Info, "raw_message\n");
-        multiLog.LogForce(ASWLog::Level::Info, "force_message");
-        multiLog.LogForceRaw(ASWLog::Level::Info, "force_raw_message\n");
-    }
-    catch (...)
-    {
-        threw = true;
-    }
+    CheckNoThrow([&] {
+            multiLog.LogInfo("log_message");
+            multiLog.LogRaw(ASWLog::Level::Info, "raw_message\n");
+            multiLog.LogForce(ASWLog::Level::Info, "force_message");
+            multiLog.LogForceRaw(ASWLog::Level::Info, "force_raw_message\n");
+        }, "An exception from one sink should not escape the composite");
     fileSink.Close();
 
     // Assert
     const auto contents = ReadFileText(file);
-    CheckFalse(threw, "An exception from one sink should not escape the composite");
     CheckContains(contents, "log_message", "Log should still reach the other sinks");
     CheckContains(contents, "raw_message", "LogRaw should still reach the other sinks");
     CheckContains(contents, "force_message", "LogForce should still reach the other sinks");
@@ -881,7 +873,7 @@ void TTest_ASWLog_MultiLog::Test_Reconfigure_PassesConfigToEverySink()
     // Assert
     const std::vector<std::string> twoReconfigures{ "Reconfigure", "Reconfigure" };
     CheckFalse(reconfiguredBeforeInitialize, "Reconfigure() should fail before Initialize()");
-    CheckTrue(callsBeforeInitialize.empty(), "Reconfigure() before Initialize() should not reach the sinks");
+    CheckEmpty(callsBeforeInitialize, "Reconfigure() before Initialize() should not reach the sinks");
     CheckFalse(reconfiguredWithFailure, "Reconfigure() should return false if any sink's Reconfigure() fails");
     CheckTrue(reconfigured, "Reconfigure() should return true once every sink's Reconfigure() succeeds");
     CheckTrue(failingSink.Calls == twoReconfigures, "Each Reconfigure() should reach the failing sink");
@@ -966,7 +958,7 @@ void TTest_ASWLog_MultiLog::Test_SetEnabled_FalseStopsFanOut()
     multiLog.LogInfo("enabled_again");
 
     // Assert
-    CheckTrue(callsWhileDisabled.empty(), "A disabled composite should fan out nothing, not even forced entries");
+    CheckEmpty(callsWhileDisabled, "A disabled composite should fan out nothing, not even forced entries");
     CheckTrue(sink.IsEnabled(), "Disabling the composite should not change its sinks");
     CheckTrue(sink.Calls == std::vector<std::string>{ "Log:enabled_again" }, "Fan-out should resume once enabled again");
 }

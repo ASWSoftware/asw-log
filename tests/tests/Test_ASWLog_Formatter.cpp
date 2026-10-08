@@ -285,20 +285,8 @@ void TTest_ASWLog_Formatter::Test_FormatLine_MemoryFields()
     const auto line = ASWLog::TASWTextFormatter::FormatLine(MakeRecord("memory"), config);
 
     // Assert
-    const auto peakPos = line.find("][PWS:");
-    CheckStartsWith(line, "[WS:", "The working set should come first: " + line);
-    CheckTrue(peakPos != std::string::npos, "The peak working set should follow: " + line);
-    CheckEndsWith(line, "]: memory", "The message should follow the fields: " + line);
-
-    if (peakPos != std::string::npos)
-    {
-        const auto isNumber = [](const std::string& text) {
-                return !text.empty() && text.find_first_not_of("0123456789") == std::string::npos;
-            };
-        const auto peakEnd = line.find(']', peakPos + 1);
-        CheckTrue(isNumber(line.substr(4, peakPos - 4)), "The working set should be a decimal number: " + line);
-        CheckTrue(isNumber(line.substr(peakPos + 6, peakEnd - peakPos - 6)), "The peak working set should be a decimal number: " + line);
-    }
+    CheckMatches(line, R"(\[WS:[0-9]+\]\[PWS:[0-9]+\]: memory)",
+        "The working set, then the peak working set, each a decimal number, should come before the message");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_Formatter::Test_FormatLine_NoFields()
@@ -357,7 +345,7 @@ void TTest_ASWLog_Formatter::Test_Formatter_ReceivesRecordFromLoggingThread()
     {
         const auto& record = records[0];
         CheckTrue(record.Timestamp == FixedTime, "The record's time should come from the logger's NowUTC()");
-        CheckTrue(record.LogLevel == ASWLog::Level::Debug, "The record should have the entry's level");
+        CheckEquals(ASWLog::Level::Debug, record.LogLevel, "The record should have the entry's level");
         CheckEquals(std::string("from worker"), record.Message, "The record should have the message");
         CheckEquals(loggedLine, record.Line, "The record should have the caller's source location");
         CheckEquals(ASWLog::GetCurrentOSProcessId(), record.ProcessId, "The record should have the process id");
