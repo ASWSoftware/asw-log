@@ -255,6 +255,21 @@ public:
     }
 };
 
+// A formatter that formats raw entries too, as "raw|message", and the others as "line|message"
+class TRawFormattingFormatter final : public ASWLog::IASWLogFormatter
+{
+public:
+    std::string Format(const ASWLog::TASWLogRecord& record, const ASWLog::TASWLogConfig& /*config*/) const override
+    {
+        return std::string(record.Raw ? "raw|" : "line|").append(record.Message);
+    }
+
+    bool FormatsRawEntries() const noexcept override
+    {
+        return true;
+    }
+};
+
 // A faulty user formatter: throws for every line (IASWLogFormatter::Format() may throw; the line is then dropped)
 class TThrowingFormatter final : public ASWLog::IASWLogFormatter
 {
@@ -409,6 +424,7 @@ TTest_ASWLog_TextLogBase::TTest_ASWLog_TextLogBase()
     RegisterTest(&TTest_ASWLog_TextLogBase::Test_Log_FormatsFiltersAndCallsAfterEntry, "Log_FormatsFiltersAndCallsAfterEntry");
     RegisterTest(&TTest_ASWLog_TextLogBase::Test_Log_MinimumLevelOffAllowsOnlyForcedEntries, "Log_MinimumLevelOffAllowsOnlyForcedEntries");
     RegisterTest(&TTest_ASWLog_TextLogBase::Test_Log_ThrowingWriteDoesNotEscape, "Log_ThrowingWriteDoesNotEscape");
+    RegisterTest(&TTest_ASWLog_TextLogBase::Test_LogRaw_FormatterCanFormatRawEntries, "LogRaw_FormatterCanFormatRawEntries");
     RegisterTest(&TTest_ASWLog_TextLogBase::Test_LogRaw_WritesMessageAsIs, "LogRaw_WritesMessageAsIs");
     RegisterTest(&TTest_ASWLog_TextLogBase::Test_OnLogEntry_CallbackCanReconfigureTheLogger, "OnLogEntry_CallbackCanReconfigureTheLogger");
     RegisterTest(&TTest_ASWLog_TextLogBase::Test_Reconfigure_AppliesNewConfigButKeepsLevel, "Reconfigure_AppliesNewConfigButKeepsLevel");
@@ -1256,6 +1272,40 @@ void TTest_ASWLog_TextLogBase::Test_Log_ThrowingWriteDoesNotEscape()
     CheckTrue(output.Lines == std::vector<std::string>{ "[INFO]: after_throw\n" }, "Logging should work after a failed write");
     CheckTrue(reportedMessages == std::vector<std::string>{ "Dropped an entry: write failed", "Dropped an entry: write failed" },
         "Each dropped entry should be reported");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_TextLogBase::Test_LogRaw_FormatterCanFormatRawEntries()
+{
+    // Arrange: a synchronous and an asynchronous logger whose formatter formats raw entries too
+    TMemoryOutput syncOutput;
+    TMemoryOutput asyncOutput;
+    auto syncConfig = MakeQuietConfig();
+    syncConfig.Line.Formatter = std::make_shared<const TRawFormattingFormatter>();
+    auto asyncConfig = MakeAsyncConfig();
+    asyncConfig.Line.Formatter = syncConfig.Line.Formatter;
+    TMemoryTextLog syncLog(syncOutput);
+    TMemoryTextLog asyncLog(asyncOutput);
+    CheckTrue(syncLog.Initialize(syncConfig), "Initialize should succeed");
+    CheckTrue(asyncLog.Initialize(asyncConfig), "Initialize should succeed (async)");
+
+    const auto logEntries = [](TMemoryTextLog& log) {
+            log.LogRaw(ASWLog::Level::Debug, "filtered_raw");
+            log.LogRaw(ASWLog::Level::Info, "partial");
+            log.LogForceRaw(ASWLog::Level::Trace, "forced\n");
+            log.LogInfo("formatted");
+        };
+
+    // Act
+    logEntries(syncLog);
+    logEntries(asyncLog);
+    asyncLog.Flush(); // Waits for the queued entries
+
+    // Assert
+    const std::vector<std::string> expected{ "raw|partial\n", "raw|forced\n\n", "line|formatted\n" };
+    CheckTrue(syncOutput.Lines == expected, "Raw entries should be formatted and get the line ending");
+    CheckTrue(syncOutput.EndsLine == std::vector<bool>{ true, true, true }, "A formatted raw entry should end its line");
+    CheckTrue(asyncOutput.Lines == expected, "Queued raw entries should be formatted and get the line ending");
+    CheckTrue(asyncOutput.EndsLine == std::vector<bool>{ true, true, true }, "A queued formatted raw entry should end its line");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_TextLogBase::Test_LogRaw_WritesMessageAsIs()

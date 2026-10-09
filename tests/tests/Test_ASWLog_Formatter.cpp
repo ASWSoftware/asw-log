@@ -49,6 +49,7 @@ limitations under the License.
 #include "ASWLog_Utils.h"
 //---------------------------------------------------------------------------
 #include "UT_Helper_DateTime.h"
+#include "UT_Helper_JSON.h"
 //---------------------------------------------------------------------------
 
 namespace ASWUnitTests
@@ -181,6 +182,12 @@ TTest_ASWLog_Formatter::TTest_ASWLog_Formatter()
     RegisterTest(&TTest_ASWLog_Formatter::Test_FormatLine_TimestampFollowsZoneAndPrecision, "FormatLine_TimestampFollowsZoneAndPrecision");
     RegisterTest(&TTest_ASWLog_Formatter::Test_Formatter_ReceivesRecordFromLoggingThread, "Formatter_ReceivesRecordFromLoggingThread");
     RegisterTest(&TTest_ASWLog_Formatter::Test_Formatter_SharedByTwoLoggers, "Formatter_SharedByTwoLoggers");
+    RegisterTest(&TTest_ASWLog_Formatter::Test_JSONFormatter_DefaultFields, "JSONFormatter_DefaultFields");
+    RegisterTest(&TTest_ASWLog_Formatter::Test_JSONFormatter_EachShowOption, "JSONFormatter_EachShowOption");
+    RegisterTest(&TTest_ASWLog_Formatter::Test_JSONFormatter_EscapesTheTexts, "JSONFormatter_EscapesTheTexts");
+    RegisterTest(&TTest_ASWLog_Formatter::Test_JSONFormatter_FileLoggerWritesJSONLines, "JSONFormatter_FileLoggerWritesJSONLines");
+    RegisterTest(&TTest_ASWLog_Formatter::Test_JSONFormatter_RawEntries, "JSONFormatter_RawEntries");
+    RegisterTest(&TTest_ASWLog_Formatter::Test_JSONFormatter_TimeFollowsZoneAndPrecision, "JSONFormatter_TimeFollowsZoneAndPrecision");
     RegisterTest(&TTest_ASWLog_Formatter::Test_PatternFormatter_AffixesOnlyAroundAValue, "PatternFormatter_AffixesOnlyAroundAValue");
     RegisterTest(&TTest_ASWLog_Formatter::Test_PatternFormatter_BracesAndPlainText, "PatternFormatter_BracesAndPlainText");
     RegisterTest(&TTest_ASWLog_Formatter::Test_PatternFormatter_DefaultLayoutMatchesTextFormatter, "PatternFormatter_DefaultLayoutMatchesTextFormatter");
@@ -426,6 +433,178 @@ void TTest_ASWLog_Formatter::Test_Formatter_SharedByTwoLoggers()
         "Logger A's file should have its 100 lines in the shared format");
     CheckTrue(contentsB.starts_with("counted|b\n") && contentsB.size() == 100 * std::string("counted|b\n").size(),
         "Logger B's file should have its 100 lines in the shared format");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_Formatter::Test_JSONFormatter_DefaultFields()
+{
+    // Arrange
+    const ASWLog::TASWJSONFormatter formatter;
+    const ASWLog::TASWLogConfig config;
+    auto categorized = MakeRecord("from net");
+    categorized.Category = "Net";
+
+    // Act
+    const auto line = formatter.Format(MakeRecord("msg"), config);
+    const auto categorizedLine = formatter.Format(categorized, config);
+
+    // Assert
+    CheckEquals(std::string(R"({"time":"2026-09-21T14:13:20.123Z","epoch_ms":1790000000123,"level":"WARN","pid":1234,"tid":5678,"message":"msg"})"),
+        line, "The default fields should be written as members, in the built-in layout's order");
+    CheckEquals(std::string(R"({"time":"2026-09-21T14:13:20.123Z","epoch_ms":1790000000123,"level":"WARN","category":"Net","pid":1234,"tid":5678,"message":"from net"})"),
+        categorizedLine, "The category should follow the level");
+    CheckTrue(IsJSONObjectLine(line) && IsJSONObjectLine(categorizedLine), "Each line should be one JSON object");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_Formatter::Test_JSONFormatter_EachShowOption()
+{
+    // Arrange: every field but memory use, memory use only, and no fields at all
+    ASWLog::TASWLogConfig allConfig;
+    allConfig.Line.ShowFunctionName = true;
+    allConfig.Line.ShowSourceLine = true;
+    auto memoryConfig = MakeConfigWithoutFields("unused.log");
+    memoryConfig.Line.ShowWorkingSet = true;
+    memoryConfig.Line.ShowPeakWorkingSet = true;
+    auto noFieldsConfig = MakeConfigWithoutFields("unused.log");
+    noFieldsConfig.Line.ShowCategory = false;
+
+    const auto location = std::source_location::current();
+    auto record = MakeRecord("all fields", location);
+    record.Category = "Net";
+    record.ProcessId = std::numeric_limits<std::uint32_t>::max();
+    record.ThreadId = 0;
+    const ASWLog::TASWJSONFormatter formatter;
+
+    // Act
+    const auto allLine = formatter.Format(record, allConfig);
+    const auto memoryLine = formatter.Format(MakeRecord("memory"), memoryConfig);
+    const auto noFieldsLine = formatter.Format(record, noFieldsConfig);
+
+    // Assert
+    const auto expected = std::format(R"({{"time":"2026-09-21T14:13:20.123Z","epoch_ms":1790000000123,"level":"WARN","category":"Net",)"
+        R"("pid":4294967295,"tid":0,"function":"{}","file":"{}","line":{},"message":"all fields"}})", location.function_name(),
+        std::filesystem::path(location.file_name()).filename().string(), location.line());
+    CheckEquals(expected, allLine, "Each field should be written, in the built-in layout's order");
+    CheckMatches(memoryLine, R"(\{"ws":[1-9][0-9]*,"pws":[1-9][0-9]*,"message":"memory"\})",
+        "The working set and peak working set should be numbers");
+    CheckEquals(std::string(R"({"message":"all fields"})"), noFieldsLine, "With every field off, only the message should remain");
+    CheckTrue(IsJSONObjectLine(allLine) && IsJSONObjectLine(memoryLine) && IsJSONObjectLine(noFieldsLine), "Each line should be one JSON object");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_Formatter::Test_JSONFormatter_EscapesTheTexts()
+{
+    // Arrange: quotes, a backslash, control characters and invalid UTF-8 in the category and the message
+    const auto config = MakeConfigWithoutFields("unused.log");
+    auto record = MakeRecord("say \"hi\" \\ \n\x01 \xCE\xBB \xFF" "end");
+    record.Category = "N\"et\t";
+
+    // Act
+    const auto line = ASWLog::TASWJSONFormatter().Format(record, config);
+
+    // Assert
+    CheckEquals(std::string(R"({"category":"N\"et\t","message":"say \"hi\" \\ \n\u0001 )" "\xCE\xBB " "\xEF\xBF\xBD" R"(end"})"), line,
+        "The texts should be escaped, valid UTF-8 kept and invalid UTF-8 replaced with U+FFFD");
+    CheckTrue(IsJSONObjectLine(line), "The line should be one JSON object");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_Formatter::Test_JSONFormatter_FileLoggerWritesJSONLines()
+{
+    // Arrange: every startup line (on Windows the drive and application info hold backslashes) and the shutdown line
+    ASWLog::TASWLogConfig config;
+    config.File.FolderPath = TestTempDir;
+    config.File.FilePath = "json.log";
+    config.File.OpenRetryCount = 1;
+    config.Startup.Banner = "Banner \"quoted\"";
+    config.Shutdown.Banner = "Bye";
+    config.Line.Formatter = std::make_shared<const ASWLog::TASWJSONFormatter>();
+    bool initialized = false;
+
+    // Act
+    {
+        ASWLog::TASWFileLog logger;
+        initialized = logger.Initialize(config);
+        ASWLog::TASWCategoryLog netLog("Net", logger);
+
+        netLog.LogWarn("from \"net\"");
+        logger.LogInfo("first line\nsecond line\r\n\ttabbed");
+        logger.LogRaw(ASWLog::Level::Info, "partial ");
+        logger.LogForceRaw(ASWLog::Level::Trace, "body\nmore\n");
+    }
+
+    const auto contents = ReadFileText(TestTempDir / "json.log");
+
+    // Assert
+    CheckTrue(initialized, "Initialize should succeed");
+    CheckEndsWith(contents, "}\n", "The file should end with a whole line");
+
+    std::vector<std::string> lines;
+
+    for (std::size_t start = 0; start < contents.size();)
+    {
+        const auto end = contents.find('\n', start);
+        lines.push_back(contents.substr(start, end - start));
+        start = end == std::string::npos ? contents.size() : end + 1;
+    }
+
+    AssertGreaterThanOrEqual(lines.size(), std::size_t(7), "The startup lines, four entries and the shutdown line should be written");
+
+    for (const auto& line : lines)
+        CheckTrue(IsJSONObjectLine(line), "Each line should be one JSON object: " + line);
+
+    CheckContains(lines.front(), R"("level":"INFO",)", "The startup lines should be JSON entries too");
+    CheckContains(contents, R"("message":"Banner \"quoted\""})", "The banner should be escaped");
+    CheckContains(contents, R"("level":"WARN","category":"Net","pid":)", "The category should be a member");
+    CheckContains(contents, R"("message":"from \"net\""})", "The message should be escaped");
+    CheckContains(contents, R"("message":"first line\nsecond line\r\n\ttabbed"})", "A multi-line message should stay on its line");
+    CheckContains(contents, R"("level":"INFO","pid":)", "A raw entry should have the default fields");
+    CheckContains(contents, R"(,"raw":true,"message":"partial "})" "\n", "A raw entry should be marked and end its line");
+    CheckContains(contents, R"("level":"TRACE",)", "A forced raw entry should keep its level");
+    CheckContains(contents, R"(,"raw":true,"message":"body\nmore\n"})" "\n", "A raw entry's line breaks should be escaped");
+    CheckContains(lines.back(), "Logger shutdown: ", "The shutdown line should be the last line");
+    CheckEndsWith(lines.back(), R"(, Bye"})", "The shutdown line should have its banner");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_Formatter::Test_JSONFormatter_RawEntries()
+{
+    // Arrange
+    const ASWLog::TASWJSONFormatter formatter;
+    const auto config = MakeConfigWithoutFields("unused.log");
+    auto record = MakeRecord("partial ");
+    record.Raw = true;
+
+    // Act
+    const auto line = formatter.Format(record, config);
+
+    // Assert
+    CheckTrue(formatter.FormatsRawEntries(), "The JSON formatter should format raw entries, so each line is a whole entry");
+    CheckFalse(ASWLog::TASWTextFormatter().FormatsRawEntries(), "The built-in layout should leave raw entries as they are");
+    CheckFalse(ASWLog::TASWPatternFormatter("{message}").FormatsRawEntries(), "A pattern should leave raw entries as they are");
+    CheckEquals(std::string(R"({"raw":true,"message":"partial "})"), line, "A raw entry should be marked before the message");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_Formatter::Test_JSONFormatter_TimeFollowsZoneAndPrecision()
+{
+    // Arrange: FixedTime in US Eastern daylight time with microseconds, and a time 1.49975 s before 1970 (the epoch
+    // milliseconds round down, like the time's)
+    auto localConfig = MakeConfigWithoutFields("unused.log");
+    localConfig.Line.ShowTimestamp = true;
+    localConfig.Line.TimestampZone = ASWLog::TimeZone::Local;
+    localConfig.Line.TimestampPrecision = ASWLog::TimePrecision::Microseconds;
+    auto utcConfig = MakeConfigWithoutFields("unused.log");
+    utcConfig.Line.ShowTimestamp = true;
+    auto before1970 = MakeRecord("old");
+    before1970.Timestamp = std::chrono::system_clock::time_point(std::chrono::microseconds(-1499750));
+    const ASWLog::TASWJSONFormatter formatter;
+    const TScopedTimeZone timeZone("EST5EDT");
+
+    // Act
+    const auto localLine = formatter.Format(MakeRecord("local"), localConfig);
+    const auto oldLine = formatter.Format(before1970, utcConfig);
+
+    // Assert
+    CheckEquals(std::string(R"({"time":"2026-09-21T10:13:20.123000-04:00","epoch_ms":1790000000123,"message":"local"})"), localLine,
+        "The time should follow the zone and precision; the epoch milliseconds don't depend on them");
+    CheckEquals(std::string(R"({"time":"1969-12-31T23:59:58.500Z","epoch_ms":-1500,"message":"old"})"), oldLine,
+        "A time before 1970 should have negative epoch milliseconds, rounded down");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_Formatter::Test_PatternFormatter_AffixesOnlyAroundAValue()

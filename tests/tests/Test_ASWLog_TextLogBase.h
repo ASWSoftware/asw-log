@@ -61,6 +61,7 @@ private: // Test methods
     void Test_Log_FormatsFiltersAndCallsAfterEntry();
     void Test_Log_MinimumLevelOffAllowsOnlyForcedEntries();
     void Test_Log_ThrowingWriteDoesNotEscape();
+    void Test_LogRaw_FormatterCanFormatRawEntries();
     void Test_LogRaw_WritesMessageAsIs();
     void Test_OnLogEntry_CallbackCanReconfigureTheLogger();
     void Test_Reconfigure_AppliesNewConfigButKeepsLevel();

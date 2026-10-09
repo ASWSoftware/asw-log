@@ -213,11 +213,12 @@ struct TASWFileConfig
 /////////////////////////////////////////////////////////////////////////////
 struct TASWLineConfig
 {
-    // Formats each entry's line (not LogRaw entries). Empty: TASWTextFormatter's layout, from the Show* options below.
-    // For a layout of your own, assign a TASWPatternFormatter (e.g. "{time} {level:5} {message}") or your own
-    // formatter. One formatter can be shared by several loggers.
+    // Formats each entry's line (LogRaw entries only if the formatter says so, as TASWJSONFormatter does). Empty:
+    // TASWTextFormatter's layout, from the Show* options below. For a layout of your own, assign a TASWPatternFormatter
+    // (e.g. "{time} {level:5} {message}") or your own formatter; for JSON Lines, a TASWJSONFormatter. One formatter can
+    // be shared by several loggers.
     std::shared_ptr<const IASWLogFormatter> Formatter;
-    LineEnding Ending = LineEnding::LF; // Added after each line (not after LogRaw entries)
+    LineEnding Ending = LineEnding::LF; // Added after each formatted line (not after LogRaw entries written as is)
 
     // The clock and precision of the timestamps, e.g. 2026-09-28T21:02:44.342Z (the defaults) or, with
     // TimeZone::Local and TimePrecision::Microseconds, 2026-09-28T16:02:44.342519-05:00. The zone also sets when daily
@@ -227,7 +228,8 @@ struct TASWLineConfig
     TimeZone TimestampZone = TimeZone::UTC;
     TimePrecision TimestampPrecision = TimePrecision::Milliseconds;
 
-    // The fields TASWTextFormatter writes before the message (a TASWPatternFormatter's pattern decides its own)
+    // The fields TASWTextFormatter and TASWJSONFormatter write before the message (a TASWPatternFormatter's pattern
+    // decides its own)
     bool ShowTimestamp      = true; // The entry's time (see TimestampZone and TimestampPrecision)
     bool ShowLevel          = true;
     bool ShowCategory       = true; // The entry's category, if it has one (see TASWCategoryLog)

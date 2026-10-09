@@ -431,7 +431,9 @@ struct TASWLogRecord
     // category has none, or there is no category (see TASWCategoryLog::SetMinimumLevel()). A multi-log uses it for its
     // own check and empties it before passing the entry on, since its loggers apply their own minimum levels.
     std::optional<Level> CategoryLevel;
-    bool Raw = false; // Written as is, without the line layout or a line ending (LogRaw(), LogForceRaw())
+    // Written as is, without the line layout or a line ending (LogRaw(), LogForceRaw()), unless the formatter formats
+    // it (see IASWLogFormatter::FormatsRawEntries())
+    bool Raw = false;
     bool Forced = false; // Written whatever the minimum level (LogForce(), LogForceRaw())
     std::string_view Message;
     std::string_view Category; // The category's name, e.g. "Net" or "Net.Http"; empty if none (see TASWCategoryLog)

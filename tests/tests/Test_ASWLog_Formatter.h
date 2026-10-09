@@ -45,6 +45,12 @@ private: // Test methods
     void Test_FormatLine_TimestampFollowsZoneAndPrecision();
     void Test_Formatter_ReceivesRecordFromLoggingThread();
     void Test_Formatter_SharedByTwoLoggers();
+    void Test_JSONFormatter_DefaultFields();
+    void Test_JSONFormatter_EachShowOption();
+    void Test_JSONFormatter_EscapesTheTexts();
+    void Test_JSONFormatter_FileLoggerWritesJSONLines();
+    void Test_JSONFormatter_RawEntries();
+    void Test_JSONFormatter_TimeFollowsZoneAndPrecision();
     void Test_PatternFormatter_AffixesOnlyAroundAValue();
     void Test_PatternFormatter_BracesAndPlainText();
     void Test_PatternFormatter_DefaultLayoutMatchesTextFormatter();

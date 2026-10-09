@@ -292,6 +292,10 @@
             <DependentOn>..\..\..\tests\UT_Helper_DateTime.h</DependentOn>
             <BuildOrder>44</BuildOrder>
         </CppCompile>
+        <CppCompile Include="..\..\..\tests\UT_Helper_JSON.cpp">
+            <DependentOn>..\..\..\tests\UT_Helper_JSON.h</DependentOn>
+            <BuildOrder>49</BuildOrder>
+        </CppCompile>
         <CppCompile Include="ASWLogTests_VCL_GUI.cpp">
             <BuildOrder>0</BuildOrder>
         </CppCompile>

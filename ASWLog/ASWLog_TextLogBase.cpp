@@ -73,6 +73,19 @@ void TASWTextLogBase::AfterQueuedEntriesUnlocked(bool mustFlush)
 }
 
 //---------------------------------------------------------------------------
+// The fixed-layout crash line for 'record', as text or, for a TASWJSONFormatter logger, as JSON (see
+// StoreCrashLineSettingsUnlocked()). Allocates nothing.
+void TASWTextLogBase::AppendCrashLine(Detail::TCrashText& line, const TASWLogRecord& record) const noexcept
+{
+    const bool usesCRLF = m_CrashLineUsesCRLF.load(std::memory_order_relaxed);
+
+    if (m_CrashLineUsesJSON.load(std::memory_order_relaxed))
+        Detail::AppendCrashJSONLine(line, record, usesCRLF);
+    else
+        Detail::AppendCrashLine(line, record, usesCRLF);
+}
+
+//---------------------------------------------------------------------------
 bool TASWTextLogBase::Close() noexcept
 {
     try
@@ -184,14 +197,14 @@ void TASWTextLogBase::FlushForCrashUnlocked() noexcept
 /*
     TASWTextLogBase::FormatEntry
 
-    The line written for 'record' with 'config': its message as is for a Raw record, otherwise the formatter's line
-    followed by the line ending.
+    The line written for 'record' with 'config': the formatter's line followed by the line ending, or, for a Raw record
+    that the formatter doesn't format (see IsFormatted()), its message as is.
 */
 std::string TASWTextLogBase::FormatEntry(const TASWLogRecord& record, const TASWLogConfig& config)
 {
     std::string line;
 
-    if (record.Raw)
+    if (!IsFormatted(record, config))
     {
         line.reserve(record.Message.size() + 2);
         line.append(record.Message);
@@ -267,6 +280,23 @@ bool TASWTextLogBase::Initialize(const TASWLogConfig& config) noexcept
     {
         return false;
     }
+}
+
+//---------------------------------------------------------------------------
+/*
+    TASWTextLogBase::IsFormatted
+
+    True if 'record' gets the formatter's line and the line ending: every record but a Raw one, unless the formatter
+    formats Raw records too (IASWLogFormatter::FormatsRawEntries()).
+*/
+bool TASWTextLogBase::IsFormatted(const TASWLogRecord& record, const TASWLogConfig& config) noexcept
+{
+    if (!record.Raw)
+        return true;
+
+    const auto* formatter = config.Line.Formatter.get();
+
+    return formatter != nullptr && formatter->FormatsRawEntries();
 }
 
 //---------------------------------------------------------------------------
@@ -369,7 +399,7 @@ void TASWTextLogBase::OnCrash(std::string_view message, bool isInSignalHandler, 
     if (!isLineWritten)
     {
         Detail::TCrashText line;
-        Detail::AppendCrashLine(line, record, m_CrashLineUsesCRLF.load(std::memory_order_relaxed));
+        AppendCrashLine(line, record);
         WriteCrashLineDirect(line.View());
     }
 }
@@ -422,6 +452,7 @@ bool TASWTextLogBase::QueueRecord(const TASWLogRecord& record)
     entry.Record = record;
     entry.Record.Message = {};
     entry.Record.Category = {};
+    entry.EndsLine = IsFormatted(record, *config);
     entry.MustFlush = record.LogLevel >= config->Async.WaitAtLevel;
 
     if (config->OnLogEntry != nullptr && record.LogLevel >= config->OnLogEntryMinimumLevel)
@@ -661,6 +692,8 @@ void TASWTextLogBase::StoreCrashLineSettingsUnlocked() noexcept
 {
     const auto& config = GetConfigUnlocked();
     m_CrashLineUsesCRLF.store(config.Line.Ending == LineEnding::CRLF, std::memory_order_relaxed);
+    const bool usesJSON = dynamic_cast<const TASWJSONFormatter*>(config.Line.Formatter.get()) != nullptr;
+    m_CrashLineUsesJSON.store(usesJSON, std::memory_order_relaxed);
     m_WritesCrashLine.store(config.Shutdown.WriteCrashLine, std::memory_order_relaxed);
 }
 
@@ -881,10 +914,9 @@ void TASWTextLogBase::WriteBacktraceForCrash(const TWriteLine& writeLine, bool m
 */
 void TASWTextLogBase::WriteBacktraceForCrashDirect(bool mustClear, std::chrono::steady_clock::time_point deadline) noexcept
 {
-    const bool usesCRLF = m_CrashLineUsesCRLF.load(std::memory_order_relaxed);
-    WriteBacktraceForCrash([this, usesCRLF](const TASWLogRecord& record) {
+    WriteBacktraceForCrash([this](const TASWLogRecord& record) {
             Detail::TCrashText line;
-            Detail::AppendCrashLine(line, record, usesCRLF);
+            AppendCrashLine(line, record);
             WriteCrashLineDirect(line.View());
         }, mustClear, deadline);
 }
@@ -902,7 +934,7 @@ void TASWTextLogBase::WriteBacktraceForCrashUnlocked(std::chrono::steady_clock::
     const auto& config = GetConfigUnlocked();
     WriteBacktraceForCrash([this, &config](const TASWLogRecord& record) {
             const auto line = FormatEntry(record, config);
-            WriteLineUnlocked(record.LogLevel, line, !record.Raw);
+            WriteLineUnlocked(record.LogLevel, line, IsFormatted(record, config));
         }, true, deadline);
 }
 
@@ -971,8 +1003,10 @@ std::string TASWTextLogBase::WriteLogEntry(const TASWLogRecord& record)
     if (!PrepareWriteUnlocked(record.Timestamp))
         return {};
 
-    auto line = FormatEntry(record, GetConfigUnlocked());
-    WriteLineUnlocked(record.LogLevel, line, !record.Raw);
+    const auto& config = GetConfigUnlocked();
+    auto line = FormatEntry(record, config);
+    WriteLineUnlocked(record.LogLevel, line, IsFormatted(record, config));
+
     return line;
 }
 
@@ -1013,7 +1047,7 @@ void TASWTextLogBase::WriteQueuedEntries(std::deque<TQueuedEntry>& entries, std:
                 if (!EnsureReadyUnlocked() || !PrepareWriteUnlocked(entry.Record.Timestamp))
                     continue;
 
-                WriteLineUnlocked(entry.Record.LogLevel, entry.Line, !entry.Record.Raw);
+                WriteLineUnlocked(entry.Record.LogLevel, entry.Line, entry.EndsLine);
                 AfterEntryUnlocked();
                 entry.IsWritten = true;
                 mustFlush = mustFlush || entry.MustFlush;

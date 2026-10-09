@@ -70,10 +70,13 @@ struct TASWCrashHandlerOptions
 //   costs at most the line.
 // - A POSIX signal handler may only do async-signal-safe work, so there the line has a fixed layout,
 //   "[<UTC time>][CRITICAL][P:<pid>][T:<tid>]: Crash: <reason>", built without allocating and written straight to the
-//   file. Its time is UTC with milliseconds whatever TASWLineConfig::TimestampZone and TimestampPrecision say, since
-//   converting to local time isn't async-signal-safe. The buffered entries are flushed only if the logger's lock is free (fflush isn't on POSIX's list of
-//   async-signal-safe functions, but no other thread can use the file then). The backtrace's lines get the same
-//   layout, with their own level and category (after the level, as "[Net]"), and only if the backtrace's lock is free.
+//   file. A logger whose formatter is a TASWJSONFormatter gets it as JSON instead, {"time":"<UTC time>",
+//   "epoch_ms":<ms>,"level":"CRITICAL","pid":<pid>,"tid":<tid>,"message":"Crash: <reason>"}, whatever its Show*
+//   options say. Its time is UTC with milliseconds whatever TASWLineConfig::TimestampZone and TimestampPrecision say,
+//   since converting to local time isn't async-signal-safe. The buffered entries are flushed only if the logger's lock
+//   is free (fflush isn't on POSIX's list of async-signal-safe functions, but no other thread can use the file then).
+//   The backtrace's lines get the same layout, with their own level and category (after the level, as "[Net]", or as
+//   "category" in JSON), and only if the backtrace's lock is free.
 // - If a logger's lock stays busy until WaitTimeout has passed (e.g. the crash happened while that thread was
 //   writing an entry), its buffered entries are lost and only the fixed-layout lines (backtrace and crash line) are
 //   written, straight to the file.
@@ -139,6 +142,9 @@ public:
     void AppendDecimal(std::uint64_t value, int minDigits = 1) noexcept; // Padded with leading zeros to 'minDigits'
     void AppendHex(std::uint64_t value, int minDigits) noexcept; // "0x" and at least 'minDigits' upper case digits
     void AppendISO8601(std::chrono::system_clock::time_point time) noexcept; // "YYYY-MM-DDTHH:mm:ss.mmmZ"
+    // 'text' as a JSON string (see JSON::AppendString()), cut between characters if needed so that 'reserved'
+    // characters stay free after it; the string is always closed
+    void AppendJSONString(std::string_view text, std::size_t reserved) noexcept;
     std::size_t GetSize() const noexcept;
     void Truncate(std::size_t size) noexcept; // Cuts the text to 'size' characters, if it is longer
     std::string_view View() const noexcept;
@@ -170,6 +176,11 @@ inline constexpr std::string_view BacktraceEndText = "Backtrace end";
 // Appends the message of the line before a written backtrace of 'count' entries: "Backtrace: the last N entries below
 // the minimum level". Doesn't allocate, so a crash handler can use it too.
 void AppendBacktraceBeginText(TCrashText& text, std::size_t count) noexcept;
+
+// Appends the fixed-layout crash line for 'record' as a JSON object, for a logger that uses TASWJSONFormatter (see
+// the crash handling notes above), with a CRLF or LF ending. A text too long for the buffer is cut off, but the line
+// is always a whole JSON object, followed by the line ending.
+void AppendCrashJSONLine(TCrashText& line, const TASWLogRecord& record, bool usesCRLF) noexcept;
 
 // Appends the fixed-layout crash line for 'record' (see the crash handling notes above), with a CRLF or LF ending. A
 // message too long for the buffer is cut off, but the line always ends with the line ending.

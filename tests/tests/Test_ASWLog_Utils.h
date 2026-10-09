@@ -45,6 +45,10 @@ private: // Test methods
     void Test_GetWindowsEditionName_ProductTypes();
     void Test_IsRootFolder_DetectsRootFolders();
     void Test_IsRootFolder_ResolvesRelativePaths();
+    void Test_JSON_AppendString_EscapesQuotesBackslashAndControls();
+    void Test_JSON_AppendString_FindsSpecialCharactersAnywhereInALongText();
+    void Test_JSON_AppendString_KeepsValidUTF8();
+    void Test_JSON_AppendString_ReplacesInvalidUTF8();
     void Test_MatchesWildcard_Patterns();
     void Test_RenameWithoutReplacing_KeepsExistingTarget();
     void Test_Time_GetUTCOffsetMinutes_FollowsDaylightSavingTime();

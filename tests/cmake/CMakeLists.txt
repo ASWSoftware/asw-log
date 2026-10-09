@@ -45,6 +45,7 @@ add_executable(ASWLogTests
     "${ASWLOG_TESTS_DIR}/Test_ASWLog_Utils.cpp"
     "${ASWLOG_TESTS_DIR}/Test_ASWLog_Version.cpp"
     "${ASWLOG_TESTS_DIR}/UT_Helper_DateTime.cpp"
+    "${ASWLOG_TESTS_DIR}/UT_Helper_JSON.cpp"
 )
 
 target_include_directories(ASWLogTests PRIVATE

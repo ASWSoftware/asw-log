@@ -599,6 +599,42 @@ void TCrashText::AppendISO8601(std::chrono::system_clock::time_point time) noexc
 }
 
 //---------------------------------------------------------------------------
+void TCrashText::AppendJSONString(std::string_view text, std::size_t reserved) noexcept
+{
+    // The text ends before the closing quote and 'reserved'
+    const std::size_t limit = Capacity - std::min(Capacity, reserved + 1);
+    char escape[6];
+    std::size_t index = 0;
+
+    Append("\"");
+
+    while (index < text.size())
+    {
+        const auto piece = NextJSONPiece(text, index, escape);
+        const std::size_t room = limit > m_Size ? limit - m_Size : 0;
+        if (piece.Text.size() <= room)
+        {
+            Append(piece.Text);
+            continue;
+        }
+
+        // A run of plain characters is cut between UTF-8 sequences; an escape or U+FFFD is left out whole
+        if (!piece.IsEscape)
+        {
+            std::size_t count = room;
+            while (count > 0 && (static_cast<unsigned char>(piece.Text[count]) & 0xC0) == 0x80)
+                --count;
+
+            Append(piece.Text.substr(0, count));
+        }
+
+        break;
+    }
+
+    Append("\"");
+}
+
+//---------------------------------------------------------------------------
 std::size_t TCrashText::GetSize() const noexcept
 {
     return m_Size;
@@ -689,6 +725,45 @@ void AppendBacktraceBeginText(TCrashText& text, std::size_t count) noexcept
     text.AppendDecimal(count);
     text.Append(count == 1 ? " entry" : " entries");
     text.Append(" below the minimum level");
+}
+
+//---------------------------------------------------------------------------
+void AppendCrashJSONLine(TCrashText& line, const TASWLogRecord& record, bool usesCRLF) noexcept
+{
+    // The room kept after the category: the ids, "raw", an empty message, the closing brace and the line ending
+    constexpr std::size_t CategoryReserved = 64;
+    const std::string_view ending = usesCRLF ? "\r\n" : "\n";
+
+    char digits[24];
+    const auto sinceEpoch = std::chrono::floor<std::chrono::milliseconds>(record.Timestamp.time_since_epoch());
+    const auto result = std::to_chars(digits, digits + sizeof(digits), static_cast<std::int64_t>(sinceEpoch.count()));
+
+    line.Append("{\"time\":\"");
+    line.AppendISO8601(record.Timestamp);
+    line.Append("\",\"epoch_ms\":");
+    line.Append(std::string_view(digits, static_cast<std::size_t>(result.ptr - digits)));
+    line.Append(",\"level\":\"");
+    line.Append(Level_ToString(record.LogLevel));
+    line.Append("\"");
+
+    if (!record.Category.empty())
+    {
+        line.Append(",\"category\":");
+        line.AppendJSONString(record.Category, CategoryReserved);
+    }
+
+    line.Append(",\"pid\":");
+    line.AppendDecimal(record.ProcessId);
+    line.Append(",\"tid\":");
+    line.AppendDecimal(record.ThreadId);
+
+    if (record.Raw)
+        line.Append(",\"raw\":true");
+
+    line.Append(",\"message\":");
+    line.AppendJSONString(record.Message, 1 + ending.size());
+    line.Append("}");
+    line.Append(ending);
 }
 
 //---------------------------------------------------------------------------

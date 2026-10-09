@@ -229,7 +229,8 @@ public:
 
     // --- Non-virtual Inline Logging Methods ---
     // Each passes a record with the caller's source location to Write(). LogRaw() writes the message as is, without the
-    // line layout or a line ending (e.g. a multi-line HTTP body); LogForce() writes it whatever the minimum level.
+    // line layout or a line ending (e.g. a multi-line HTTP body; a TASWJSONFormatter logger writes it as a JSON object
+    // with "raw":true instead); LogForce() writes it whatever the minimum level.
     inline void Log(Level level, std::string_view msg, std::source_location loc = std::source_location::current()) noexcept
     {
         Write(MakeRecord(level, msg, loc, false, false));

@@ -68,6 +68,8 @@ limitations under the License.
 #include "ASWLog_Formatter.h"
 #include "ASWLog_Utils.h"
 //---------------------------------------------------------------------------
+#include "UT_Helper_JSON.h"
+//---------------------------------------------------------------------------
 
 // The sanitizers replace or watch the signal handlers and the stack, which a stack overflow test can't work with
 #if defined(__SANITIZE_ADDRESS__) || defined(__SANITIZE_THREAD__)
@@ -172,6 +174,48 @@ void ExitAsPassedOnFromSignal(int signalNumber, siginfo_t* /*info*/, void* /*con
     _exit(signalNumber == SIGABRT ? PassedOnAbortExitCode : PassedOnFaultExitCode);
 }
 #endif
+
+// Calls HandleCrash(reason), with a 50 ms WaitTimeout, while another thread holds the lock of 'log', so the crash lines
+// are written straight to its file in the fixed layout. Returns how long HandleCrash() took.
+std::chrono::milliseconds HandleCrashWhileLocked(TLockableFileLog& log, std::string_view reason)
+{
+    std::mutex mutex;
+    std::condition_variable changed;
+    bool isLocked = false;
+    bool mayUnlock = false;
+    std::thread holder([&] {
+        std::lock_guard<std::mutex> logLock(log.GetMutex());
+        std::unique_lock<std::mutex> lock(mutex);
+        isLocked = true;
+        changed.notify_all();
+        changed.wait(lock, [&] {
+            return mayUnlock;
+                    });
+                });
+
+    {
+        std::unique_lock<std::mutex> lock(mutex);
+        changed.wait(lock, [&] {
+                    return isLocked;
+                });
+    }
+
+    ASWLog::TASWCrashHandlerOptions options;
+    options.WaitTimeout = std::chrono::milliseconds(50);
+    const auto start = std::chrono::steady_clock::now();
+    ASWLog::HandleCrash(reason, options);
+    const auto elapsed = std::chrono::steady_clock::now() - start;
+
+    {
+        std::lock_guard<std::mutex> lock(mutex);
+        mayUnlock = true;
+    }
+
+    changed.notify_all();
+    holder.join();
+
+    return std::chrono::duration_cast<std::chrono::milliseconds>(elapsed);
+}
 
 // An OnError handler for the tests that cause failures on purpose, so their reports don't go to stderr
 void IgnoreError(const ASWLog::TASWLogError& /*error*/)
@@ -518,6 +562,8 @@ std::string TCrashingFormatter::Format(const ASWLog::TASWLogRecord& record, cons
 TTest_ASWLog_CrashHandler::TTest_ASWLog_CrashHandler()
     : inherited("ASWLog_CrashHandler_Tests")
 {
+    RegisterTest(&TTest_ASWLog_CrashHandler::Test_AppendCrashJSONLine_CutsALongTextButStaysValid, "AppendCrashJSONLine_CutsALongTextButStaysValid");
+    RegisterTest(&TTest_ASWLog_CrashHandler::Test_AppendCrashJSONLine_UsesTheFixedLayout, "AppendCrashJSONLine_UsesTheFixedLayout");
     RegisterTest(&TTest_ASWLog_CrashHandler::Test_AppendCrashLine_CutsALongMessageButKeepsTheEnding, "AppendCrashLine_CutsALongMessageButKeepsTheEnding");
     RegisterTest(&TTest_ASWLog_CrashHandler::Test_AppendCrashLine_ShowsTheCategory, "AppendCrashLine_ShowsTheCategory");
     RegisterTest(&TTest_ASWLog_CrashHandler::Test_AppendCrashLine_UsesTheFixedLayout, "AppendCrashLine_UsesTheFixedLayout");
@@ -532,6 +578,7 @@ TTest_ASWLog_CrashHandler::TTest_ASWLog_CrashHandler()
     RegisterTest(&TTest_ASWLog_CrashHandler::Test_HandleCrash_ConsoleLogWritesTheLineToStdErr, "HandleCrash_ConsoleLogWritesTheLineToStdErr");
     RegisterTest(&TTest_ASWLog_CrashHandler::Test_HandleCrash_DisabledLoggerIsOnlyFlushed, "HandleCrash_DisabledLoggerIsOnlyFlushed");
     RegisterTest(&TTest_ASWLog_CrashHandler::Test_HandleCrash_FlushesAndWritesTheCrashLine, "HandleCrash_FlushesAndWritesTheCrashLine");
+    RegisterTest(&TTest_ASWLog_CrashHandler::Test_HandleCrash_JSONLoggerGetsJSONLinesWhenTheLockStaysBusy, "HandleCrash_JSONLoggerGetsJSONLinesWhenTheLockStaysBusy");
     RegisterTest(&TTest_ASWLog_CrashHandler::Test_HandleCrash_SkipsClosedAndDestroyedLoggers, "HandleCrash_SkipsClosedAndDestroyedLoggers");
     RegisterTest(&TTest_ASWLog_CrashHandler::Test_HandleCrash_SyncsTheLineAtSyncToDiskAtLevel, "HandleCrash_SyncsTheLineAtSyncToDiskAtLevel");
     RegisterTest(&TTest_ASWLog_CrashHandler::Test_HandleCrash_ThrowingFormatterGetsTheFixedLayoutLine, "HandleCrash_ThrowingFormatterGetsTheFixedLayoutLine");
@@ -571,6 +618,96 @@ void TTest_ASWLog_CrashHandler::TearDown_Test(ITestCase& /*testCase*/)
 
 // /////// Begin tests after this line ///////////////////////
 
+//---------------------------------------------------------------------------
+void TTest_ASWLog_CrashHandler::Test_AppendCrashJSONLine_CutsALongTextButStaysValid()
+{
+    // Arrange: a category that alone would fill the buffer, and messages of two-byte characters and quotes, each
+    // escaped as two characters, too long for the buffer; 0 to 3 leading characters move the cut through every
+    // position in the repeating 4-byte unit
+    ASWLog::TASWLogRecord categorized;
+    const std::string category(3000, 'c');
+    categorized.Category = category;
+    categorized.Message = "after";
+
+    std::vector<std::string> messages;
+
+    for (std::size_t offset = 0; offset < 4; ++offset)
+    {
+        std::string message(offset, 'x');
+
+        for (int unit = 0; unit < 1000; ++unit)
+            message += "\xCE\xBB\"";
+
+        messages.push_back(message);
+    }
+
+    // Act
+    ASWLog::Detail::TCrashText categoryLine;
+    ASWLog::Detail::AppendCrashJSONLine(categoryLine, categorized, true);
+
+    std::vector<std::string> messageLines;
+
+    for (const auto& message : messages)
+    {
+        ASWLog::TASWLogRecord record;
+        record.Message = message;
+        ASWLog::Detail::TCrashText line;
+        ASWLog::Detail::AppendCrashJSONLine(line, record, true);
+        messageLines.emplace_back(line.View());
+    }
+
+    // Assert
+    const std::string categoryText(categoryLine.View());
+    CheckEndsWith(categoryText, R"(,"pid":0,"tid":0,"message":"after"})" "\r\n", "A cut category should leave room for the rest");
+    CheckTrue(IsJSONObjectLine(categoryText.substr(0, categoryText.size() - 2)), "The line with a cut category should be one JSON object");
+
+    for (const auto& text : messageLines)
+    {
+        CheckLessThanOrEqual(text.size(), ASWLog::Detail::TCrashText::Capacity, "The line should fit the buffer");
+        CheckGreaterThan(text.size(), ASWLog::Detail::TCrashText::Capacity - 8, "The message should fill the buffer");
+        CheckEndsWith(text, "\"}\r\n", "The cut line should still close the message, the object and the line");
+        CheckTrue(IsJSONObjectLine(text.substr(0, text.size() - 2)),
+            "The cut line should be one JSON object, with no character or escape cut in two: " + text.substr(text.size() - 12));
+    }
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_CrashHandler::Test_AppendCrashJSONLine_UsesTheFixedLayout()
+{
+    // Arrange: a crash line, and a raw backtrace entry from a category
+    using namespace std::chrono;
+    ASWLog::TASWLogRecord record;
+    record.Timestamp = sys_days{ year{ 2026 } / 10 / 4 } + hours(12) + minutes(34) + seconds(56) + milliseconds(789);
+    record.LogLevel = ASWLog::Level::Critical;
+    record.Message = "Crash: \"test\"";
+    record.ProcessId = 12;
+    record.ThreadId = 345;
+    auto categorizedRaw = record;
+    categorizedRaw.LogLevel = ASWLog::Level::Debug;
+    categorizedRaw.Category = "Net.Http";
+    categorizedRaw.Raw = true;
+    categorizedRaw.Message = "kept\n";
+
+    // Act
+    ASWLog::Detail::TCrashText lfLine;
+    ASWLog::Detail::AppendCrashJSONLine(lfLine, record, false);
+    ASWLog::Detail::TCrashText crlfLine;
+    ASWLog::Detail::AppendCrashJSONLine(crlfLine, record, true);
+    ASWLog::Detail::TCrashText categorizedLine;
+    ASWLog::Detail::AppendCrashJSONLine(categorizedLine, categorizedRaw, false);
+
+    // Assert
+    CheckEquals(std::string(R"({"time":"2026-10-04T12:34:56.789Z","epoch_ms":1791117296789,"level":"CRITICAL","pid":12,"tid":345,)"
+        R"("message":"Crash: \"test\""})" "\n"), std::string(lfLine.View()), "The line should have the fixed layout");
+    CheckEndsWith(std::string(crlfLine.View()), "\"}\r\n", "The line should end with the configured line ending");
+    CheckEquals(std::string(R"({"time":"2026-10-04T12:34:56.789Z","epoch_ms":1791117296789,"level":"DEBUG","category":"Net.Http",)"
+        R"("pid":12,"tid":345,"raw":true,"message":"kept\n"})" "\n"), std::string(categorizedLine.View()),
+        "The category and the raw mark should be written like the JSON formatter writes them");
+
+    const ASWLog::TASWJSONFormatter formatter;
+    const ASWLog::TASWLogConfig defaultConfig;
+    CheckEquals(formatter.Format(categorizedRaw, defaultConfig) + "\n", std::string(categorizedLine.View()),
+        "The fixed layout should match the JSON formatter's default fields");
+}
 //---------------------------------------------------------------------------
 void TTest_ASWLog_CrashHandler::Test_AppendCrashLine_CutsALongMessageButKeepsTheEnding()
 {
@@ -845,6 +982,46 @@ void TTest_ASWLog_CrashHandler::Test_HandleCrash_FlushesAndWritesTheCrashLine()
         "The buffered entry should be flushed, then the formatted crash line written and flushed");
 }
 //---------------------------------------------------------------------------
+void TTest_ASWLog_CrashHandler::Test_HandleCrash_JSONLoggerGetsJSONLinesWhenTheLockStaysBusy()
+{
+    // Arrange: a JSON logger with a backtrace entry (HandleCrashWhileLocked() holds its lock on another thread meanwhile)
+    auto config = MakeCrashTestConfig("busy.json");
+    config.Backtrace.Capacity = 5;
+    config.Backtrace.LowestLevel = ASWLog::Level::Debug;
+    config.Line.Formatter = std::make_shared<const ASWLog::TASWJSONFormatter>();
+    TLockableFileLog log;
+    CheckTrue(log.Initialize(config), "Initialize should succeed");
+    log.LogDebug("debug_1");
+
+    // Act
+    const auto elapsed = HandleCrashWhileLocked(log, "busy \"json\"");
+    const auto contents = ReadFileText(TestTempDir / "busy.json");
+
+    // Assert
+    std::vector<std::string> lines;
+
+    for (std::size_t start = 0; start < contents.size();)
+    {
+        const auto end = contents.find('\n', start);
+        lines.push_back(contents.substr(start, end - start));
+        start = end == std::string::npos ? contents.size() : end + 1;
+    }
+
+    CheckLessThan(elapsed.count(), 5000, "HandleCrash() should give up waiting for the lock");
+    CheckEndsWith(contents, "}\n", "The file should end with a whole line");
+    AssertEquals(std::size_t(4), lines.size(), "The backtrace's markers, its entry and the crash line should be written");
+
+    for (const auto& line : lines)
+        CheckTrue(IsJSONObjectLine(line), "Each line should be one JSON object: " + line);
+
+    const auto ids = std::format(R"("pid":{},"tid":{},)", ASWLog::GetCurrentOSProcessId(), ASWLog::GetCurrentOSThreadId());
+    CheckEndsWith(lines[0], R"("level":"INFO",)" + ids + R"("message":"Backtrace: the last 1 entry below the minimum level"})",
+        "The backtrace should start with its marker, in the fixed JSON layout");
+    CheckEndsWith(lines[1], R"("level":"DEBUG",)" + ids + R"("message":"debug_1"})", "The kept entry should follow");
+    CheckEndsWith(lines[2], R"("level":"INFO",)" + ids + R"("message":"Backtrace end"})", "Then the end marker");
+    CheckEndsWith(lines[3], R"("level":"CRITICAL",)" + ids + R"("message":"Crash: busy \"json\""})", "Then the crash line, escaped");
+}
+//---------------------------------------------------------------------------
 void TTest_ASWLog_CrashHandler::Test_HandleCrash_SkipsClosedAndDestroyedLoggers()
 {
     // Arrange: one logger closed, one destroyed (a crash handler must not touch it)
@@ -1013,7 +1190,7 @@ void TTest_ASWLog_CrashHandler::Test_HandleCrash_WritesTheBacktraceBeforeTheCras
 //---------------------------------------------------------------------------
 void TTest_ASWLog_CrashHandler::Test_HandleCrash_WritesTheLineDirectlyWhenTheLockStaysBusy()
 {
-    // Arrange: another thread holds the logger's lock until the test lets it go
+    // Arrange: a backtrace entry (HandleCrashWhileLocked() holds the logger's lock on another thread meanwhile)
     auto config = MakeCrashTestConfig("busy.log");
     config.Line.Ending = ASWLog::LineEnding::CRLF;
     config.Backtrace.Capacity = 5;
@@ -1022,46 +1199,12 @@ void TTest_ASWLog_CrashHandler::Test_HandleCrash_WritesTheLineDirectlyWhenTheLoc
     CheckTrue(log.Initialize(config), "Initialize should succeed");
     log.LogDebug("debug_1");
 
-    std::mutex mutex;
-    std::condition_variable changed;
-    bool isLocked = false;
-    bool mayUnlock = false;
-    std::thread holder([&] {
-        std::lock_guard<std::mutex> logLock(log.GetMutex());
-        std::unique_lock<std::mutex> lock(mutex);
-        isLocked = true;
-        changed.notify_all();
-        changed.wait(lock, [&] {
-            return mayUnlock;
-                });
-            });
-
-    {
-        std::unique_lock<std::mutex> lock(mutex);
-        changed.wait(lock, [&] {
-                return isLocked;
-            });
-    }
-
     // Act
-    ASWLog::TASWCrashHandlerOptions options;
-    options.WaitTimeout = std::chrono::milliseconds(50);
-    const auto start = std::chrono::steady_clock::now();
-    ASWLog::HandleCrash("busy", options);
-    const auto elapsed = std::chrono::steady_clock::now() - start;
+    const auto elapsed = HandleCrashWhileLocked(log, "busy");
     const auto contents = ReadFileText(TestTempDir / "busy.log");
 
-    {
-        std::lock_guard<std::mutex> lock(mutex);
-        mayUnlock = true;
-    }
-
-    changed.notify_all();
-    holder.join();
-
     // Assert
-    CheckLessThan(std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count(), 5000,
-        "HandleCrash() should give up waiting for the lock");
+    CheckLessThan(elapsed.count(), 5000, "HandleCrash() should give up waiting for the lock");
     CheckStartsWith(contents, "[", "The crash line should start with the time");
     CheckEndsWith(contents, std::format("][CRITICAL][P:{}][T:{}]: Crash: busy\r\n", ASWLog::GetCurrentOSProcessId(),
         ASWLog::GetCurrentOSThreadId()), "The fixed-layout crash line should be written straight to the file");

@@ -65,6 +65,24 @@ see [0.26.1](#0261---2026-09-17) for the initial versioned baseline.
   throws `std::invalid_argument` naming the problem and where it is. The
   `Line.Show*` options don't apply to a pattern, and the logger still adds
   `Line.Ending` after each line.
+- JSON Lines output: `TASWJSONFormatter` writes each entry as a JSON object
+  on one line, e.g.
+  `config.Line.Formatter = std::make_shared<const ASWLog::TASWJSONFormatter>();`
+  for
+  `{"time":"2026-10-08T14:31:00.217Z","epoch_ms":1791469860217,"level":"DEBUG","category":"Net","pid":4120,"tid":7788,"message":"connected"}`.
+  It writes the fields that the `Line.Show*` options turn on, in the
+  built-in layout's order: `time` (in `Line.TimestampZone` and
+  `Line.TimestampPrecision`) with `epoch_ms` (whole milliseconds since 1970
+  UTC), `level`, `category`, `pid`, `tid`, `ws`, `pws`, `function`, `file`
+  and `line`, then always `message`. Texts are escaped as RFC 8259 asks,
+  and invalid UTF-8 is replaced with U+FFFD, so a multi-line message stays
+  on its line. A `LogRaw()` entry gets an object of its own with
+  `"raw":true` instead of being written as is, and the startup, shutdown
+  and crash lines are objects too, including the fixed-layout crash line
+  (in a POSIX signal handler, or when the logger's lock stays busy). A
+  custom formatter can format raw entries too by overriding the new
+  `IASWLogFormatter::FormatsRawEntries()` (false by default), and
+  `JSON::AppendString()` writes a text as an escaped JSON string.
 
 ### Changed
 

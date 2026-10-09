@@ -59,9 +59,51 @@ public:
     virtual ~IASWLogFormatter() = default;
 
     // Returns the line for 'record', without its line ending (the logger adds TASWLogConfig::Line.Ending).
-    // 'config' is the calling logger's config. Not called for a Raw record (LogRaw()/LogForceRaw()), whose message is written as is.
+    // 'config' is the calling logger's config. Not called for a Raw record (LogRaw()/LogForceRaw()), whose message is
+    // written as is, unless FormatsRawEntries() says so.
     // May throw, e.g. std::bad_alloc: the entry is then dropped.
     [[nodiscard]] virtual std::string Format(const TASWLogRecord& record, const TASWLogConfig& config) const = 0;
+
+    // True if Format() is called for a Raw record too, whose line the logger then ends with the line ending like any
+    // other (e.g. for a format in which every line must be a whole entry, such as JSON Lines). False by default: the
+    // logger writes a Raw record's message as is, without a line ending.
+    [[nodiscard]] virtual bool FormatsRawEntries() const noexcept
+    {
+        return false;
+    }
+};
+
+
+/////////////////////////////////////////////////////////////////////////////
+// TASWJSONFormatter
+//
+// Writes each entry as a JSON object on one line (JSON Lines), e.g.
+//     config.Line.Formatter = std::make_shared<const ASWLog::TASWJSONFormatter>();
+// writes {"time":"2026-10-08T14:31:00.217Z","epoch_ms":1791469860217,"level":"DEBUG","category":"Net","pid":4120,
+// "tid":7788,"message":"connected"}. Like TASWTextFormatter, it writes the fields whose TASWLineConfig Show* option
+// is on, in the same order:
+//   "time", "epoch_ms"  the timestamp, as TASWTextFormatter writes it (TimestampZone and TimestampPrecision), and as
+//                       whole milliseconds since 1970-01-01 UTC (ShowTimestamp)
+//   "level"             TRACE, DEBUG, INFO, WARN, ERROR or CRITICAL (ShowLevel)
+//   "category"          the category's name, if the entry has one (ShowCategory; see TASWCategoryLog)
+//   "pid", "tid"        the process and thread ids, as numbers (ShowProcessId, ShowThreadId)
+//   "ws", "pws"         the process's working set and peak working set in bytes, as numbers (ShowWorkingSet,
+//                       ShowPeakWorkingSet)
+//   "function"          the function that logged the entry (ShowFunctionName)
+//   "file", "line"      its source file's name (without folders) and line, a number (ShowSourceLine)
+//   "raw"               true for a LogRaw()/LogForceRaw() entry, which gets a line of its own like any other
+//   "message"           the message, always
+// Texts are escaped as RFC 8259 asks, with each invalid UTF-8 sequence replaced by U+FFFD (see JSON::AppendString()),
+// so a multi-line message stays on one line. The logger adds the line ending (TASWLineConfig::Ending): LF, as JSON
+// Lines asks, or CRLF, which JSON readers accept too. A crash line written in a POSIX signal handler, or when the
+// logger's lock stays busy, is a JSON object too, with fixed fields (see ASWLog_CrashHandler.h). Thread-safe, so
+// loggers can share one.
+/////////////////////////////////////////////////////////////////////////////
+class TASWJSONFormatter : public IASWLogFormatter
+{
+public:
+    [[nodiscard]] std::string Format(const TASWLogRecord& record, const TASWLogConfig& config) const override;
+    [[nodiscard]] bool FormatsRawEntries() const noexcept override; // True
 };
 
 
@@ -145,7 +187,7 @@ public:
 // "[time][LEVEL][category][P:pid][T:tid][WS:bytes][PWS:bytes][function][file:line]: message", where each bracketed
 // field is written only if its TASWLineConfig option is on (ShowTimestamp, ShowLevel, ShowCategory, ShowProcessId,
 // ShowThreadId, ShowWorkingSet, ShowPeakWorkingSet, ShowFunctionName, ShowSourceLine), and the category only if the
-// entry has one. For another layout, see TASWPatternFormatter.
+// entry has one. For another layout, see TASWPatternFormatter; for JSON Lines, TASWJSONFormatter.
 /////////////////////////////////////////////////////////////////////////////
 class TASWTextFormatter : public IASWLogFormatter
 {

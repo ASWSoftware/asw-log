@@ -40,6 +40,8 @@ private:
     typedef TTestGroupBase inherited;
 
 private: // Test methods
+    void Test_AppendCrashJSONLine_CutsALongTextButStaysValid();
+    void Test_AppendCrashJSONLine_UsesTheFixedLayout();
     void Test_AppendCrashLine_CutsALongMessageButKeepsTheEnding();
     void Test_AppendCrashLine_ShowsTheCategory();
     void Test_AppendCrashLine_UsesTheFixedLayout();
@@ -54,6 +56,7 @@ private: // Test methods
     void Test_HandleCrash_ConsoleLogWritesTheLineToStdErr();
     void Test_HandleCrash_DisabledLoggerIsOnlyFlushed();
     void Test_HandleCrash_FlushesAndWritesTheCrashLine();
+    void Test_HandleCrash_JSONLoggerGetsJSONLinesWhenTheLockStaysBusy();
     void Test_HandleCrash_SkipsClosedAndDestroyedLoggers();
     void Test_HandleCrash_SyncsTheLineAtSyncToDiskAtLevel();
     void Test_HandleCrash_ThrowingFormatterGetsTheFixedLayoutLine();

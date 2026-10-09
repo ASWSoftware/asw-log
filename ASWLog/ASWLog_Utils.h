@@ -136,6 +136,45 @@ struct TSystemMemoryUsage
 */
 [[nodiscard]] std::error_code RenameWithoutReplacing(const std::filesystem::path& from, const std::filesystem::path& to) noexcept;
 
+namespace Detail
+{
+
+// A piece of a JSON string's text (see NextJSONPiece())
+struct TJSONPiece
+{
+    std::string_view Text;
+    bool IsEscape = false; // An escape or U+FFFD, which must not be cut; otherwise ASCII and valid UTF-8, as they are
+};
+
+//---------------------------------------------------------------------------
+
+/*
+    NextJSONPiece
+
+    The next piece of 'text', from 'index' on, as JSON::AppendString() writes it between the quotes, and moves 'index'
+    past it: a run of characters written as they are (a view of 'text', which can be cut between UTF-8 sequences), or
+    one escape or U+FFFD, written into 'escape'. An empty piece at the end of 'text'. Allocates nothing, so a crash
+    handler can write a JSON string piece by piece into a fixed buffer.
+*/
+[[nodiscard]] TJSONPiece NextJSONPiece(std::string_view text, std::size_t& index, char (& escape)[6]) noexcept;
+
+} // namespace Detail
+
+namespace JSON
+{
+
+/*
+    AppendString
+
+    Appends 'text' to 'output' as a JSON string, in double quotes, escaped as RFC 8259 asks: '"' and '\' with a
+    backslash, the control characters below 0x20 as \b, \f, \n, \r, \t or \u00XX. Valid UTF-8 is written as it is, and
+    each invalid UTF-8 sequence (the longest start of a valid sequence, or else one byte, as Unicode recommends) is
+    replaced with U+FFFD, so the result is always valid UTF-8 JSON.
+*/
+void AppendString(std::string& output, std::string_view text);
+
+} // namespace JSON
+
 namespace Time
 {
 

@@ -27,6 +27,7 @@ limitations under the License.
 // System includes here
 #include <algorithm>
 #include <charconv>
+#include <chrono>
 #include <cstdint>
 #include <filesystem>
 #include <format>
@@ -51,6 +52,9 @@ constexpr std::size_t MaxPatternWidth = 1000;
 
 void AppendField(std::string& line, std::string_view value, std::string_view prefix, std::string_view suffix,
     std::size_t width);
+template<typename TInteger>
+void AppendJSONNumber(std::string& line, std::string_view name, TInteger value);
+void AppendJSONString(std::string& line, std::string_view name, std::string_view value);
 void AppendNumberField(std::string& line, std::string_view label, std::uint64_t value);
 bool IsASCIIDigit(char character) noexcept;
 bool IsASCIILetter(char character) noexcept;
@@ -78,6 +82,38 @@ void AppendField(std::string& line, std::string_view value, std::string_view pre
         line.append(width - value.size(), ' ');
 
     line.append(suffix);
+}
+
+/*
+  AppendJSONNumber
+
+  Appends a JSON object's member "<name>":<value>, followed by a comma
+*/
+template<typename TInteger>
+void AppendJSONNumber(std::string& line, std::string_view name, TInteger value)
+{
+    char digits[24];
+    const auto result = std::to_chars(digits, digits + sizeof(digits), value);
+
+    line += '"';
+    line.append(name);
+    line += "\":";
+    line.append(digits, result.ptr);
+    line += ',';
+}
+
+/*
+  AppendJSONString
+
+  Appends a JSON object's member "<name>":"<value>", the value escaped, followed by a comma
+*/
+void AppendJSONString(std::string& line, std::string_view name, std::string_view value)
+{
+    line += '"';
+    line.append(name);
+    line += "\":";
+    JSON::AppendString(line, value);
+    line += ',';
 }
 
 /*
@@ -139,6 +175,83 @@ std::string_view ToDecimal(char (& buffer)[Time::ISO8601BufferSize], std::uint64
 }
 
 } // namespace
+
+//---------------------------------------------------------------------------
+
+/////////////////////////////////////////////////////////////////////////////
+// TASWJSONFormatter
+/////////////////////////////////////////////////////////////////////////////
+
+//---------------------------------------------------------------------------
+std::string TASWJSONFormatter::Format(const TASWLogRecord& record, const TASWLogConfig& config) const
+{
+    std::string line;
+    line.reserve(record.Message.size() + 256);
+    line += '{';
+
+    // Each member is followed by a comma, since "message" always comes last
+    if (config.Line.ShowTimestamp)
+    {
+        char timestamp[Time::ISO8601BufferSize];
+        line += "\"time\":\"";
+        line.append(timestamp, Time::WriteISO8601(timestamp, record.Timestamp, config.Line.TimestampZone, config.Line.TimestampPrecision));
+        line += "\",";
+
+        const auto sinceEpoch = std::chrono::floor<std::chrono::milliseconds>(record.Timestamp.time_since_epoch());
+        AppendJSONNumber(line, "epoch_ms", static_cast<std::int64_t>(sinceEpoch.count()));
+    }
+
+    if (config.Line.ShowLevel)
+    {
+        line += "\"level\":\"";
+        line.append(Level_ToString(record.LogLevel));
+        line += "\",";
+    }
+
+    if (config.Line.ShowCategory && !record.Category.empty())
+        AppendJSONString(line, "category", record.Category);
+
+    if (config.Line.ShowProcessId)
+        AppendJSONNumber(line, "pid", record.ProcessId);
+
+    if (config.Line.ShowThreadId)
+        AppendJSONNumber(line, "tid", record.ThreadId);
+
+    if (config.Line.ShowWorkingSet || config.Line.ShowPeakWorkingSet)
+    {
+        const auto memoryUsage = GetMemoryUsage();
+        if (config.Line.ShowWorkingSet)
+            AppendJSONNumber(line, "ws", memoryUsage.WorkingSetBytes);
+
+        if (config.Line.ShowPeakWorkingSet)
+            AppendJSONNumber(line, "pws", memoryUsage.PeakWorkingSetBytes);
+    }
+
+    if (config.Line.ShowFunctionName)
+        AppendJSONString(line, "function", record.Location.function_name());
+
+    if (config.Line.ShowSourceLine)
+    {
+        // As TASWTextFormatter writes it
+        AppendJSONString(line, "file", std::filesystem::path(record.Location.file_name()).filename().string());
+        AppendJSONNumber(line, "line", record.Location.line());
+    }
+
+    if (record.Raw)
+        line += "\"raw\":true,";
+
+    line += "\"message\":";
+    JSON::AppendString(line, record.Message);
+    line += '}';
+
+    return line;
+}
+
+//---------------------------------------------------------------------------
+bool TASWJSONFormatter::FormatsRawEntries() const noexcept
+{
+    return true;
+}
 
 //---------------------------------------------------------------------------
 

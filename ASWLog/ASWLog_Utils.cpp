@@ -29,6 +29,7 @@ limitations under the License.
 #include <cerrno>
 #include <charconv>
 #include <chrono>
+#include <cstring>
 #include <ctime>
 #include <filesystem>
 #include <format>
@@ -613,6 +614,230 @@ std::error_code RenameWithoutReplacing(const std::filesystem::path& from, const 
     return std::error_code(linkError, std::generic_category());
 #endif
 }
+
+//---------------------------------------------------------------------------
+
+namespace Detail
+{
+
+namespace
+{
+
+// U+FFFD, the replacement character, in UTF-8
+constexpr std::string_view ReplacementCharacter = "\xEF\xBF\xBD";
+
+//---------------------------------------------------------------------------
+
+bool IsPlainJSONCharacter(unsigned char character) noexcept;
+bool IsPlainJSONWord(const char* data) noexcept;
+std::size_t MeasureUTF8Sequence(std::string_view text, std::size_t index, std::size_t& invalidLength) noexcept;
+
+//---------------------------------------------------------------------------
+
+/*
+  IsPlainJSONCharacter
+
+  True for an ASCII character a JSON string holds as it is: not a control character, '"' or '\'
+*/
+bool IsPlainJSONCharacter(unsigned char character) noexcept
+{
+    return character >= 0x20 && character < 0x80 && character != '"' && character != '\\';
+}
+
+/*
+  IsPlainJSONWord
+
+  True if all 8 characters at 'data' are plain (see IsPlainJSONCharacter()), tested together in a 64-bit word, which
+  is several times faster than one at a time for the usual messages
+*/
+bool IsPlainJSONWord(const char* data) noexcept
+{
+    constexpr std::uint64_t Ones = 0x0101010101010101;
+    constexpr std::uint64_t HighBits = 0x8080808080808080;
+
+    std::uint64_t word;
+    std::memcpy(&word, data, sizeof(word));
+
+    // A byte's high bit ends up set if it is 0x80 or above, or (for the bytes below 0x80) below 0x20, or equal to '"'
+    // or '\' (the usual test for a zero byte, on the word XORed with them); the order of the bytes doesn't matter
+    const std::uint64_t quotes = word ^ (Ones * '"');
+    const std::uint64_t backslashes = word ^ (Ones * '\\');
+    const std::uint64_t special = word | ((word - Ones * 0x20) & ~word) | ((quotes - Ones) & ~quotes) |
+        ((backslashes - Ones) & ~backslashes);
+
+    return (special & HighBits) == 0;
+}
+
+/*
+  MeasureUTF8Sequence
+
+  The length of the UTF-8 sequence of a character above U+007F that starts at 'index', if it is valid (see the Unicode
+  standard's table of well-formed byte sequences); otherwise 0, and 'invalidLength' gets the length of its longest start
+  that could begin a valid sequence, at least 1, which U+FFFD replaces
+*/
+std::size_t MeasureUTF8Sequence(std::string_view text, std::size_t index, std::size_t& invalidLength) noexcept
+{
+    const auto lead = static_cast<unsigned char>(text[index]);
+    std::size_t length = 0;
+    unsigned char low = 0x80; // The range of the second byte, which some lead bytes narrow
+    unsigned char high = 0xBF;
+
+    if (lead >= 0xC2 && lead <= 0xDF)
+    {
+        length = 2;
+    }
+    else if (lead >= 0xE0 && lead <= 0xEF)
+    {
+        length = 3;
+        low = lead == 0xE0 ? 0xA0 : 0x80; // No overlong forms
+        high = lead == 0xED ? 0x9F : 0xBF; // No surrogates
+    }
+    else if (lead >= 0xF0 && lead <= 0xF4)
+    {
+        length = 4;
+        low = lead == 0xF0 ? 0x90 : 0x80; // No overlong forms
+        high = lead == 0xF4 ? 0x8F : 0xBF; // Nothing above U+10FFFF
+    }
+    else
+    {
+        invalidLength = 1;
+        return 0;
+    }
+
+    std::size_t count = 1;
+
+    while (count < length && index + count < text.size())
+    {
+        const auto byte = static_cast<unsigned char>(text[index + count]);
+        if (byte < low || byte > high)
+            break;
+
+        low = 0x80;
+        high = 0xBF;
+        ++count;
+    }
+
+    if (count == length)
+        return length;
+
+    invalidLength = count;
+
+    return 0;
+}
+
+} // namespace
+
+//---------------------------------------------------------------------------
+TJSONPiece NextJSONPiece(std::string_view text, std::size_t& index, char (& escape)[6]) noexcept
+{
+    const std::size_t start = index;
+    std::size_t invalidLength = 0;
+
+    while (index < text.size())
+    {
+        if (text.size() - index >= 8 && IsPlainJSONWord(text.data() + index))
+        {
+            index += 8;
+            continue;
+        }
+
+        const auto character = static_cast<unsigned char>(text[index]);
+        if (IsPlainJSONCharacter(character))
+        {
+            ++index;
+            continue;
+        }
+
+        if (character < 0x80)
+            break;
+
+        const auto length = MeasureUTF8Sequence(text, index, invalidLength);
+        if (length == 0)
+            break;
+
+        index += length;
+    }
+
+    if (index > start)
+        return TJSONPiece{ text.substr(start, index - start), false };
+
+    if (index >= text.size())
+        return TJSONPiece{};
+
+    if (invalidLength > 0)
+    {
+        index += invalidLength;
+        return TJSONPiece{ ReplacementCharacter, true };
+    }
+
+    const char character = text[index++];
+    escape[0] = '\\';
+
+    switch (character)
+    {
+        case '"':
+        case '\\':
+            escape[1] = character;
+            break;
+
+        case '\b':
+            escape[1] = 'b';
+            break;
+
+        case '\f':
+            escape[1] = 'f';
+            break;
+
+        case '\n':
+            escape[1] = 'n';
+            break;
+
+        case '\r':
+            escape[1] = 'r';
+            break;
+
+        case '\t':
+            escape[1] = 't';
+            break;
+
+        default:
+        {
+            constexpr std::string_view HexDigits = "0123456789abcdef";
+            const auto code = static_cast<unsigned char>(character);
+            escape[1] = 'u';
+            escape[2] = '0';
+            escape[3] = '0';
+            escape[4] = HexDigits[code >> 4];
+            escape[5] = HexDigits[code & 0xF];
+            return TJSONPiece{ std::string_view(escape, 6), true };
+        }
+    }
+
+    return TJSONPiece{ std::string_view(escape, 2), true };
+}
+
+} // namespace Detail
+
+//---------------------------------------------------------------------------
+
+namespace JSON
+{
+
+//---------------------------------------------------------------------------
+void AppendString(std::string& output, std::string_view text)
+{
+    char escape[6];
+    std::size_t index = 0;
+
+    output += '"';
+
+    while (index < text.size())
+        output.append(Detail::NextJSONPiece(text, index, escape).Text);
+
+    output += '"';
+}
+
+} // namespace JSON
 
 //---------------------------------------------------------------------------
 

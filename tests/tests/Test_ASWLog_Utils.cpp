@@ -31,12 +31,15 @@ limitations under the License.
 #include <cstdlib>
 #include <ctime>
 #include <filesystem>
+#include <format>
 #include <fstream>
 #include <iterator>
 #include <ratio>
 #include <string>
+#include <string_view>
 #include <system_error>
 #include <thread>
+#include <vector>
 
 #if defined(_WIN32)
 #include <windows.h>
@@ -65,6 +68,25 @@ std::string ReadText(const std::filesystem::path& path)
     return std::string((std::istreambuf_iterator<char>(stream)), std::istreambuf_iterator<char>());
 }
 
+// The bytes of 'text' in hex, e.g. "E2 82", for a check's message
+std::string ToHex(std::string_view text)
+{
+    std::string hex;
+    for (const char character : text)
+        hex += std::format("{}{:02X}", hex.empty() ? "" : " ", static_cast<unsigned char>(character));
+
+    return hex;
+}
+
+// 'text' as JSON::AppendString() writes it
+std::string ToJSONString(std::string_view text)
+{
+    std::string output;
+    ASWLog::JSON::AppendString(output, text);
+
+    return output;
+}
+
 } // namespace
 
 //---------------------------------------------------------------------------
@@ -82,6 +104,10 @@ TTest_ASWLog_Utils::TTest_ASWLog_Utils()
     RegisterTest(&TTest_ASWLog_Utils::Test_GetWindowsEditionName_ProductTypes, "GetWindowsEditionName_ProductTypes");
     RegisterTest(&TTest_ASWLog_Utils::Test_IsRootFolder_DetectsRootFolders, "IsRootFolder_DetectsRootFolders");
     RegisterTest(&TTest_ASWLog_Utils::Test_IsRootFolder_ResolvesRelativePaths, "IsRootFolder_ResolvesRelativePaths");
+    RegisterTest(&TTest_ASWLog_Utils::Test_JSON_AppendString_EscapesQuotesBackslashAndControls, "JSON_AppendString_EscapesQuotesBackslashAndControls");
+    RegisterTest(&TTest_ASWLog_Utils::Test_JSON_AppendString_FindsSpecialCharactersAnywhereInALongText, "JSON_AppendString_FindsSpecialCharactersAnywhereInALongText");
+    RegisterTest(&TTest_ASWLog_Utils::Test_JSON_AppendString_KeepsValidUTF8, "JSON_AppendString_KeepsValidUTF8");
+    RegisterTest(&TTest_ASWLog_Utils::Test_JSON_AppendString_ReplacesInvalidUTF8, "JSON_AppendString_ReplacesInvalidUTF8");
     RegisterTest(&TTest_ASWLog_Utils::Test_MatchesWildcard_Patterns, "MatchesWildcard_Patterns");
     RegisterTest(&TTest_ASWLog_Utils::Test_RenameWithoutReplacing_KeepsExistingTarget, "RenameWithoutReplacing_KeepsExistingTarget");
     RegisterTest(&TTest_ASWLog_Utils::Test_Time_GetUTCOffsetMinutes_FollowsDaylightSavingTime, "Time_GetUTCOffsetMinutes_FollowsDaylightSavingTime");
@@ -323,6 +349,121 @@ void TTest_ASWLog_Utils::Test_IsRootFolder_ResolvesRelativePaths()
     CheckTrue(ASWLog::IsRootFolder(relativeRoot), "A relative path that leads to a root should be a root folder");
     if (currentPath != currentPath.root_path())
         CheckFalse(ASWLog::IsRootFolder("."), "\".\" should not be a root folder when the current folder isn't one");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_Utils::Test_JSON_AppendString_EscapesQuotesBackslashAndControls()
+{
+    // Arrange: each control character's escape, the short form where JSON has one
+    std::string appended = "key:";
+
+    // Act
+    ASWLog::JSON::AppendString(appended, "value");
+
+    // Assert
+    CheckEquals(std::string("key:\"value\""), appended, "The string should be appended, in quotes");
+    CheckEquals(std::string("\"\""), ToJSONString(""), "An empty text should be an empty string");
+    CheckEquals(std::string(R"("say \"hi\" \\ there")"), ToJSONString(R"(say "hi" \ there)"), "Quotes and backslashes should be escaped");
+    CheckEquals(std::string(R"("a / b ~)" "\x7F" R"(")"), ToJSONString("a / b ~\x7F"), "'/' and DEL should be written as they are");
+    CheckEquals(std::string(R"("line1\nline2\r\n\tend")"), ToJSONString("line1\nline2\r\n\tend"), "Line breaks should be escaped");
+
+    for (int code = 0; code < 0x20; ++code)
+    {
+        std::string expected;
+        switch (code)
+        {
+            case 0x08: expected = "\\b"; break;
+            case 0x09: expected = "\\t"; break;
+            case 0x0A: expected = "\\n"; break;
+            case 0x0C: expected = "\\f"; break;
+            case 0x0D: expected = "\\r"; break;
+            default: expected = std::format("\\u{:04x}", code); break;
+        }
+
+        CheckEquals("\"" + expected + "\"", ToJSONString(std::string(1, static_cast<char>(code))),
+            std::format("Control character 0x{:02X} should be escaped", code));
+    }
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_Utils::Test_JSON_AppendString_FindsSpecialCharactersAnywhereInALongText()
+{
+    // Arrange: plain text is scanned 8 bytes at a time, so each special character goes at every position of the first
+    // two 8-byte words of a longer text, with what it should become
+    struct TCase
+    {
+        std::string Text;
+        std::string Expected;
+    };
+
+    const std::vector<TCase> specials{
+        { "\"", "\\\"" }, { "\\", "\\\\" }, { std::string(1, '\0'), "\\u0000" }, { "\n", "\\n" }, { "\x1F", "\\u001f" },
+        { " ", " " }, { "\x7F", "\x7F" }, { "\xCE\xBB", "\xCE\xBB" }, { "\xF0\x9F\x98\x80", "\xF0\x9F\x98\x80" },
+        { "\x80", "\xEF\xBF\xBD" }, { "\xFF", "\xEF\xBF\xBD" }, { "\xE2\x82", "\xEF\xBF\xBD" }
+    };
+
+    // Act & Assert
+    for (const auto& special : specials)
+    {
+        for (std::size_t position = 0; position < 16; ++position)
+        {
+            const std::string before(position, 'a');
+            const std::string after(24 - position, 'z');
+            CheckEquals("\"" + before + special.Expected + after + "\"", ToJSONString(before + special.Text + after),
+                std::format("{} at index {} should be found", ToHex(special.Text), position));
+        }
+    }
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_Utils::Test_JSON_AppendString_KeepsValidUTF8()
+{
+    // Arrange: the first and last character of each UTF-8 length, the characters around the surrogates, and a few
+    // common ones
+    const std::vector<std::string> texts{
+        "\xC2\x80", "\xDF\xBF", "\xE0\xA0\x80", "\xED\x9F\xBF", "\xEE\x80\x80", "\xEF\xBF\xBF", "\xF0\x90\x80\x80",
+        "\xF4\x8F\xBF\xBF", "\xCE\xBB", "\xE2\x82\xAC", "\xF0\x9F\x98\x80", "a\xCE\xBB" "b\xE2\x82\xAC" "c"
+    };
+
+    // Act & Assert
+    for (const auto& text : texts)
+        CheckEquals("\"" + text + "\"", ToJSONString(text), "Valid UTF-8 should be written as it is: " + ToHex(text));
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_Utils::Test_JSON_AppendString_ReplacesInvalidUTF8()
+{
+    // Arrange: each invalid text and what it should become, U+FFFD (R) for each longest start of a valid sequence, or
+    // else each byte
+    const std::string R = "\xEF\xBF\xBD";
+    struct TCase
+    {
+        std::string Text;
+        std::string Expected;
+    };
+
+    const std::vector<TCase> cases{
+        { "\x80", R }, // A continuation byte without a lead byte
+        { "a\xBF" "b", "a" + R + "b" },
+        { "\xC0\xAF", R + R }, // Overlong forms: C0 and C1 never start a valid sequence
+        { "\xC1\xBF", R + R },
+        { "\xE0\x80\xAF", R + R + R }, // Overlong: E0 needs A0-BF next
+        { "\xF0\x80\x80\x80", R + R + R + R }, // Overlong: F0 needs 90-BF next
+        { "\xED\xA0\x80", R + R + R }, // A surrogate (U+D800)
+        { "\xF4\x90\x80\x80", R + R + R + R }, // Above U+10FFFF
+        { "\xF5\x80", R + R }, // F5-FF never start a valid sequence
+        { "\xFF", R },
+        { "\xC2", R }, // Cut off at the end
+        { "\xE2\x82", R }, // A cut off sequence is one U+FFFD
+        { "\xE2\x82" "X", R + "X" },
+        { "\xF0\x9F\x98", R },
+        { "\xF0\x9F\x98" "a", R + "a" },
+        { "\xC2\"", R + "\\\"" }, // The character after a cut off sequence is written as usual
+        { "\xCE\xBB\xCE", "\xCE\xBB" + R }
+    };
+
+    // Act & Assert
+    for (const auto& testCase : cases)
+    {
+        CheckEquals("\"" + testCase.Expected + "\"", ToJSONString(testCase.Text),
+            "Invalid UTF-8 should be replaced with U+FFFD: " + ToHex(testCase.Text));
+    }
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_Utils::Test_MatchesWildcard_Patterns()

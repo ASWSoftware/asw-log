@@ -53,6 +53,7 @@ namespace Detail
 {
 
 class TCrashHandling; // See ASWLog_CrashHandler.h
+class TCrashText;
 
 } // namespace Detail
 
@@ -110,6 +111,7 @@ private:
         std::string Line; // The line to write: formatted, or the raw text
         std::shared_ptr<const TASWLogConfig> CallbackConfig; // Set only if OnLogEntry will be called
         std::uint64_t Sequence = 0;
+        bool EndsLine = true; // Line ends with the line ending (see IsFormatted())
         bool MustFlush = false; // At or above TASWAsyncConfig::WaitAtLevel: its caller waits until it is flushed
         bool IsWritten = false;
     };
@@ -146,6 +148,7 @@ private:
 
     // From the config (see StoreCrashLineSettingsUnlocked()), for a crash handler that doesn't get the lock
     std::atomic<bool> m_CrashLineUsesCRLF{ false };
+    std::atomic<bool> m_CrashLineUsesJSON{ false }; // The formatter is a TASWJSONFormatter
     std::atomic<bool> m_WritesCrashLine{ true };
 
 private:
@@ -175,8 +178,10 @@ private:
 
 private:
     static std::string FormatEntry(const TASWLogRecord& record, const TASWLogConfig& config);
+    static bool IsFormatted(const TASWLogRecord& record, const TASWLogConfig& config) noexcept;
 
 private:
+    void AppendCrashLine(Detail::TCrashText& line, const TASWLogRecord& record) const noexcept;
     void DispatchLogCallback(const TASWLogConfig& config, const TASWLogRecord& record, std::string_view formattedLine) const noexcept;
     TASWLogRecord MakeBacktraceMarker(std::string_view message) const noexcept;
     void OnCrash(std::string_view message, bool isInSignalHandler, std::chrono::steady_clock::time_point deadline) noexcept;
@@ -316,7 +321,8 @@ protected:
     // state m_Mutex guards being consistent. Does nothing by default.
     virtual void WriteCrashLineDirect(std::string_view line) noexcept;
 
-    // Writes a finished line. 'endsLine' is true if 'line' ends with the line ending (false for a Raw record).
+    // Writes a finished line. 'endsLine' is true if 'line' ends with the line ending (false for a Raw record written
+    // as is; see IASWLogFormatter::FormatsRawEntries()).
     virtual void WriteLineUnlocked(Level level, std::string_view line, bool endsLine) = 0;
 
 protected: // TASWLogBase hook
