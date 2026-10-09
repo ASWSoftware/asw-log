@@ -24,6 +24,7 @@ limitations under the License.
 // Module header
 #include "Test_ASWLog_CrashHandler.h"
 //---------------------------------------------------------------------------
+#include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <condition_variable>
@@ -569,6 +570,8 @@ TTest_ASWLog_CrashHandler::TTest_ASWLog_CrashHandler()
     RegisterTest(&TTest_ASWLog_CrashHandler::Test_AppendCrashJSONLine_UsesTheFixedLayout, "AppendCrashJSONLine_UsesTheFixedLayout");
     RegisterTest(&TTest_ASWLog_CrashHandler::Test_AppendCrashLine_CutsALongMessageButKeepsTheEnding, "AppendCrashLine_CutsALongMessageButKeepsTheEnding");
     RegisterTest(&TTest_ASWLog_CrashHandler::Test_AppendCrashLine_FieldsThatDontFitAreLeftOut, "AppendCrashLine_FieldsThatDontFitAreLeftOut");
+    RegisterTest(&TTest_ASWLog_CrashHandler::Test_AppendCrashLine_FollowsTheMultilineMode, "AppendCrashLine_FollowsTheMultilineMode");
+    RegisterTest(&TTest_ASWLog_CrashHandler::Test_AppendCrashLine_NeverCutsARewrittenLineBreak, "AppendCrashLine_NeverCutsARewrittenLineBreak");
     RegisterTest(&TTest_ASWLog_CrashHandler::Test_AppendCrashLine_ShowsTheFields, "AppendCrashLine_ShowsTheFields");
     RegisterTest(&TTest_ASWLog_CrashHandler::Test_AppendCrashLine_ShowsTheCategory, "AppendCrashLine_ShowsTheCategory");
     RegisterTest(&TTest_ASWLog_CrashHandler::Test_AppendCrashLine_UsesTheFixedLayout, "AppendCrashLine_UsesTheFixedLayout");
@@ -583,6 +586,7 @@ TTest_ASWLog_CrashHandler::TTest_ASWLog_CrashHandler()
     RegisterTest(&TTest_ASWLog_CrashHandler::Test_HandleCrash_ConsoleLogWritesTheLineToStdErr, "HandleCrash_ConsoleLogWritesTheLineToStdErr");
     RegisterTest(&TTest_ASWLog_CrashHandler::Test_HandleCrash_DisabledLoggerIsOnlyFlushed, "HandleCrash_DisabledLoggerIsOnlyFlushed");
     RegisterTest(&TTest_ASWLog_CrashHandler::Test_HandleCrash_CrashLineHasTheThreadsScopeFields, "HandleCrash_CrashLineHasTheThreadsScopeFields");
+    RegisterTest(&TTest_ASWLog_CrashHandler::Test_HandleCrash_FixedLayoutLineFollowsTheMultilineMode, "HandleCrash_FixedLayoutLineFollowsTheMultilineMode");
     RegisterTest(&TTest_ASWLog_CrashHandler::Test_HandleCrash_FlushesAndWritesTheCrashLine, "HandleCrash_FlushesAndWritesTheCrashLine");
     RegisterTest(&TTest_ASWLog_CrashHandler::Test_HandleCrash_JSONLoggerGetsJSONLinesWhenTheLockStaysBusy, "HandleCrash_JSONLoggerGetsJSONLinesWhenTheLockStaysBusy");
     RegisterTest(&TTest_ASWLog_CrashHandler::Test_HandleCrash_SkipsClosedAndDestroyedLoggers, "HandleCrash_SkipsClosedAndDestroyedLoggers");
@@ -805,6 +809,84 @@ void TTest_ASWLog_CrashHandler::Test_AppendCrashLine_FieldsThatDontFitAreLeftOut
     CheckNotContains(json, "\"after\"", "A field that doesn't fit should be left out of the JSON line too");
     CheckEndsWith(json, "v\"},\"message\":\"msg\"}\r\n", "The JSON line should close the fields and keep the message");
     CheckTrue(IsJSONObjectLine(json.substr(0, json.size() - 2)), "The JSON line should be one JSON object");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_CrashHandler::Test_AppendCrashLine_FollowsTheMultilineMode()
+{
+    // Arrange: a message with each kind of line break, a lone CR, and a line break at its end
+    ASWLog::TASWLogRecord record;
+    record.LogLevel = ASWLog::Level::Critical;
+    record.Message = "a\r\nb\n\rc\n";
+
+    const auto appendLine = [&record](bool usesCRLF, ASWLog::MultilineMode mode) {
+            ASWLog::Detail::TCrashText line;
+            ASWLog::Detail::AppendCrashLine(line, record, usesCRLF, mode);
+
+            return std::string(line.View());
+        };
+
+    // Act
+    const auto preserved = appendLine(false, ASWLog::MultilineMode::Preserve);
+    const auto indentedLF = appendLine(false, ASWLog::MultilineMode::Indent);
+    const auto indentedCRLF = appendLine(true, ASWLog::MultilineMode::Indent);
+    const auto escaped = appendLine(true, ASWLog::MultilineMode::Escape);
+
+    // Assert
+    CheckEndsWith(preserved, "][P:0][T:0]: a\r\nb\n\rc\n\n", "Preserve should write the message as it is");
+    CheckEndsWith(indentedLF, "][P:0][T:0]: a\n    | b\n    | \rc\n    |\n", "Indent should mark each line after the first");
+    CheckEndsWith(indentedCRLF, "][P:0][T:0]: a\r\n    | b\r\n    | \rc\r\n    |\r\n", "Indent should use the CRLF ending");
+    CheckEndsWith(escaped, "][P:0][T:0]: a\\r\\nb\\n\\rc\\n\r\n", "Escape should keep the entry on one line");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_CrashHandler::Test_AppendCrashLine_NeverCutsARewrittenLineBreak()
+{
+    // Arrange: messages whose line break falls at each place around the end of the buffer
+    struct TCase
+    {
+        ASWLog::MultilineMode Mode;
+        bool UsesCRLF;
+        std::string_view LineBreak;
+        std::string_view Rewritten; // How the line break is written
+    };
+
+    const TCase cases[] = {
+        { ASWLog::MultilineMode::Indent, false, "\n", "\n    | " },
+        { ASWLog::MultilineMode::Indent, true, "\r\n", "\r\n    | " },
+        { ASWLog::MultilineMode::Escape, false, "\n", "\\n" }, { ASWLog::MultilineMode::Escape, true, "\r", "\\r" }
+    };
+
+    for (const auto& item : cases)
+    {
+        // A record of its own for each case: the message of the last one is gone
+        ASWLog::TASWLogRecord record;
+        record.LogLevel = ASWLog::Level::Critical;
+
+        const std::string_view ending = item.UsesCRLF ? "\r\n" : "\n";
+        ASWLog::Detail::TCrashText emptyLine;
+        ASWLog::Detail::AppendCrashLine(emptyLine, record, item.UsesCRLF, item.Mode);
+        const std::size_t room = ASWLog::Detail::TCrashText::Capacity - emptyLine.GetSize(); // For the message
+        CheckGreaterThan(room, std::size_t(900), "The line without a message should leave most of the buffer free");
+
+        for (std::size_t length = room - 12; length <= room; ++length)
+        {
+            const std::string message = std::string(length, 'x') + std::string(item.LineBreak) + "y";
+            record.Message = message;
+
+            // Act
+            ASWLog::Detail::TCrashText line;
+            ASWLog::Detail::AppendCrashLine(line, record, item.UsesCRLF, item.Mode);
+
+            // Assert: before the line ending, the last 'x', the whole rewritten line break, or the 'y' after it
+            const std::string text(line.View());
+            const auto description = std::format("{} with a line break after {} of {} characters",
+                ASWLog::MultilineMode_ToString(item.Mode), length, room);
+            CheckEndsWith(text, std::string(ending), description);
+            CheckLessThanOrEqual(text.size(), ASWLog::Detail::TCrashText::Capacity, description);
+            const auto body = text.substr(0, text.size() - std::min(text.size(), ending.size()));
+            CheckTrue(body.ends_with('x') || body.ends_with('y') || body.ends_with(item.Rewritten),
+                description + ": the line break should be written whole or not at all");
+        }
+    }
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_CrashHandler::Test_AppendCrashLine_ShowsTheFields()
@@ -1088,6 +1170,30 @@ void TTest_ASWLog_CrashHandler::Test_HandleCrash_CrashLineHasTheThreadsScopeFiel
         "The formatted crash line should have the crashing thread's scope fields");
     CheckEndsWith(ReadFileText(TestTempDir / "scoped_busy.log"), std::format("][T:{}][requestId=\"r-1\"]: Crash: scoped\n",
         ASWLog::GetCurrentOSThreadId()), "The fixed-layout crash line should have them too");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_CrashHandler::Test_HandleCrash_FixedLayoutLineFollowsTheMultilineMode()
+{
+    // Arrange: an Indent logger with a multi-line backtrace entry (HandleCrashWhileLocked() holds its lock on another
+    // thread meanwhile), reconfigured to CRLF endings
+    auto config = MakeCrashTestConfig("multiline.log");
+    config.Backtrace.Capacity = 5;
+    config.Backtrace.LowestLevel = ASWLog::Level::Debug;
+    config.Line.Multiline = ASWLog::MultilineMode::Indent;
+    TLockableFileLog log;
+    CheckTrue(log.Initialize(config), "Initialize should succeed");
+    config.Line.Ending = ASWLog::LineEnding::CRLF;
+    CheckTrue(log.Reconfigure(config), "Reconfigure should succeed");
+    log.LogDebug("debug\nsecond");
+
+    // Act
+    HandleCrashWhileLocked(log, "busy\nreason");
+    const auto contents = ReadFileText(TestTempDir / "multiline.log");
+
+    // Assert
+    const auto ids = std::format("[P:{}][T:{}]: ", ASWLog::GetCurrentOSProcessId(), ASWLog::GetCurrentOSThreadId());
+    CheckContains(contents, "][DEBUG]" + ids + "debug\r\n    | second\r\n", "The backtrace entry should be indented");
+    CheckEndsWith(contents, "][CRITICAL]" + ids + "Crash: busy\r\n    | reason\r\n", "The crash line should be indented");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_CrashHandler::Test_HandleCrash_FlushesAndWritesTheCrashLine()

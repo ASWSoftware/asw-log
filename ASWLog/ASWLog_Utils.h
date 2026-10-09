@@ -146,7 +146,22 @@ struct TJSONPiece
     bool IsEscape = false; // An escape or U+FFFD, which must not be cut; otherwise ASCII and valid UTF-8, as they are
 };
 
+// A piece of a line as a MultilineMode writes it (see NextMultilinePiece())
+struct TMultilinePiece
+{
+    std::string_view Text;
+    bool IsLineBreak = false; // A line break as the mode writes it, which must not be cut; otherwise text as it is
+};
+
 //---------------------------------------------------------------------------
+
+/*
+    ApplyMultilineMode
+
+    Rewrites the line breaks inside 'line' as 'mode' asks (see MultilineMode), Indent with 'ending' as the line ending.
+    Leaves 'line' as it is, without allocating, if it has no line break to rewrite.
+*/
+void ApplyMultilineMode(std::string& line, MultilineMode mode, LineEnding ending);
 
 /*
     NextJSONPiece
@@ -157,6 +172,17 @@ struct TJSONPiece
     handler can write a JSON string piece by piece into a fixed buffer.
 */
 [[nodiscard]] TJSONPiece NextJSONPiece(std::string_view text, std::size_t& index, char (& escape)[6]) noexcept;
+
+/*
+    NextMultilinePiece
+
+    The next piece of 'text', from 'index' on, as ApplyMultilineMode() writes it, and moves 'index' past it: a run of
+    text without a line break to rewrite (a view of 'text'; with Preserve, the rest of it), or one line break as 'mode'
+    writes it (Indent: 'ending' and the marker of the next line, "    | ", or "    |" when that line is empty). An empty
+    piece at the end of 'text'. Allocates nothing, so a crash handler can use it too.
+*/
+[[nodiscard]] TMultilinePiece NextMultilinePiece(std::string_view text, std::size_t& index, MultilineMode mode,
+    LineEnding ending) noexcept;
 
 } // namespace Detail
 

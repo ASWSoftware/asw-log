@@ -78,6 +78,7 @@ struct TASWCrashHandlerOptions
 //   The backtrace's lines get the same layout, with their own level and category (after the level, as "[Net]", or as
 //   "category" in JSON), and only if the backtrace's lock is free. The lines show the entry's fields too (see
 //   TASWLogScope; the crash line has the crashing thread's scope fields), after the thread id, as far as they fit.
+//   The text lines write the line breaks in their messages as TASWLineConfig::Multiline says, like the other lines.
 // - If a logger's lock stays busy until WaitTimeout has passed (e.g. the crash happened while that thread was
 //   writing an entry), its buffered entries are lost and only the fixed-layout lines (backtrace and crash line) are
 //   written, straight to the file.
@@ -146,6 +147,9 @@ public:
     // 'text' as a JSON string (see JSON::AppendString()), cut between characters if needed so that 'reserved'
     // characters stay free after it; the string is always closed
     void AppendJSONString(std::string_view text, std::size_t reserved) noexcept;
+    // 'text' with its line breaks written as 'mode' asks (see Detail::NextMultilinePiece()), cut if needed so that
+    // 'reserved' characters stay free after it; a rewritten line break is never cut
+    void AppendMultiline(std::string_view text, MultilineMode mode, LineEnding ending, std::size_t reserved) noexcept;
     std::size_t GetSize() const noexcept;
     void Truncate(std::size_t size) noexcept; // Cuts the text to 'size' characters, if it is longer
     std::string_view View() const noexcept;
@@ -183,9 +187,11 @@ void AppendBacktraceBeginText(TCrashText& text, std::size_t count) noexcept;
 // is always a whole JSON object, followed by the line ending.
 void AppendCrashJSONLine(TCrashText& line, const TASWLogRecord& record, bool usesCRLF) noexcept;
 
-// Appends the fixed-layout crash line for 'record' (see the crash handling notes above), with a CRLF or LF ending. A
-// message too long for the buffer is cut off, but the line always ends with the line ending.
-void AppendCrashLine(TCrashText& line, const TASWLogRecord& record, bool usesCRLF) noexcept;
+// Appends the fixed-layout crash line for 'record' (see the crash handling notes above), with a CRLF or LF ending, the
+// message's line breaks written as 'multiline' asks (TASWLineConfig::Multiline). A message too long for the buffer is
+// cut off, but the line always ends with the line ending.
+void AppendCrashLine(TCrashText& line, const TASWLogRecord& record, bool usesCRLF,
+    MultilineMode multiline = MultilineMode::Preserve) noexcept;
 
 // Pauses briefly (about a millisecond) and returns true, or returns false at once if 'deadline' has passed. For the
 // polling waits of a crash handler, which can't wait on a condition variable in a signal handler.

@@ -34,6 +34,7 @@ limitations under the License.
 #include <filesystem>
 #include <format>
 #include <fstream>
+#include <utility>
 #include <vector>
 
 #if defined(_WIN32)
@@ -623,16 +624,47 @@ namespace Detail
 namespace
 {
 
+// The line breaks MultilineMode::Escape writes
+constexpr std::string_view EscapedCR = "\\r";
+constexpr std::string_view EscapedLF = "\\n";
+
+// The line breaks MultilineMode::Indent writes: the line ending and the next line's marker, whose space is left out
+// when that line is empty
+constexpr std::string_view IndentedCRLF = "\r\n    | ";
+constexpr std::string_view IndentedLF = "\n    | ";
+
 // U+FFFD, the replacement character, in UTF-8
 constexpr std::string_view ReplacementCharacter = "\xEF\xBF\xBD";
 
 //---------------------------------------------------------------------------
 
+bool HasCROrLF(const char* data) noexcept;
 bool IsPlainJSONCharacter(unsigned char character) noexcept;
 bool IsPlainJSONWord(const char* data) noexcept;
 std::size_t MeasureUTF8Sequence(std::string_view text, std::size_t index, std::size_t& invalidLength) noexcept;
 
 //---------------------------------------------------------------------------
+
+/*
+  HasCROrLF
+
+  True if any of the 8 characters at 'data' is a CR or a LF, tested together in a 64-bit word (see IsPlainJSONWord())
+*/
+bool HasCROrLF(const char* data) noexcept
+{
+    constexpr std::uint64_t Ones = 0x0101010101010101;
+    constexpr std::uint64_t HighBits = 0x8080808080808080;
+
+    std::uint64_t word;
+    std::memcpy(&word, data, sizeof(word));
+
+    // The usual test for a zero byte, on the word XORed with each of them
+    const std::uint64_t returns = word ^ (Ones * '\r');
+    const std::uint64_t lineFeeds = word ^ (Ones * '\n');
+    const std::uint64_t found = ((returns - Ones) & ~returns) | ((lineFeeds - Ones) & ~lineFeeds);
+
+    return (found & HighBits) != 0;
+}
 
 /*
   IsPlainJSONCharacter
@@ -728,6 +760,25 @@ std::size_t MeasureUTF8Sequence(std::string_view text, std::size_t index, std::s
 } // namespace
 
 //---------------------------------------------------------------------------
+void ApplyMultilineMode(std::string& line, MultilineMode mode, LineEnding ending)
+{
+    std::size_t index = 0;
+    const auto first = NextMultilinePiece(line, index, mode, ending);
+
+    if (!first.IsLineBreak && index >= line.size())
+        return;
+
+    std::string rewritten;
+    rewritten.reserve(line.size() + 32);
+    rewritten.append(first.Text);
+
+    while (index < line.size())
+        rewritten.append(NextMultilinePiece(line, index, mode, ending).Text);
+
+    line = std::move(rewritten);
+}
+
+//---------------------------------------------------------------------------
 TJSONPiece NextJSONPiece(std::string_view text, std::size_t& index, char (& escape)[6]) noexcept
 {
     const std::size_t start = index;
@@ -814,6 +865,50 @@ TJSONPiece NextJSONPiece(std::string_view text, std::size_t& index, char (& esca
     }
 
     return TJSONPiece{ std::string_view(escape, 2), true };
+}
+
+//---------------------------------------------------------------------------
+TMultilinePiece NextMultilinePiece(std::string_view text, std::size_t& index, MultilineMode mode,
+    LineEnding ending) noexcept
+{
+    const std::size_t start = index;
+
+    if (mode == MultilineMode::Preserve)
+    {
+        index = text.size();
+        return TMultilinePiece{ text.substr(start), false };
+    }
+
+    // Indent leaves a lone CR as it is
+    const auto isLineBreakAt = [text, mode](std::size_t position) {
+            return text[position] == '\n' || (text[position] == '\r' && (mode == MultilineMode::Escape ||
+                (position + 1 < text.size() && text[position + 1] == '\n')));
+        };
+
+    while (index < text.size())
+    {
+        if (text.size() - index >= 8 && !HasCROrLF(text.data() + index))
+            index += 8;
+        else if (isLineBreakAt(index))
+            break;
+        else
+            ++index;
+    }
+
+    if (index > start)
+        return TMultilinePiece{ text.substr(start, index - start), false };
+
+    if (index >= text.size())
+        return TMultilinePiece{};
+
+    if (mode == MultilineMode::Escape)
+        return TMultilinePiece{ text[index++] == '\r' ? EscapedCR : EscapedLF, true };
+
+    index += text[index] == '\r' ? 2 : 1;
+    const std::string_view indented = ending == LineEnding::CRLF ? IndentedCRLF : IndentedLF;
+    const bool isNextLineEmpty = index >= text.size() || isLineBreakAt(index);
+
+    return TMultilinePiece{ isNextLineEmpty ? indented.substr(0, indented.size() - 1) : indented, true };
 }
 
 } // namespace Detail

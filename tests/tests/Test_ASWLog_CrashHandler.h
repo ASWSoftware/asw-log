@@ -45,6 +45,8 @@ private: // Test methods
     void Test_AppendCrashJSONLine_UsesTheFixedLayout();
     void Test_AppendCrashLine_CutsALongMessageButKeepsTheEnding();
     void Test_AppendCrashLine_FieldsThatDontFitAreLeftOut();
+    void Test_AppendCrashLine_FollowsTheMultilineMode();
+    void Test_AppendCrashLine_NeverCutsARewrittenLineBreak();
     void Test_AppendCrashLine_ShowsTheFields();
     void Test_AppendCrashLine_ShowsTheCategory();
     void Test_AppendCrashLine_UsesTheFixedLayout();
@@ -59,6 +61,7 @@ private: // Test methods
     void Test_HandleCrash_ConsoleLogWritesTheLineToStdErr();
     void Test_HandleCrash_DisabledLoggerIsOnlyFlushed();
     void Test_HandleCrash_CrashLineHasTheThreadsScopeFields();
+    void Test_HandleCrash_FixedLayoutLineFollowsTheMultilineMode();
     void Test_HandleCrash_FlushesAndWritesTheCrashLine();
     void Test_HandleCrash_JSONLoggerGetsJSONLinesWhenTheLockStaysBusy();
     void Test_HandleCrash_SkipsClosedAndDestroyedLoggers();

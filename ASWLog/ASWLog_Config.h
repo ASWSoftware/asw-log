@@ -219,6 +219,10 @@ struct TASWLineConfig
     // be shared by several loggers.
     std::shared_ptr<const IASWLogFormatter> Formatter;
     LineEnding Ending = LineEnding::LF; // Added after each formatted line (not after LogRaw entries written as is)
+    // The line breaks inside a formatted line, e.g. of a multi-line message: written as they are (the default), each
+    // followed by "    | " on the next line (Indent), or as \r and \n (Escape), so that every entry is recognizable as
+    // one (see MultilineMode). LogRaw entries written as is always stay as they are; a JSON line has no line breaks.
+    MultilineMode Multiline = MultilineMode::Preserve;
 
     // The clock and precision of the timestamps, e.g. 2026-09-28T21:02:44.342Z (the defaults) or, with
     // TimeZone::Local and TimePrecision::Microseconds, 2026-09-28T16:02:44.342519-05:00. The zone also sets when daily

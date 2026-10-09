@@ -151,6 +151,7 @@ private:
     // From the config (see StoreCrashLineSettingsUnlocked()), for a crash handler that doesn't get the lock
     std::atomic<bool> m_CrashLineUsesCRLF{ false };
     std::atomic<bool> m_CrashLineUsesJSON{ false }; // The formatter is a TASWJSONFormatter
+    std::atomic<MultilineMode> m_CrashLineMultiline{ MultilineMode::Preserve };
     std::atomic<bool> m_WritesCrashLine{ true };
 
 private:

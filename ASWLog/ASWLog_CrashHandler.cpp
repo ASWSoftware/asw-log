@@ -705,6 +705,32 @@ void TCrashText::AppendJSONString(std::string_view text, std::size_t reserved) n
 }
 
 //---------------------------------------------------------------------------
+void TCrashText::AppendMultiline(std::string_view text, MultilineMode mode, LineEnding ending,
+    std::size_t reserved) noexcept
+{
+    const std::size_t limit = Capacity - std::min(Capacity, reserved);
+    std::size_t index = 0;
+
+    while (index < text.size())
+    {
+        const auto piece = NextMultilinePiece(text, index, mode, ending);
+        const std::size_t room = limit > m_Size ? limit - m_Size : 0;
+
+        if (piece.Text.size() <= room)
+        {
+            Append(piece.Text);
+            continue;
+        }
+
+        // A run of text is cut; a rewritten line break is left out whole
+        if (!piece.IsLineBreak)
+            Append(piece.Text.substr(0, room));
+
+        break;
+    }
+}
+
+//---------------------------------------------------------------------------
 std::size_t TCrashText::GetSize() const noexcept
 {
     return m_Size;
@@ -848,7 +874,7 @@ void AppendCrashJSONLine(TCrashText& line, const TASWLogRecord& record, bool use
 }
 
 //---------------------------------------------------------------------------
-void AppendCrashLine(TCrashText& line, const TASWLogRecord& record, bool usesCRLF) noexcept
+void AppendCrashLine(TCrashText& line, const TASWLogRecord& record, bool usesCRLF, MultilineMode multiline) noexcept
 {
     const std::string_view ending = usesCRLF ? "\r\n" : "\n";
 
@@ -878,7 +904,7 @@ void AppendCrashLine(TCrashText& line, const TASWLogRecord& record, bool usesCRL
     }
 
     line.Append("]: ");
-    line.Append(record.Message);
+    line.AppendMultiline(record.Message, multiline, usesCRLF ? LineEnding::CRLF : LineEnding::LF, ending.size());
 
     line.Truncate(TCrashText::Capacity - ending.size());
     line.Append(ending);

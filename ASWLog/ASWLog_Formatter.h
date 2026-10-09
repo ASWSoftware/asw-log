@@ -58,9 +58,10 @@ class IASWLogFormatter
 public:
     virtual ~IASWLogFormatter() = default;
 
-    // Returns the line for 'record', without its line ending (the logger adds TASWLogConfig::Line.Ending).
-    // 'config' is the calling logger's config. Not called for a Raw record (LogRaw()/LogForceRaw()), whose message is
-    // written as is, unless FormatsRawEntries() says so.
+    // Returns the line for 'record', without its line ending (the logger adds TASWLogConfig::Line.Ending, after
+    // rewriting the line breaks inside the line as Line.Multiline says). 'config' is the calling logger's config. Not
+    // called for a Raw record (LogRaw()/LogForceRaw()), whose message is written as is, unless FormatsRawEntries()
+    // says so.
     // May throw, e.g. std::bad_alloc: the entry is then dropped.
     [[nodiscard]] virtual std::string Format(const TASWLogRecord& record, const TASWLogConfig& config) const = 0;
 

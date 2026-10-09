@@ -36,6 +36,10 @@ private:
     typedef TTestGroupBase inherited;
 
 private: // Test methods
+    void Test_ApplyMultilineMode_EscapeWritesCRAndLFAsText();
+    void Test_ApplyMultilineMode_FindsLineBreaksAnywhereInALongText();
+    void Test_ApplyMultilineMode_IndentMarksEachLineAfterTheFirst();
+    void Test_ApplyMultilineMode_LeavesOtherLinesAsTheyAre();
     void Test_GenerateLogFileName_ContainsExpectedFields();
     void Test_GenerateLogFileName_PrefixAndPostfixAreOptional();
     void Test_GetCurrentOSProcessId_MatchesOS();

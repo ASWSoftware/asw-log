@@ -333,6 +333,36 @@ enum class LineEnding
 
 //---------------------------------------------------------------------------
 
+// How a text logger writes the line breaks inside an entry's line, e.g. of a message holding an HTTP body (see
+// TASWLineConfig::Multiline)
+enum class MultilineMode
+{
+    Preserve, // As they are, so a multi-line message spans several lines of the log
+    Indent,   // Each "\n" or "\r\n" as the line ending followed by "    | ", so each line after the first is marked
+    Escape,   // Each CR and LF as the two characters \r and \n, so the entry stays on one line
+};
+
+[[nodiscard]] std::optional<MultilineMode> MultilineMode_FromString(std::string_view str) noexcept;
+
+[[nodiscard]] constexpr std::string_view MultilineMode_ToString(MultilineMode mode) noexcept
+{
+    switch (mode)
+    {
+        case MultilineMode::Preserve:
+            return "PRESERVE";
+
+        case MultilineMode::Indent:
+            return "INDENT";
+
+        case MultilineMode::Escape:
+            return "ESCAPE";
+    }
+
+    return "UNKNOWN";
+}
+
+//---------------------------------------------------------------------------
+
 // How many digits of the second a timestamp shows (see TASWLineConfig::TimestampPrecision). The digits past the system
 // clock's resolution are 0: with nanoseconds, the last two with MSVC and MinGW on Windows (100 ns), the last three with
 // libc++ (1 us, e.g. RAD Studio).

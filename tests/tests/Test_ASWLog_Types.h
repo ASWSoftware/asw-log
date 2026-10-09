@@ -47,6 +47,8 @@ private: // Test methods
     void Test_Level_ToString();
     void Test_LineEnding_FromString();
     void Test_LineEnding_ToString();
+    void Test_MultilineMode_FromString();
+    void Test_MultilineMode_ToString();
     void Test_LogError_ToString();
     void Test_TimePrecision_FromString();
     void Test_TimePrecision_ToString();

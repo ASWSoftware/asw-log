@@ -62,6 +62,14 @@ constexpr bool HasSubmicrosecondClock = std::ratio_less_v<std::chrono::system_cl
 
 //---------------------------------------------------------------------------
 
+// 'text' as Detail::ApplyMultilineMode() rewrites it
+std::string ApplyMode(std::string text, ASWLog::MultilineMode mode, ASWLog::LineEnding ending = ASWLog::LineEnding::LF)
+{
+    ASWLog::Detail::ApplyMultilineMode(text, mode, ending);
+
+    return text;
+}
+
 std::string ReadText(const std::filesystem::path& path)
 {
     std::ifstream stream(path, std::ios::binary);
@@ -95,6 +103,10 @@ std::string ToJSONString(std::string_view text)
 TTest_ASWLog_Utils::TTest_ASWLog_Utils()
     : inherited("ASWLog_Utils_Tests")
 {
+    RegisterTest(&TTest_ASWLog_Utils::Test_ApplyMultilineMode_EscapeWritesCRAndLFAsText, "ApplyMultilineMode_EscapeWritesCRAndLFAsText");
+    RegisterTest(&TTest_ASWLog_Utils::Test_ApplyMultilineMode_FindsLineBreaksAnywhereInALongText, "ApplyMultilineMode_FindsLineBreaksAnywhereInALongText");
+    RegisterTest(&TTest_ASWLog_Utils::Test_ApplyMultilineMode_IndentMarksEachLineAfterTheFirst, "ApplyMultilineMode_IndentMarksEachLineAfterTheFirst");
+    RegisterTest(&TTest_ASWLog_Utils::Test_ApplyMultilineMode_LeavesOtherLinesAsTheyAre, "ApplyMultilineMode_LeavesOtherLinesAsTheyAre");
     RegisterTest(&TTest_ASWLog_Utils::Test_GenerateLogFileName_ContainsExpectedFields, "GenerateLogFileName_ContainsExpectedFields");
     RegisterTest(&TTest_ASWLog_Utils::Test_GenerateLogFileName_PrefixAndPostfixAreOptional, "GenerateLogFileName_PrefixAndPostfixAreOptional");
     RegisterTest(&TTest_ASWLog_Utils::Test_GetCurrentOSProcessId_MatchesOS, "GetCurrentOSProcessId_MatchesOS");
@@ -143,6 +155,114 @@ void TTest_ASWLog_Utils::TearDown_Test(ITestCase& /*testCase*/)
 
 // /////// Begin tests after this line ///////////////////////
 
+//---------------------------------------------------------------------------
+void TTest_ASWLog_Utils::Test_ApplyMultilineMode_EscapeWritesCRAndLFAsText()
+{
+    // Arrange: each CR and LF, alone or together, and other text around them
+    struct TCase
+    {
+        std::string Text;
+        std::string Expected;
+    };
+
+    const std::vector<TCase> cases{
+        { "a\r\nb\nc\rd", "a\\r\\nb\\nc\\rd" }, { "a\n\n", "a\\n\\n" }, { "\r", "\\r" },
+        { "C:\\temp\\new\n", "C:\\temp\\new\\n" }, { "\t\"x\"\xCE\xBB\n", "\t\"x\"\xCE\xBB\\n" }
+    };
+
+    // Act & Assert: the line ending doesn't matter
+    for (const auto& item : cases)
+    {
+        CheckEquals(item.Expected, ApplyMode(item.Text, ASWLog::MultilineMode::Escape),
+            "Only CR and LF should be escaped, with LF endings: " + ToHex(item.Text));
+        CheckEquals(item.Expected, ApplyMode(item.Text, ASWLog::MultilineMode::Escape, ASWLog::LineEnding::CRLF),
+            "Only CR and LF should be escaped, with CRLF endings: " + ToHex(item.Text));
+    }
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_Utils::Test_ApplyMultilineMode_FindsLineBreaksAnywhereInALongText()
+{
+    // Arrange: text is scanned 8 bytes at a time, so each line break goes at every position of the first two 8-byte
+    // words of a longer text, with what it should become
+    struct TCase
+    {
+        ASWLog::MultilineMode Mode;
+        std::string Text;
+        std::string Expected;
+    };
+
+    const std::vector<TCase> breaks{
+        { ASWLog::MultilineMode::Indent, "\n", "\n    | " }, { ASWLog::MultilineMode::Indent, "\r\n", "\n    | " },
+        { ASWLog::MultilineMode::Indent, "\r", "\r" }, { ASWLog::MultilineMode::Escape, "\n", "\\n" },
+        { ASWLog::MultilineMode::Escape, "\r", "\\r" }
+    };
+
+    // Act & Assert
+    for (const auto& item : breaks)
+    {
+        for (std::size_t position = 0; position < 16; ++position)
+        {
+            const std::string before(position, 'a');
+            const std::string after(24 - position, 'z');
+            CheckEquals(before + item.Expected + after, ApplyMode(before + item.Text + after, item.Mode),
+                std::format("{} at index {} should be found ({})", ToHex(item.Text), position,
+                    ASWLog::MultilineMode_ToString(item.Mode)));
+        }
+    }
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_Utils::Test_ApplyMultilineMode_IndentMarksEachLineAfterTheFirst()
+{
+    // Arrange
+    struct TCase
+    {
+        std::string Text;
+        ASWLog::LineEnding Ending;
+        std::string Expected;
+    };
+
+    constexpr auto LF = ASWLog::LineEnding::LF;
+    constexpr auto CRLF = ASWLog::LineEnding::CRLF;
+    const std::vector<TCase> cases{
+        // Each "\n" or "\r\n" becomes the line ending and the marker
+        { "a\nb", LF, "a\n    | b" }, { "a\nb", CRLF, "a\r\n    | b" }, { "a\r\nb", LF, "a\n    | b" },
+        { "a\r\nb", CRLF, "a\r\n    | b" }, { "\nb", LF, "\n    | b" }, { "a\n  b", LF, "a\n    |   b" },
+        // An empty line gets the marker without its space, at the end too
+        { "a\n", LF, "a\n    |" }, { "\n", CRLF, "\r\n    |" }, { "a\n\nb", LF, "a\n    |\n    | b" },
+        { "a\r\n\r\nb", CRLF, "a\r\n    |\r\n    | b" }, { "a\n\r\n", LF, "a\n    |\n    |" },
+        // A lone CR stays as it is
+        { "a\rb", LF, "a\rb" }, { "a\r", CRLF, "a\r" }, { "a\r\r\nb", LF, "a\r\n    | b" }, { "a\n\rb", LF, "a\n    | \rb" }
+    };
+
+    // Act & Assert
+    for (const auto& item : cases)
+    {
+        CheckEquals(item.Expected, ApplyMode(item.Text, ASWLog::MultilineMode::Indent, item.Ending),
+            std::format("{} with {} endings", ToHex(item.Text), ASWLog::LineEnding_ToString(item.Ending)));
+    }
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_Utils::Test_ApplyMultilineMode_LeavesOtherLinesAsTheyAre()
+{
+    // Arrange
+    const std::string multiline = "a\r\nb\n\rc\r";
+    std::string plain = "[2026-09-28T21:02:44.342Z][INFO]: no line break here, but more than 8 characters";
+    const char* plainData = plain.data();
+
+    // Act
+    const auto preservedLF = ApplyMode(multiline, ASWLog::MultilineMode::Preserve);
+    const auto preservedCRLF = ApplyMode(multiline, ASWLog::MultilineMode::Preserve, ASWLog::LineEnding::CRLF);
+    ASWLog::Detail::ApplyMultilineMode(plain, ASWLog::MultilineMode::Indent, ASWLog::LineEnding::LF);
+    ASWLog::Detail::ApplyMultilineMode(plain, ASWLog::MultilineMode::Escape, ASWLog::LineEnding::LF);
+
+    // Assert
+    CheckEquals(multiline, preservedLF, "Preserve should leave every line break as it is (LF endings)");
+    CheckEquals(multiline, preservedCRLF, "Preserve should leave every line break as it is (CRLF endings)");
+    CheckEquals(std::string("[2026-09-28T21:02:44.342Z][INFO]: no line break here, but more than 8 characters"), plain,
+        "A line without line breaks should stay as it is");
+    CheckSame(plainData, plain.data(), "A line without line breaks should be left in place, not copied");
+    CheckEquals(std::string(), ApplyMode("", ASWLog::MultilineMode::Indent), "An empty line should stay empty");
+}
 //---------------------------------------------------------------------------
 void TTest_ASWLog_Utils::Test_GenerateLogFileName_ContainsExpectedFields()
 {

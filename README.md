@@ -41,6 +41,9 @@ ASWLog is a thread-safe light-weight C++ logging tool for Windows and Linux proj
   assigned to `TASWLogConfig::Line.Formatter`).
 - JSON Lines output for log shippers and tools such as `jq`: one escaped JSON object per entry
   (`ASWLog::TASWJSONFormatter`, assigned to `TASWLogConfig::Line.Formatter`).
+- Multi-line messages (e.g. an HTTP body) written as they are, or, with `TASWLogConfig::Line.Multiline`, each line after
+  the first marked with `    | ` (`MultilineMode::Indent`) or the line breaks escaped as `\r` and `\n`
+  (`MultilineMode::Escape`), so that every entry is recognizable as one.
 - Structured fields per entry, e.g. `logger.LogInfo("Order placed", {{"orderId", 17}})`, and scoped context that every
   entry on the thread carries, e.g. `ASWLog::TASWLogScope scope{{"requestId", id}};` (`ASWLog_Fields.h`).
 - Extensible: assign your own formatter (`IASWLogFormatter`) to `TASWLogConfig::Line.Formatter` for your own line layout,

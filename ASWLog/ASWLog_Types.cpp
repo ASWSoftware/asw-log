@@ -141,6 +141,21 @@ std::optional<LineEnding> LineEnding_FromString(std::string_view str) noexcept
 }
 
 //---------------------------------------------------------------------------
+std::optional<MultilineMode> MultilineMode_FromString(std::string_view str) noexcept
+{
+    if (iequals(str, "PRESERVE"))
+        return MultilineMode::Preserve;
+
+    if (iequals(str, "INDENT"))
+        return MultilineMode::Indent;
+
+    if (iequals(str, "ESCAPE"))
+        return MultilineMode::Escape;
+
+    return std::nullopt;
+}
+
+//---------------------------------------------------------------------------
 std::optional<TimePrecision> TimePrecision_FromString(std::string_view str) noexcept
 {
     if (iequals(str, "MILLISECONDS") || iequals(str, "MS"))

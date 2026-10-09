@@ -82,7 +82,7 @@ void TASWTextLogBase::AppendCrashLine(Detail::TCrashText& line, const TASWLogRec
     if (m_CrashLineUsesJSON.load(std::memory_order_relaxed))
         Detail::AppendCrashJSONLine(line, record, usesCRLF);
     else
-        Detail::AppendCrashLine(line, record, usesCRLF);
+        Detail::AppendCrashLine(line, record, usesCRLF, m_CrashLineMultiline.load(std::memory_order_relaxed));
 }
 
 //---------------------------------------------------------------------------
@@ -197,8 +197,9 @@ void TASWTextLogBase::FlushForCrashUnlocked() noexcept
 /*
     TASWTextLogBase::FormatEntry
 
-    The line written for 'record' with 'config': the formatter's line followed by the line ending, or, for a Raw record
-    that the formatter doesn't format (see IsFormatted()), its message as is.
+    The line written for 'record' with 'config': the formatter's line, its line breaks written as Line.Multiline asks,
+    followed by the line ending, or, for a Raw record that the formatter doesn't format (see IsFormatted()), its
+    message as is.
 */
 std::string TASWTextLogBase::FormatEntry(const TASWLogRecord& record, const TASWLogConfig& config)
 {
@@ -216,6 +217,9 @@ std::string TASWTextLogBase::FormatEntry(const TASWLogRecord& record, const TASW
     // at exit before a never-destroyed singleton logger writes its shutdown line)
     const auto* formatter = config.Line.Formatter.get();
     line = formatter != nullptr ? formatter->Format(record, config) : TASWTextFormatter::FormatLine(record, config);
+
+    if (config.Line.Multiline != MultilineMode::Preserve)
+        Detail::ApplyMultilineMode(line, config.Line.Multiline, config.Line.Ending);
 
     if (config.Line.Ending == LineEnding::CRLF)
         line += "\r\n";
@@ -698,6 +702,7 @@ void TASWTextLogBase::StoreCrashLineSettingsUnlocked() noexcept
     m_CrashLineUsesCRLF.store(config.Line.Ending == LineEnding::CRLF, std::memory_order_relaxed);
     const bool usesJSON = dynamic_cast<const TASWJSONFormatter*>(config.Line.Formatter.get()) != nullptr;
     m_CrashLineUsesJSON.store(usesJSON, std::memory_order_relaxed);
+    m_CrashLineMultiline.store(config.Line.Multiline, std::memory_order_relaxed);
     m_WritesCrashLine.store(config.Shutdown.WriteCrashLine, std::memory_order_relaxed);
 }
 

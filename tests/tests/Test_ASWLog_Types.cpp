@@ -53,6 +53,8 @@ TTest_ASWLog_Types::TTest_ASWLog_Types()
     RegisterTest(&TTest_ASWLog_Types::Test_LineEnding_FromString, "LineEnding_FromString");
     RegisterTest(&TTest_ASWLog_Types::Test_LineEnding_ToString, "LineEnding_ToString");
     RegisterTest(&TTest_ASWLog_Types::Test_LogError_ToString, "LogError_ToString");
+    RegisterTest(&TTest_ASWLog_Types::Test_MultilineMode_FromString, "MultilineMode_FromString");
+    RegisterTest(&TTest_ASWLog_Types::Test_MultilineMode_ToString, "MultilineMode_ToString");
     RegisterTest(&TTest_ASWLog_Types::Test_TimePrecision_FromString, "TimePrecision_FromString");
     RegisterTest(&TTest_ASWLog_Types::Test_TimePrecision_ToString, "TimePrecision_ToString");
     RegisterTest(&TTest_ASWLog_Types::Test_TimeZone_FromString, "TimeZone_FromString");
@@ -313,6 +315,29 @@ void TTest_ASWLog_Types::Test_LogError_ToString()
     // Assert
     CheckEquals(std::string("EXCEPTION: Dropped an entry: out of memory"), messageOnlyText, "The empty parts should be left out");
     CheckEquals("OPEN_FAILED: Couldn't open the log file 'logs/app.log': " + code.message() + " (3 more not reported)", everyPartText, "Every part should be in the line");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_Types::Test_MultilineMode_FromString()
+{
+    // Arrange
+    const auto preserve = ASWLog::MultilineMode_FromString("PRESERVE");
+    const auto indent = ASWLog::MultilineMode_FromString("indent");
+    const auto escape = ASWLog::MultilineMode_FromString("Escape");
+    const auto unknown = ASWLog::MultilineMode_FromString("verbatim");
+
+    // Act & Assert
+    CheckTrue(preserve == ASWLog::MultilineMode::Preserve, "PRESERVE should map to Preserve");
+    CheckTrue(indent == ASWLog::MultilineMode::Indent, "indent should map to Indent, ignoring case");
+    CheckTrue(escape == ASWLog::MultilineMode::Escape, "Escape should map to Escape, ignoring case");
+    CheckFalse(unknown.has_value(), "An unknown mode should not parse");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_Types::Test_MultilineMode_ToString()
+{
+    // Act & Assert
+    CheckEquals(std::string("PRESERVE"), std::string(ASWLog::MultilineMode_ToString(ASWLog::MultilineMode::Preserve)), "Preserve should stringify as PRESERVE");
+    CheckEquals(std::string("INDENT"), std::string(ASWLog::MultilineMode_ToString(ASWLog::MultilineMode::Indent)), "Indent should stringify as INDENT");
+    CheckEquals(std::string("ESCAPE"), std::string(ASWLog::MultilineMode_ToString(ASWLog::MultilineMode::Escape)), "Escape should stringify as ESCAPE");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_Types::Test_TimePrecision_FromString()

@@ -426,6 +426,10 @@ TTest_ASWLog_TextLogBase::TTest_ASWLog_TextLogBase()
     RegisterTest(&TTest_ASWLog_TextLogBase::Test_Log_ThrowingWriteDoesNotEscape, "Log_ThrowingWriteDoesNotEscape");
     RegisterTest(&TTest_ASWLog_TextLogBase::Test_LogRaw_FormatterCanFormatRawEntries, "LogRaw_FormatterCanFormatRawEntries");
     RegisterTest(&TTest_ASWLog_TextLogBase::Test_LogRaw_WritesMessageAsIs, "LogRaw_WritesMessageAsIs");
+    RegisterTest(&TTest_ASWLog_TextLogBase::Test_Multiline_AppliesToEveryFormattersLine, "Multiline_AppliesToEveryFormattersLine");
+    RegisterTest(&TTest_ASWLog_TextLogBase::Test_Multiline_EscapeKeepsEachEntryOnOneLine, "Multiline_EscapeKeepsEachEntryOnOneLine");
+    RegisterTest(&TTest_ASWLog_TextLogBase::Test_Multiline_LogRawStaysAsIs, "Multiline_LogRawStaysAsIs");
+    RegisterTest(&TTest_ASWLog_TextLogBase::Test_Multiline_PreserveWritesLineBreaksAsTheyAre, "Multiline_PreserveWritesLineBreaksAsTheyAre");
     RegisterTest(&TTest_ASWLog_TextLogBase::Test_OnLogEntry_CallbackCanReconfigureTheLogger, "OnLogEntry_CallbackCanReconfigureTheLogger");
     RegisterTest(&TTest_ASWLog_TextLogBase::Test_Reconfigure_AppliesNewConfigButKeepsLevel, "Reconfigure_AppliesNewConfigButKeepsLevel");
     RegisterTest(&TTest_ASWLog_TextLogBase::Test_Reconfigure_IsSafeWhileOtherThreadsLog, "Reconfigure_IsSafeWhileOtherThreadsLog");
@@ -1323,6 +1327,114 @@ void TTest_ASWLog_TextLogBase::Test_LogRaw_WritesMessageAsIs()
     // Assert
     CheckTrue(output.Lines == std::vector<std::string>{ "partial", " line\n" }, "Raw entries should be written as is, without a format or a line ending");
     CheckTrue(output.EndsLine == std::vector<bool>{ false, false }, "A raw entry doesn't end its line");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_TextLogBase::Test_Multiline_AppliesToEveryFormattersLine()
+{
+    // Arrange: Indent with CRLF endings, for the built-in layout, a pattern, a user's own formatter and JSON
+    auto config = MakeQuietConfig();
+    config.Line.Multiline = ASWLog::MultilineMode::Indent;
+    config.Line.Ending = ASWLog::LineEnding::CRLF;
+
+    const auto logWith = [&config](std::shared_ptr<const ASWLog::IASWLogFormatter> formatter) {
+            TMemoryOutput output;
+            auto formatterConfig = config;
+            formatterConfig.Line.Formatter = std::move(formatter);
+            TMemoryTextLog log(output);
+            if (log.Initialize(formatterConfig))
+                log.LogInfo("first\nsecond");
+
+            return output.Lines;
+        };
+
+    // Act
+    const auto textLines = logWith(nullptr);
+    const auto patternLines = logWith(std::make_shared<const ASWLog::TASWPatternFormatter>("{level}|{message} <"));
+    const auto ownLines = logWith(std::make_shared<const TPipeFormatter>());
+    const auto jsonLines = logWith(std::make_shared<const ASWLog::TASWJSONFormatter>());
+
+    // Assert
+    CheckTrue(textLines == std::vector<std::string>{ "[INFO]: first\r\n    | second\r\n" }, "The built-in layout's line should be indented");
+    CheckTrue(patternLines == std::vector<std::string>{ "INFO|first\r\n    | second <\r\n" }, "A pattern's line should be indented");
+    CheckTrue(ownLines == std::vector<std::string>{ "INFO|first\r\n    | second\r\n" }, "A user's own formatter's line should be indented");
+    CheckTrue(jsonLines == std::vector<std::string>{ "{\"level\":\"INFO\",\"message\":\"first\\nsecond\"}\r\n" },
+        "A JSON line has no line break to indent");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_TextLogBase::Test_Multiline_EscapeKeepsEachEntryOnOneLine()
+{
+    // Arrange: a logger that starts with Preserve and is reconfigured to Escape, and an asynchronous one
+    TMemoryOutput output;
+    TMemoryOutput asyncOutput;
+    std::vector<std::string> callbackLines;
+    auto config = MakeQuietConfig();
+    config.OnLogEntryMinimumLevel = ASWLog::Level::Info;
+    config.OnLogEntry = [&callbackLines](const ASWLog::TASWLogRecord& /*record*/, std::string_view line) {
+            callbackLines.emplace_back(line);
+        };
+    auto escapeConfig = config;
+    escapeConfig.Line.Multiline = ASWLog::MultilineMode::Escape;
+    auto asyncConfig = MakeAsyncConfig();
+    asyncConfig.Line.Multiline = ASWLog::MultilineMode::Escape;
+    TMemoryTextLog log(output);
+    TMemoryTextLog asyncLog(asyncOutput);
+    CheckTrue(log.Initialize(config), "Initialize should succeed");
+    CheckTrue(asyncLog.Initialize(asyncConfig), "Initialize should succeed (async)");
+
+    // Act
+    log.LogInfo("first\nline");
+    const bool reconfigured = log.Reconfigure(escapeConfig);
+    log.LogInfo("GET /\r\nHost: x\r\n");
+    asyncLog.LogInfo("GET /\r\nHost: x\r\n");
+    asyncLog.Flush(); // Waits for the queued entry
+
+    // Assert
+    const std::vector<std::string> expected{ "[INFO]: first\nline\n", "[INFO]: GET /\\r\\nHost: x\\r\\n\n" };
+    CheckTrue(reconfigured, "Reconfigure should succeed");
+    CheckTrue(output.Lines == expected, "After Reconfigure, the line breaks should be escaped");
+    CheckTrue(callbackLines == expected, "OnLogEntry should get the line as written");
+    CheckTrue(asyncOutput.Lines == std::vector<std::string>{ expected[1] }, "A queued line's line breaks should be escaped");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_TextLogBase::Test_Multiline_LogRawStaysAsIs()
+{
+    // Arrange: Indent, without and with a formatter that formats raw entries
+    TMemoryOutput output;
+    TMemoryOutput formattedOutput;
+    auto config = MakeQuietConfig();
+    config.Line.Multiline = ASWLog::MultilineMode::Indent;
+    auto formattedConfig = config;
+    formattedConfig.Line.Formatter = std::make_shared<const TRawFormattingFormatter>();
+    TMemoryTextLog log(output);
+    TMemoryTextLog formattedLog(formattedOutput);
+    CheckTrue(log.Initialize(config), "Initialize should succeed");
+    CheckTrue(formattedLog.Initialize(formattedConfig), "Initialize should succeed (formatted raw entries)");
+
+    // Act
+    log.LogRaw(ASWLog::Level::Info, "a\nb\n");
+    log.LogForceRaw(ASWLog::Level::Trace, "c\r\nd");
+    formattedLog.LogRaw(ASWLog::Level::Info, "a\nb");
+
+    // Assert
+    CheckTrue(output.Lines == std::vector<std::string>{ "a\nb\n", "c\r\nd" }, "Raw entries written as is should stay as they are");
+    CheckTrue(formattedOutput.Lines == std::vector<std::string>{ "raw|a\n    | b\n" },
+        "A raw entry the formatter formats should be indented like any formatted line");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_TextLogBase::Test_Multiline_PreserveWritesLineBreaksAsTheyAre()
+{
+    // Arrange: the default mode, with CRLF endings
+    TMemoryOutput output;
+    auto config = MakeQuietConfig();
+    config.Line.Ending = ASWLog::LineEnding::CRLF;
+    TMemoryTextLog log(output);
+    CheckTrue(log.Initialize(config), "Initialize should succeed");
+
+    // Act
+    log.LogInfo("a\r\nb\nc\rd\n");
+
+    // Assert: no line break converted to the line ending
+    CheckTrue(output.Lines == std::vector<std::string>{ "[INFO]: a\r\nb\nc\rd\n\r\n" }, "The message should be written as it is");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_TextLogBase::Test_OnLogEntry_CallbackCanReconfigureTheLogger()

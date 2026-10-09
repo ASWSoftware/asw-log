@@ -89,6 +89,7 @@ void TTest_ASWLog_Config::Test_Defaults_MatchDocumentedValues()
     // Assert: Line
     CheckNull(config.Line.Formatter, "Line.Formatter should default to unset (the built-in layout)");
     CheckEquals(ASWLog::LineEnding::LF, config.Line.Ending, "Line.Ending should default to LF");
+    CheckEquals(ASWLog::MultilineMode::Preserve, config.Line.Multiline, "Line.Multiline should default to Preserve");
     CheckEquals(ASWLog::TimeZone::UTC, config.Line.TimestampZone, "Line.TimestampZone should default to UTC");
     CheckEquals(ASWLog::TimePrecision::Milliseconds, config.Line.TimestampPrecision, "Line.TimestampPrecision should default to Milliseconds");
     CheckTrue(config.Line.ShowTimestamp, "Line.ShowTimestamp should default to true");

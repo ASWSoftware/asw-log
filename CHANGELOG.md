@@ -110,6 +110,18 @@ see [0.26.1](#0261---2026-09-17) for the initial versioned baseline.
   crash line gets the crashing thread's scope fields. `TASWLogRecord`
   gains `Fields` and `Scope` (both pointers, so a filtered call costs no
   more), read with `ForEachField()`.
+- Multi-line message handling: `Line.Multiline` (`MultilineMode::Preserve`,
+  the default, writes line breaks as they are, as before). With
+  `MultilineMode::Indent`, each `\n` or `\r\n` in a formatted line is
+  written as the line ending followed by `    | ` (`    |` for an empty
+  line), so every line after an entry's first is marked as part of it and
+  can't pass for an entry of its own; a lone `\r` stays as it is. With
+  `MultilineMode::Escape`, each CR and LF is written as the two characters
+  `\r` and `\n` (other characters, backslashes included, as they are), so
+  every entry is one line. It applies to the line of any formatter,
+  including your own (a JSON line has no line breaks), and to the
+  fixed-layout crash and backtrace lines; `LogRaw()` entries written as is
+  stay as they are.
 
 ### Changed
 
