@@ -79,6 +79,25 @@ public:
     TReportingErrorScope& operator=(const TReportingErrorScope&) = delete;
 };
 
+//---------------------------------------------------------------------------
+
+void ForgetCopiedViews(TASWLogRecord& record) noexcept;
+
+//---------------------------------------------------------------------------
+
+/*
+  ForgetCopiedViews
+
+  Empties the views of a kept record whose texts and fields are held in copies beside it (see TBacktraceEntry)
+*/
+void ForgetCopiedViews(TASWLogRecord& record) noexcept
+{
+    record.Message = {};
+    record.Category = {};
+    record.Fields = nullptr;
+    record.Scope = nullptr;
+}
+
 } // namespace
 
 //---------------------------------------------------------------------------
@@ -171,12 +190,15 @@ void TASWLogBase::KeepInBacktrace(const TASWLogRecord& record)
     if (m_BacktraceCapacity == 0)
         return; // Switched off since the gate let the entry in
 
+    // The fields are copied first, so a failed copy changes nothing
+    Detail::TOwnedFields fields;
+    fields.AssignMerged(record.Scope, record.GetOwnFields());
+
     if (m_Backtrace.size() < m_BacktraceCapacity)
     {
         // The texts are copied first, so a failed copy leaves no empty entry behind
-        TBacktraceEntry entry{ record, std::string(record.Message), std::string(record.Category) };
-        entry.Record.Message = {};
-        entry.Record.Category = {};
+        TBacktraceEntry entry{ record, std::string(record.Message), std::string(record.Category), std::move(fields) };
+        ForgetCopiedViews(entry.Record);
         m_Backtrace.push_back(std::move(entry));
     }
     else
@@ -187,9 +209,9 @@ void TASWLogBase::KeepInBacktrace(const TASWLogRecord& record)
         std::string category(record.Category);
         entry.Message.assign(record.Message);
         entry.Category.swap(category);
+        entry.Fields = std::move(fields);
         entry.Record = record;
-        entry.Record.Message = {};
-        entry.Record.Category = {};
+        ForgetCopiedViews(entry.Record);
         m_BacktraceOldest = (m_BacktraceOldest + 1) % m_BacktraceCapacity;
     }
 
@@ -345,6 +367,9 @@ void TASWLogBase::Write(const TASWLogRecord& record) noexcept
     TASWLogRecord stampedRecord = record;
     StampRecord(stampedRecord);
 
+    if (stampedRecord.Scope == nullptr)
+        stampedRecord.Scope = TASWLogScope::GetCurrent();
+
     // A derived logger's WriteRecord() may throw (e.g. out of memory, or a custom logger's own error); logging must
     // never throw into the application, so the entry is dropped instead
     try
@@ -398,10 +423,14 @@ void TASWLogBase::WriteBacktrace()
 
     for (const auto& entry : entries)
     {
+        const auto fields = entry.Fields.Get();
+
         auto record = entry.Record;
         record.Message = entry.Message;
         record.Category = entry.Category;
+        record.Fields = &fields;
         record.Forced = true;
+
         WriteRecord(record);
     }
 

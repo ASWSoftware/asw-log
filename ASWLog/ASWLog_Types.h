@@ -35,9 +35,12 @@ limitations under the License.
 #include <filesystem>
 #include <optional>
 #include <source_location>
+#include <span>
 #include <string>
 #include <string_view>
 #include <system_error>
+//---------------------------------------------------------------------------
+#include "ASWLog_Fields.h"
 //---------------------------------------------------------------------------
 
 namespace ASWLog
@@ -418,8 +421,9 @@ struct TASWLogError
 // by a multi-log to its loggers) keeps them. A category logger (see TASWCategoryLog) fills in Category and, if it has
 // a level of its own, CategoryLevel.
 //
-// Message, Category and Location refer to the caller's data, so they are only valid during the call; a logger,
-// formatter or callback that keeps a record beyond it must copy them.
+// Message, Category, Location, Fields and Scope refer to the caller's data, so they are only valid during the call; a
+// logger, formatter or callback that keeps a record beyond it must copy them (the fields with ForEachField(), since the
+// scope is the thread's).
 /////////////////////////////////////////////////////////////////////////////
 struct TASWLogRecord
 {
@@ -440,6 +444,33 @@ struct TASWLogRecord
     std::source_location Location; // Where the entry was logged
     std::uint32_t ProcessId = 0; // The OS process id (see GetCurrentOSProcessId())
     std::uint32_t ThreadId = 0; // The OS id of the thread that logged the entry (see GetCurrentOSThreadId())
+    // The entry's own fields, from the logging call (e.g. LogInfo("Order placed", {{"orderId", 17}})), or null. A
+    // pointer to the list rather than the list itself, because every logging call builds a record, even when the entry
+    // is filtered out, and a 16-byte member measurably slowed that down.
+    const std::span<const TASWLogField>* Fields = nullptr;
+    // The innermost scope of the thread that logged the entry (see TASWLogScope), filled in by TASWLogBase::Write()
+    // like the Timestamp, if still null; null if the thread has none
+    const TASWLogScope* Scope = nullptr;
+
+    // Calls visit(field) for each of the entry's fields, its scopes' and its own, each key once, the innermost value
+    // winning (see ForEachLogField()). Allocates nothing.
+    template<typename TVisit>
+    void ForEachField(TVisit&& visit) const
+    {
+        ForEachLogField(Scope, GetOwnFields(), visit);
+    }
+
+    // The entry's own fields (see Fields), which may be empty
+    [[nodiscard]] std::span<const TASWLogField> GetOwnFields() const noexcept
+    {
+        return Fields != nullptr ? *Fields : std::span<const TASWLogField>();
+    }
+
+    // True if the entry may have fields (its own, or a scope; a scope may have none)
+    [[nodiscard]] bool HasFields() const noexcept
+    {
+        return (Fields != nullptr && !Fields->empty()) || Scope != nullptr;
+    }
 };
 
 //---------------------------------------------------------------------------

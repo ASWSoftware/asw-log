@@ -76,7 +76,8 @@ struct TASWCrashHandlerOptions
 //   since converting to local time isn't async-signal-safe. The buffered entries are flushed only if the logger's lock
 //   is free (fflush isn't on POSIX's list of async-signal-safe functions, but no other thread can use the file then).
 //   The backtrace's lines get the same layout, with their own level and category (after the level, as "[Net]", or as
-//   "category" in JSON), and only if the backtrace's lock is free.
+//   "category" in JSON), and only if the backtrace's lock is free. The lines show the entry's fields too (see
+//   TASWLogScope; the crash line has the crashing thread's scope fields), after the thread id, as far as they fit.
 // - If a logger's lock stays busy until WaitTimeout has passed (e.g. the crash happened while that thread was
 //   writing an entry), its buffered entries are lost and only the fixed-layout lines (backtrace and crash line) are
 //   written, straight to the file.

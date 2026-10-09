@@ -239,6 +239,7 @@ struct TASWLineConfig
     bool ShowPeakWorkingSet = false;
     bool ShowFunctionName   = false; // The function that logged the entry
     bool ShowSourceLine     = false; // The source file and line that logged the entry
+    bool ShowFields         = true; // The entry's fields (its own and its scopes'; see TASWLogScope), if it has any
 };
 
 

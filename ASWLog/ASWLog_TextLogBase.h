@@ -105,9 +105,11 @@ private:
     // An entry queued by an asynchronous logger (see TASWAsyncConfig), for the worker to write
     struct TQueuedEntry
     {
-        TASWLogRecord Record; // Its Message and Category are empty: the texts are in Message and Category, if needed
+        // Its Message, Category, Fields and Scope are empty: the copies below hold them, if needed
+        TASWLogRecord Record;
         std::string Message; // The record's message, copied only if OnLogEntry will be called
         std::string Category; // The record's category, likewise
+        Detail::TOwnedFields Fields; // The record's fields and its scopes', merged, likewise
         std::string Line; // The line to write: formatted, or the raw text
         std::shared_ptr<const TASWLogConfig> CallbackConfig; // Set only if OnLogEntry will be called
         std::uint64_t Sequence = 0;

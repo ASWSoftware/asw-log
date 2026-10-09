@@ -91,6 +91,9 @@ public:
 //                       ShowPeakWorkingSet)
 //   "function"          the function that logged the entry (ShowFunctionName)
 //   "file", "line"      its source file's name (without folders) and line, a number (ShowSourceLine)
+//   "fields"            an object with the entry's fields, its own and its scopes' (see TASWLogScope), each key once,
+//                       if it has any (ShowFields): numbers and bools as such, texts as strings, and a NaN or infinite
+//                       double as the string "NaN", "Infinity" or "-Infinity"
 //   "raw"               true for a LogRaw()/LogForceRaw() entry, which gets a line of its own like any other
 //   "message"           the message, always
 // Texts are escaped as RFC 8259 asks, with each invalid UTF-8 sequence replaced by U+FFFD (see JSON::AppendString()),
@@ -122,6 +125,8 @@ public:
 //   {ws}, {pws}     the process's working set and peak working set in bytes (the memory is read once per line)
 //   {function}      the function that logged the entry
 //   {file}, {line}  its source file's name (without folders) and line
+//   {fields}        the entry's fields, its own and its scopes' (see TASWLogScope), as in TASWTextFormatter's layout:
+//                   requestId="8f3a" orderId=17; nothing if it has none
 //   {message}       the message
 // A minimum width after the name, e.g. {level:5}, pads the field with spaces on the right (counted in bytes). Text
 // inside the braces around the name is written only when the field isn't empty: punctuation and spaces as they are,
@@ -149,6 +154,7 @@ private:
         Function,
         File,
         Line,
+        Fields,
         Message,
     };
 
@@ -184,10 +190,13 @@ public:
 // TASWTextFormatter
 //
 // The built-in text layout, used when TASWLogConfig::Line.Formatter is empty:
-// "[time][LEVEL][category][P:pid][T:tid][WS:bytes][PWS:bytes][function][file:line]: message", where each bracketed
-// field is written only if its TASWLineConfig option is on (ShowTimestamp, ShowLevel, ShowCategory, ShowProcessId,
-// ShowThreadId, ShowWorkingSet, ShowPeakWorkingSet, ShowFunctionName, ShowSourceLine), and the category only if the
-// entry has one. For another layout, see TASWPatternFormatter; for JSON Lines, TASWJSONFormatter.
+// "[time][LEVEL][category][P:pid][T:tid][WS:bytes][PWS:bytes][function][file:line][fields]: message", where each
+// bracketed field is written only if its TASWLineConfig option is on (ShowTimestamp, ShowLevel, ShowCategory,
+// ShowProcessId, ShowThreadId, ShowWorkingSet, ShowPeakWorkingSet, ShowFunctionName, ShowSourceLine, ShowFields), and
+// the category and the fields only if the entry has them. The fields, its own and its scopes' (see TASWLogScope), read
+// [requestId="8f3a" orderId=17 cached=true]: each key once, texts in double quotes with '"', '\' and control
+// characters escaped as in JSON, numbers and bools as they are. For another layout, see TASWPatternFormatter; for JSON
+// Lines, TASWJSONFormatter.
 /////////////////////////////////////////////////////////////////////////////
 class TASWTextFormatter : public IASWLogFormatter
 {

@@ -37,8 +37,10 @@ limitations under the License.
 #include <initializer_list>
 #include <iostream>
 #include <iterator>
+#include <limits>
 #include <memory>
 #include <mutex>
+#include <span>
 #include <sstream>
 #include <stdexcept>
 #include <string>
@@ -563,8 +565,11 @@ TTest_ASWLog_CrashHandler::TTest_ASWLog_CrashHandler()
     : inherited("ASWLog_CrashHandler_Tests")
 {
     RegisterTest(&TTest_ASWLog_CrashHandler::Test_AppendCrashJSONLine_CutsALongTextButStaysValid, "AppendCrashJSONLine_CutsALongTextButStaysValid");
+    RegisterTest(&TTest_ASWLog_CrashHandler::Test_AppendCrashJSONLine_ShowsTheFields, "AppendCrashJSONLine_ShowsTheFields");
     RegisterTest(&TTest_ASWLog_CrashHandler::Test_AppendCrashJSONLine_UsesTheFixedLayout, "AppendCrashJSONLine_UsesTheFixedLayout");
     RegisterTest(&TTest_ASWLog_CrashHandler::Test_AppendCrashLine_CutsALongMessageButKeepsTheEnding, "AppendCrashLine_CutsALongMessageButKeepsTheEnding");
+    RegisterTest(&TTest_ASWLog_CrashHandler::Test_AppendCrashLine_FieldsThatDontFitAreLeftOut, "AppendCrashLine_FieldsThatDontFitAreLeftOut");
+    RegisterTest(&TTest_ASWLog_CrashHandler::Test_AppendCrashLine_ShowsTheFields, "AppendCrashLine_ShowsTheFields");
     RegisterTest(&TTest_ASWLog_CrashHandler::Test_AppendCrashLine_ShowsTheCategory, "AppendCrashLine_ShowsTheCategory");
     RegisterTest(&TTest_ASWLog_CrashHandler::Test_AppendCrashLine_UsesTheFixedLayout, "AppendCrashLine_UsesTheFixedLayout");
     RegisterTest(&TTest_ASWLog_CrashHandler::Test_CrashProcess_AbortWritesTheCrashLine, "CrashProcess_AbortWritesTheCrashLine");
@@ -577,6 +582,7 @@ TTest_ASWLog_CrashHandler::TTest_ASWLog_CrashHandler()
     RegisterTest(&TTest_ASWLog_CrashHandler::Test_CrashProcess_TerminateWritesTheExceptionAndFlushes, "CrashProcess_TerminateWritesTheExceptionAndFlushes");
     RegisterTest(&TTest_ASWLog_CrashHandler::Test_HandleCrash_ConsoleLogWritesTheLineToStdErr, "HandleCrash_ConsoleLogWritesTheLineToStdErr");
     RegisterTest(&TTest_ASWLog_CrashHandler::Test_HandleCrash_DisabledLoggerIsOnlyFlushed, "HandleCrash_DisabledLoggerIsOnlyFlushed");
+    RegisterTest(&TTest_ASWLog_CrashHandler::Test_HandleCrash_CrashLineHasTheThreadsScopeFields, "HandleCrash_CrashLineHasTheThreadsScopeFields");
     RegisterTest(&TTest_ASWLog_CrashHandler::Test_HandleCrash_FlushesAndWritesTheCrashLine, "HandleCrash_FlushesAndWritesTheCrashLine");
     RegisterTest(&TTest_ASWLog_CrashHandler::Test_HandleCrash_JSONLoggerGetsJSONLinesWhenTheLockStaysBusy, "HandleCrash_JSONLoggerGetsJSONLinesWhenTheLockStaysBusy");
     RegisterTest(&TTest_ASWLog_CrashHandler::Test_HandleCrash_SkipsClosedAndDestroyedLoggers, "HandleCrash_SkipsClosedAndDestroyedLoggers");
@@ -671,6 +677,35 @@ void TTest_ASWLog_CrashHandler::Test_AppendCrashJSONLine_CutsALongTextButStaysVa
     }
 }
 //---------------------------------------------------------------------------
+void TTest_ASWLog_CrashHandler::Test_AppendCrashJSONLine_ShowsTheFields()
+{
+    // Arrange: a kept entry with fields of each kind
+    using namespace std::chrono;
+    const ASWLog::TASWLogField own[] = {
+        { "user", "a\"my" }, { "n", 17 }, { "x", 9.5 }, { "ok", true }, { "nan", std::numeric_limits<double>::quiet_NaN() }
+    };
+    const std::span<const ASWLog::TASWLogField> ownFields(own);
+
+    ASWLog::TASWLogRecord record;
+    record.Timestamp = sys_days{ year{ 2026 } / 10 / 4 } + hours(12) + minutes(34) + seconds(56) + milliseconds(789);
+    record.LogLevel = ASWLog::Level::Debug;
+    record.Message = "kept";
+    record.ProcessId = 12;
+    record.ThreadId = 345;
+    record.Fields = &ownFields;
+
+    // Act
+    ASWLog::Detail::TCrashText line;
+    ASWLog::Detail::AppendCrashJSONLine(line, record, false);
+
+    // Assert
+    CheckEquals(std::string(R"({"time":"2026-10-04T12:34:56.789Z","epoch_ms":1791117296789,"level":"DEBUG","pid":12,"tid":345,)"
+        R"("fields":{"user":"a\"my","n":17,"x":9.5,"ok":true,"nan":"NaN"},"message":"kept"})" "\n"), std::string(line.View()),
+        "The fields should follow the thread id, as an object");
+    CheckEquals(ASWLog::TASWJSONFormatter().Format(record, ASWLog::TASWLogConfig()) + "\n", std::string(line.View()),
+        "The fixed layout should match the JSON formatter's default fields");
+}
+//---------------------------------------------------------------------------
 void TTest_ASWLog_CrashHandler::Test_AppendCrashJSONLine_UsesTheFixedLayout()
 {
     // Arrange: a crash line, and a raw backtrace entry from a category
@@ -725,6 +760,75 @@ void TTest_ASWLog_CrashHandler::Test_AppendCrashLine_CutsALongMessageButKeepsThe
     const std::string text(line.View());
     CheckEquals(ASWLog::Detail::TCrashText::Capacity, text.size(), "The line should fill the buffer");
     CheckEndsWith(text, "x\r\n", "The cut line should still end with the line ending");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_CrashHandler::Test_AppendCrashLine_FieldsThatDontFitAreLeftOut()
+{
+    // Arrange: a text field longer than the buffer, then one that no longer fits after it; and a field whose key alone
+    // is too long, between two that fit
+    const std::string longText(3000, 'v');
+    const ASWLog::TASWLogField own[] = { { "long", longText }, { "after", 1 } };
+    const std::span<const ASWLog::TASWLogField> ownFields(own);
+
+    ASWLog::TASWLogRecord record;
+    record.LogLevel = ASWLog::Level::Critical;
+    record.Message = "msg";
+    record.Fields = &ownFields;
+
+    const std::string longKey(2000, 'k');
+    const ASWLog::TASWLogField keyed[] = { { "a", 1 }, { longKey, 2 }, { "z", 3 } };
+    const std::span<const ASWLog::TASWLogField> keyedFields(keyed);
+
+    auto keyedRecord = record;
+    keyedRecord.Fields = &keyedFields;
+
+    // Act
+    ASWLog::Detail::TCrashText textLine;
+    ASWLog::Detail::AppendCrashLine(textLine, record, true);
+    ASWLog::Detail::TCrashText jsonLine;
+    ASWLog::Detail::AppendCrashJSONLine(jsonLine, record, true);
+    ASWLog::Detail::TCrashText keyedTextLine;
+    ASWLog::Detail::AppendCrashLine(keyedTextLine, keyedRecord, true);
+    ASWLog::Detail::TCrashText keyedJSONLine;
+    ASWLog::Detail::AppendCrashJSONLine(keyedJSONLine, keyedRecord, true);
+
+    // Assert
+    CheckEndsWith(std::string(keyedTextLine.View()), "[a=1 z=3]: msg\r\n", "A field whose key doesn't fit should be left out whole");
+    CheckEndsWith(std::string(keyedJSONLine.View()), R"("fields":{"a":1,"z":3},"message":"msg"})" "\r\n",
+        "A field whose key doesn't fit should be left out of the JSON line whole");
+
+    const std::string text(textLine.View());
+    const std::string json(jsonLine.View());
+    CheckContains(text, "[long=\"vvv", "The long text should be written, cut to fit");
+    CheckNotContains(text, "after=", "A field that doesn't fit should be left out whole");
+    CheckEndsWith(text, "v\"]: msg\r\n", "The cut text should be closed, and the message should still fit");
+    CheckNotContains(json, "\"after\"", "A field that doesn't fit should be left out of the JSON line too");
+    CheckEndsWith(json, "v\"},\"message\":\"msg\"}\r\n", "The JSON line should close the fields and keep the message");
+    CheckTrue(IsJSONObjectLine(json.substr(0, json.size() - 2)), "The JSON line should be one JSON object");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_CrashHandler::Test_AppendCrashLine_ShowsTheFields()
+{
+    // Arrange: a kept entry with its own fields
+    using namespace std::chrono;
+    const ASWLog::TASWLogField own[] = { { "user", "amy" }, { "n", 17 } };
+    const std::span<const ASWLog::TASWLogField> ownFields(own);
+
+    ASWLog::TASWLogRecord record;
+    record.Timestamp = sys_days{ year{ 2026 } / 10 / 8 } + hours(1) + minutes(2) + seconds(3) + milliseconds(4);
+    record.LogLevel = ASWLog::Level::Debug;
+    record.Message = "kept";
+    record.ProcessId = 12;
+    record.ThreadId = 345;
+    record.Fields = &ownFields;
+
+    // Act
+    ASWLog::Detail::TCrashText line;
+    ASWLog::Detail::AppendCrashLine(line, record, false);
+
+    // Assert
+    CheckEquals(std::string("[2026-10-08T01:02:03.004Z][DEBUG][P:12][T:345][user=\"amy\" n=17]: kept\n"), std::string(line.View()),
+        "The fields should follow the thread id, as in the built-in layout");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_CrashHandler::Test_AppendCrashLine_UsesTheFixedLayout()
@@ -963,6 +1067,27 @@ void TTest_ASWLog_CrashHandler::Test_HandleCrash_DisabledLoggerIsOnlyFlushed()
     // Assert
     CheckEquals(std::string("[INFO]: entry_1\n"), ReadFileText(TestTempDir / "disabled.log"),
         "A disabled logger should be flushed, without the crash line");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_CrashHandler::Test_HandleCrash_CrashLineHasTheThreadsScopeFields()
+{
+    // Arrange: two loggers, one whose lock another thread holds
+    ASWLog::TASWFileLog log;
+    CheckTrue(log.Initialize(MakeCrashTestConfig("scoped.log")), "Initialize should succeed");
+    TLockableFileLog busyLog;
+    CheckTrue(busyLog.Initialize(MakeCrashTestConfig("scoped_busy.log")), "Initialize should succeed (busy)");
+
+    // Act: the crash is handled on this thread, inside its scope
+    {
+        const ASWLog::TASWLogScope scope{ { "requestId", "r-1" } };
+        HandleCrashWhileLocked(busyLog, "scoped");
+    }
+
+    // Assert
+    CheckEquals(std::string("[CRITICAL][requestId=\"r-1\"]: Crash: scoped\n"), ReadFileText(TestTempDir / "scoped.log"),
+        "The formatted crash line should have the crashing thread's scope fields");
+    CheckEndsWith(ReadFileText(TestTempDir / "scoped_busy.log"), std::format("][T:{}][requestId=\"r-1\"]: Crash: scoped\n",
+        ASWLog::GetCurrentOSThreadId()), "The fixed-layout crash line should have them too");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_CrashHandler::Test_HandleCrash_FlushesAndWritesTheCrashLine()

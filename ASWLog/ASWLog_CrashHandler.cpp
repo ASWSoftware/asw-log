@@ -540,6 +540,76 @@ void UninstallCrashHandlers() noexcept
 namespace Detail
 {
 
+namespace
+{
+
+// The room a fixed-layout line keeps after its fields: the rest of the line's own text, part of the message, and the
+// line ending
+constexpr std::size_t FieldsReserved = 96;
+
+//---------------------------------------------------------------------------
+
+bool AppendCrashFields(TCrashText& line, const TASWLogRecord& record, bool isJSON) noexcept;
+
+//---------------------------------------------------------------------------
+
+/*
+  AppendCrashFields
+
+  Appends the entry's fields as the text layout writes them (key="text" key=17, separated by spaces) or, for 'isJSON',
+  as JSON members ("key":"text","key":17), each only if it fits whole while FieldsReserved characters stay free (a long
+  text is cut to fit), and returns false if none was written. Allocates nothing.
+*/
+bool AppendCrashFields(TCrashText& line, const TASWLogRecord& record, bool isJSON) noexcept
+{
+    bool hasField = false;
+
+    record.ForEachField([&line, &hasField, isJSON](const TASWLogField& field) {
+                    const std::size_t used = line.GetSize() + FieldsReserved;
+                    if (used >= TCrashText::Capacity)
+                        return;
+
+                    // Built aside, so that a field that doesn't fit is left out whole
+                    const std::size_t room = TCrashText::Capacity - used;
+                    TCrashText text;
+                    if (hasField)
+                        text.Append(isJSON ? "," : " ");
+
+                    if (isJSON)
+                    {
+                        text.AppendJSONString(field.Key, TCrashText::Capacity - room);
+                        text.Append(":");
+                    }
+                    else
+                    {
+                        text.Append(field.Key);
+                        text.Append("=");
+                    }
+
+                    if (field.Value.GetKind() == ValueKind::Text)
+                    {
+                        text.AppendJSONString(field.Value.GetText(), TCrashText::Capacity - room);
+                    }
+                    else
+                    {
+                        char buffer[ScalarValueBufferSize];
+                        text.Append(WriteScalarValue(buffer, field.Value, isJSON));
+                    }
+
+                    if (text.GetSize() <= room)
+                    {
+                        line.Append(text.View());
+                        hasField = true;
+                    }
+                });
+
+    return hasField;
+}
+
+} // namespace
+
+//---------------------------------------------------------------------------
+
 /////////////////////////////////////////////////////////////////////////////
 // TCrashText
 /////////////////////////////////////////////////////////////////////////////
@@ -757,6 +827,17 @@ void AppendCrashJSONLine(TCrashText& line, const TASWLogRecord& record, bool use
     line.Append(",\"tid\":");
     line.AppendDecimal(record.ThreadId);
 
+    if (record.HasFields())
+    {
+        const std::size_t sizeBefore = line.GetSize();
+        line.Append(",\"fields\":{");
+
+        if (AppendCrashFields(line, record, true))
+            line.Append("}");
+        else
+            line.Truncate(sizeBefore);
+    }
+
     if (record.Raw)
         line.Append(",\"raw\":true");
 
@@ -786,6 +867,16 @@ void AppendCrashLine(TCrashText& line, const TASWLogRecord& record, bool usesCRL
     line.AppendDecimal(record.ProcessId);
     line.Append("][T:");
     line.AppendDecimal(record.ThreadId);
+
+    if (record.HasFields())
+    {
+        const std::size_t sizeBefore = line.GetSize();
+        line.Append("][");
+
+        if (!AppendCrashFields(line, record, false))
+            line.Truncate(sizeBefore);
+    }
+
     line.Append("]: ");
     line.Append(record.Message);
 

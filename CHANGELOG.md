@@ -83,6 +83,33 @@ see [0.26.1](#0261---2026-09-17) for the initial versioned baseline.
   custom formatter can format raw entries too by overriding the new
   `IASWLogFormatter::FormatsRawEntries()` (false by default), and
   `JSON::AppendString()` writes a text as an escaped JSON string.
+- Structured fields and scoped context (new `ASWLog_Fields.h`; add
+  `ASWLog_Fields.cpp` to projects that list the ASWLog sources). Every
+  logging method has an overload that takes fields for that entry, e.g.
+  `logger.LogInfo("Order placed", {{"orderId", 17}, {"total", 9.99}})`,
+  and every `*Fmt` method one with the fields first, e.g.
+  `logger.LogInfoFmt({{"orderId", id}}, "Order {} placed", id)`. A value
+  is a signed or unsigned integer, a double, a bool or text, viewed rather
+  than copied, so the call doesn't allocate; characters, enums and
+  pointers other than to text are rejected at compile time. A
+  `TASWLogScope`, e.g. `ASWLog::TASWLogScope scope{{"requestId", id}};`,
+  adds its fields to every entry the thread logs while it exists, also in
+  the functions it calls; scopes nest, and each key is written once, the
+  entry's own value winning over a scope's and an inner scope's over an
+  outer one's. Scopes stay on their thread: `TASWLogScope::Capture()`
+  copies the current ones into a `TASWLogContext`, and
+  `TASWLogScope scope(context);` applies it on another thread, e.g. in a
+  thread pool. The built-in layout writes the fields before the message,
+  `[requestId="8f3a" orderId=17 total=9.99]: Order placed`, text always
+  in quotes and escaped (hide them with the new `Line.ShowFields`); the
+  pattern formatter has `{fields}`, and the JSON formatter writes a
+  `"fields"` object (a NaN or infinite double as the string `"NaN"`,
+  `"Infinity"` or `"-Infinity"`). A `LogRaw()` entry is still written as
+  is by the text layouts. The backtrace, an asynchronous logger's
+  `OnLogEntry` and the fixed-layout crash lines keep the fields, and the
+  crash line gets the crashing thread's scope fields. `TASWLogRecord`
+  gains `Fields` and `Scope` (both pointers, so a filtered call costs no
+  more), read with `ForEachField()`.
 
 ### Changed
 

@@ -28,6 +28,7 @@ limitations under the License.
 #include "ASWLog_CategoryLog.h"
 #include "ASWLog_ConsoleLog.h"
 #include "ASWLog_CrashHandler.h"
+#include "ASWLog_Fields.h"
 #include "ASWLog_FileLog.h"
 #include "ASWLog_MultiLog.h"
 #include "ASWLog_Utils.h"
@@ -213,6 +214,15 @@ int main(int argc, char* argv[])
     netLogger.LogDebug("This Net entry follows the file logger's level, so it is written.");
     dbLogger.LogInfo("This Db entry is below the Db category's own level (Warn), so it is skipped.");
     dbLogger.LogWarn("This Db entry is at the Db category's own level, so it is written.");
+
+    // Example of fields: an entry's own, and a scope's, which every entry logged on this thread carries while the scope
+    // exists, e.g. [requestId="8f3a" orderId=17 total=9.99]
+    std::cout << "Testing fields and scopes...\n";
+    {
+        const ASWLog::TASWLogScope requestScope{ { "requestId", "8f3a" } };
+        globalLogger.LogInfo("Order placed", { { "orderId", 17 }, { "total", 9.99 } });
+        netLogger.LogDebug("This Net entry carries the request's scope fields too.");
+    }
 
     globalLogger.LogInfo("Application terminated naturally via main exit block.");
     std::cout << "Execution completed.\n";

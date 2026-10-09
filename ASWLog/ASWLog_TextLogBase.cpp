@@ -347,6 +347,7 @@ void TASWTextLogBase::OnCrash(std::string_view message, bool isInSignalHandler, 
     record.LogLevel = Level::Critical;
     record.Message = message;
     record.Forced = true;
+    record.Scope = TASWLogScope::GetCurrent(); // The crashing thread's
     StampRecord(record);
 
     const bool writesLine = IsEnabled() && m_WritesCrashLine.load(std::memory_order_relaxed);
@@ -452,6 +453,8 @@ bool TASWTextLogBase::QueueRecord(const TASWLogRecord& record)
     entry.Record = record;
     entry.Record.Message = {};
     entry.Record.Category = {};
+    entry.Record.Fields = nullptr;
+    entry.Record.Scope = nullptr;
     entry.EndsLine = IsFormatted(record, *config);
     entry.MustFlush = record.LogLevel >= config->Async.WaitAtLevel;
 
@@ -459,6 +462,7 @@ bool TASWTextLogBase::QueueRecord(const TASWLogRecord& record)
     {
         entry.Message = record.Message;
         entry.Category = record.Category;
+        entry.Fields.AssignMerged(record.Scope, record.GetOwnFields());
         entry.CallbackConfig = config;
     }
 
@@ -1111,9 +1115,12 @@ void TASWTextLogBase::WriteQueuedEntries(std::deque<TQueuedEntry>& entries, std:
         if (!entry.IsWritten || entry.CallbackConfig == nullptr)
             continue;
 
+        const auto fields = entry.Fields.Get();
         auto record = entry.Record;
         record.Message = entry.Message;
         record.Category = entry.Category;
+        record.Fields = &fields;
+
         DispatchLogCallback(*entry.CallbackConfig, record, entry.Line);
     }
 }

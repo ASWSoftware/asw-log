@@ -30,6 +30,7 @@ limitations under the License.
 #include <concepts>
 #include <exception>
 #include <format>
+#include <initializer_list>
 #include <memory>
 #include <source_location>
 #include <string>
@@ -159,6 +160,16 @@ private:
         return record;
     }
 
+    // Writes an entry with fields: the record points to the list, which lives during the call
+    void WriteWithFields(Level level, std::string_view message, std::initializer_list<TASWLogField> fields,
+        std::source_location loc, bool raw, bool forced) noexcept
+    {
+        const std::span<const TASWLogField> ownFields(fields.begin(), fields.size());
+        TASWLogRecord record = MakeRecord(level, message, loc, raw, forced);
+        record.Fields = &ownFields;
+        Write(record);
+    }
+
 public:
     virtual ~IASWLog() = default;
 
@@ -281,6 +292,71 @@ public:
         Write(MakeRecord(Level::Critical, msg, loc, false, false));
     }
 
+    // --- Non-virtual Inline Logging Methods With Fields ---
+    // As above, with fields for this entry, e.g. LogInfo("Order placed", {{"orderId", 17}, {"total", 9.99}}). They
+    // come after the fields of the thread's scopes (see TASWLogScope) and replace those with the same key. The keys and
+    // texts are only read during the call. A text logger writes them before the message (see
+    // TASWLineConfig::ShowFields), but not for a LogRaw() entry, which it writes as is.
+    inline void Log(Level level, std::string_view msg, std::initializer_list<TASWLogField> fields,
+        std::source_location loc = std::source_location::current()) noexcept
+    {
+        WriteWithFields(level, msg, fields, loc, false, false);
+    }
+
+    inline void LogRaw(Level level, std::string_view msg, std::initializer_list<TASWLogField> fields,
+        std::source_location loc = std::source_location::current()) noexcept
+    {
+        WriteWithFields(level, msg, fields, loc, true, false);
+    }
+
+    inline void LogForce(Level level, std::string_view msg, std::initializer_list<TASWLogField> fields,
+        std::source_location loc = std::source_location::current()) noexcept
+    {
+        WriteWithFields(level, msg, fields, loc, false, true);
+    }
+
+    inline void LogForceRaw(Level level, std::string_view msg, std::initializer_list<TASWLogField> fields,
+        std::source_location loc = std::source_location::current()) noexcept
+    {
+        WriteWithFields(level, msg, fields, loc, true, true);
+    }
+
+    inline void LogTrace(std::string_view msg, std::initializer_list<TASWLogField> fields,
+        std::source_location loc = std::source_location::current()) noexcept
+    {
+        WriteWithFields(Level::Trace, msg, fields, loc, false, false);
+    }
+
+    inline void LogDebug(std::string_view msg, std::initializer_list<TASWLogField> fields,
+        std::source_location loc = std::source_location::current()) noexcept
+    {
+        WriteWithFields(Level::Debug, msg, fields, loc, false, false);
+    }
+
+    inline void LogInfo(std::string_view msg, std::initializer_list<TASWLogField> fields,
+        std::source_location loc = std::source_location::current()) noexcept
+    {
+        WriteWithFields(Level::Info, msg, fields, loc, false, false);
+    }
+
+    inline void LogWarn(std::string_view msg, std::initializer_list<TASWLogField> fields,
+        std::source_location loc = std::source_location::current()) noexcept
+    {
+        WriteWithFields(Level::Warn, msg, fields, loc, false, false);
+    }
+
+    inline void LogError(std::string_view msg, std::initializer_list<TASWLogField> fields,
+        std::source_location loc = std::source_location::current()) noexcept
+    {
+        WriteWithFields(Level::Error, msg, fields, loc, false, false);
+    }
+
+    inline void LogCritical(std::string_view msg, std::initializer_list<TASWLogField> fields,
+        std::source_location loc = std::source_location::current()) noexcept
+    {
+        WriteWithFields(Level::Critical, msg, fields, loc, false, false);
+    }
+
     // --- Non-virtual Inline Template Format Methods ---
     // Each passes on the caller's source location, captured by TASWFormatString. The format string is checked against
     // the arguments at compile time. Use RuntimeFormat() to wrap run time format strings. A formatting error at run
@@ -349,6 +425,83 @@ public:
     inline void LogCriticalFmt(TASWFormatString<std::type_identity_t<Args>...> fmt, Args&&... args) noexcept
     {
         LogFmt(Level::Critical, fmt, std::forward<Args>(args) ...);
+    }
+
+    // --- Non-virtual Inline Template Format Methods With Fields ---
+    // As above, with fields for this entry (see the logging methods with fields), first since the format arguments
+    // come last, e.g. LogInfoFmt({{"orderId", id}}, "Order {} placed", id).
+    template<typename ... Args>
+    inline void LogFmt(Level level, std::initializer_list<TASWLogField> fields, TASWFormatString<std::type_identity_t<Args>...> fmt,
+        Args&&... args) noexcept
+    {
+        if (ShouldLog(level))
+            Log(level, fmt.FormatMessage(args ...), fields, fmt.Location);
+    }
+
+    template<typename ... Args>
+    inline void LogRawFmt(Level level, std::initializer_list<TASWLogField> fields, TASWFormatString<std::type_identity_t<Args>...> fmt,
+        Args&&... args) noexcept
+    {
+        if (ShouldLog(level))
+            LogRaw(level, fmt.FormatMessage(args ...), fields, fmt.Location);
+    }
+
+    template<typename ... Args>
+    inline void LogForceFmt(Level level, std::initializer_list<TASWLogField> fields,
+        TASWFormatString<std::type_identity_t<Args>...> fmt, Args&&... args) noexcept
+    {
+        if (level != Level::Off && IsEnabled())
+            LogForce(level, fmt.FormatMessage(args ...), fields, fmt.Location);
+    }
+
+    template<typename ... Args>
+    inline void LogForceRawFmt(Level level, std::initializer_list<TASWLogField> fields,
+        TASWFormatString<std::type_identity_t<Args>...> fmt, Args&&... args) noexcept
+    {
+        if (level != Level::Off && IsEnabled())
+            LogForceRaw(level, fmt.FormatMessage(args ...), fields, fmt.Location);
+    }
+
+    template<typename ... Args>
+    inline void LogTraceFmt(std::initializer_list<TASWLogField> fields, TASWFormatString<std::type_identity_t<Args>...> fmt,
+        Args&&... args) noexcept
+    {
+        LogFmt(Level::Trace, fields, fmt, std::forward<Args>(args) ...);
+    }
+
+    template<typename ... Args>
+    inline void LogDebugFmt(std::initializer_list<TASWLogField> fields, TASWFormatString<std::type_identity_t<Args>...> fmt,
+        Args&&... args) noexcept
+    {
+        LogFmt(Level::Debug, fields, fmt, std::forward<Args>(args) ...);
+    }
+
+    template<typename ... Args>
+    inline void LogInfoFmt(std::initializer_list<TASWLogField> fields, TASWFormatString<std::type_identity_t<Args>...> fmt,
+        Args&&... args) noexcept
+    {
+        LogFmt(Level::Info, fields, fmt, std::forward<Args>(args) ...);
+    }
+
+    template<typename ... Args>
+    inline void LogWarnFmt(std::initializer_list<TASWLogField> fields, TASWFormatString<std::type_identity_t<Args>...> fmt,
+        Args&&... args) noexcept
+    {
+        LogFmt(Level::Warn, fields, fmt, std::forward<Args>(args) ...);
+    }
+
+    template<typename ... Args>
+    inline void LogErrorFmt(std::initializer_list<TASWLogField> fields, TASWFormatString<std::type_identity_t<Args>...> fmt,
+        Args&&... args) noexcept
+    {
+        LogFmt(Level::Error, fields, fmt, std::forward<Args>(args) ...);
+    }
+
+    template<typename ... Args>
+    inline void LogCriticalFmt(std::initializer_list<TASWLogField> fields, TASWFormatString<std::type_identity_t<Args>...> fmt,
+        Args&&... args) noexcept
+    {
+        LogFmt(Level::Critical, fields, fmt, std::forward<Args>(args) ...);
     }
 };
 

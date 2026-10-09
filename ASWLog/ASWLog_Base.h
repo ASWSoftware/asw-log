@@ -116,9 +116,10 @@ private:
     // record's Message and Category are empty)
     struct TBacktraceEntry
     {
-        TASWLogRecord Record;
+        TASWLogRecord Record; // Its Message, Category, Fields and Scope are empty: the copies below hold them
         std::string Message;
         std::string Category;
+        Detail::TOwnedFields Fields; // The entry's fields and its scopes', merged
     };
 
     // The backtrace, guarded by m_BacktraceMutex: at most m_BacktraceCapacity entries, the oldest at m_BacktraceOldest
@@ -250,10 +251,10 @@ protected:
     void StampRecord(TASWLogRecord& record) const noexcept;
 
     // For a crash handler (see TASWTextLogBase): if the backtrace's lock is free, calls visit(record, index, count) for
-    // each kept entry, oldest first ('record' is marked Forced, and its Message and Category refer to the kept copies,
-    // valid during the call), then forgets them if 'mustClear', and returns true. Returns false at once if the lock is
-    // busy (e.g. the crashed thread holds it). Allocates nothing itself, except that clearing frees the copies, so with
-    // a visitor that doesn't allocate and 'mustClear' false, it can run in a signal handler.
+    // each kept entry, oldest first ('record' is marked Forced, and its Message, Category and Fields refer to the kept
+    // copies, valid during the call), then forgets them if 'mustClear', and returns true. Returns false at once if the
+    // lock is busy (e.g. the crashed thread holds it). Allocates nothing itself, except that clearing frees the copies,
+    // so with a visitor that doesn't allocate and 'mustClear' false, it can run in a signal handler.
     template<typename TVisit>
     bool VisitBacktraceForCrash(TVisit&& visit, bool mustClear)
     {
@@ -265,9 +266,11 @@ protected:
         for (std::size_t index = 0; index < count; ++index)
         {
             const auto& entry = m_Backtrace[(m_BacktraceOldest + index) % count];
+            const auto fields = entry.Fields.Get();
             TASWLogRecord record = entry.Record;
             record.Message = entry.Message;
             record.Category = entry.Category;
+            record.Fields = &fields;
             record.Forced = true;
             visit(static_cast<const TASWLogRecord&>(record), index, count);
         }

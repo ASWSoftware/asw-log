@@ -237,6 +237,9 @@ std::string TASWJSONFormatter::Format(const TASWLogRecord& record, const TASWLog
         AppendJSONNumber(line, "line", record.Location.line());
     }
 
+    if (config.Line.ShowFields && record.HasFields())
+        Detail::AppendFieldsJSON(line, record.Scope, record.GetOwnFields());
+
     if (record.Raw)
         line += "\"raw\":true,";
 
@@ -307,7 +310,7 @@ std::string TASWPatternFormatter::Format(const TASWLogRecord& record, const TASW
     line.reserve(record.Message.size() + 256);
 
     const TMemoryUsage memoryUsage = m_UsesMemoryUsage ? GetMemoryUsage() : TMemoryUsage{};
-    std::string fileName;
+    std::string text; // A field's value that has to be built first
 
     for (const auto& part : m_Parts)
     {
@@ -355,12 +358,18 @@ std::string TASWPatternFormatter::Format(const TASWLogRecord& record, const TASW
 
             case TField::File:
                 // As TASWTextFormatter writes it
-                fileName = std::filesystem::path(record.Location.file_name()).filename().string();
-                value = fileName;
+                text = std::filesystem::path(record.Location.file_name()).filename().string();
+                value = text;
                 break;
 
             case TField::Line:
                 value = ToDecimal(buffer, record.Location.line());
+                break;
+
+            case TField::Fields:
+                text.clear();
+                Detail::AppendFieldsText(text, record.Scope, record.GetOwnFields());
+                value = text;
                 break;
 
             case TField::Message:
@@ -401,7 +410,7 @@ std::size_t TASWPatternFormatter::ParsePlaceholder(std::size_t start)
         { "time", TField::Time }, { "level", TField::Level }, { "category", TField::Category },
         { "pid", TField::ProcessId }, { "tid", TField::ThreadId }, { "ws", TField::WorkingSet },
         { "pws", TField::PeakWorkingSet }, { "function", TField::Function }, { "file", TField::File },
-        { "line", TField::Line }, { "message", TField::Message }
+        { "line", TField::Line }, { "fields", TField::Fields }, { "message", TField::Message }
     };
 
     const std::string_view pattern = m_Pattern;
@@ -585,6 +594,9 @@ std::string TASWTextFormatter::FormatLine(const TASWLogRecord& record, const TAS
         std::filesystem::path fullPath(record.Location.file_name());
         std::format_to(std::back_inserter(line), "[{}:{}]", fullPath.filename().string(), record.Location.line());
     }
+
+    if (config.Line.ShowFields && record.HasFields())
+        Detail::AppendFieldsText(line, record.Scope, record.GetOwnFields(), "[", "]");
 
     line += ": ";
     line.append(record.Message);
