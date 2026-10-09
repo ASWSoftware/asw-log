@@ -80,6 +80,7 @@ void TTest_ASWLog_Config::Test_Defaults_MatchDocumentedValues()
     CheckNull(config.OnLogEntry, "OnLogEntry should default to unset");
     CheckEquals(ASWLog::Level::Error, config.OnLogEntryMinimumLevel, "OnLogEntryMinimumLevel should default to Error");
     CheckNull(config.OnError, "OnError should default to unset (reports go to stderr)");
+    CheckNull(config.OnBeforeWrite, "OnBeforeWrite should default to unset");
     CheckFalse(config.Async.Enabled, "Async.Enabled should default to false");
     CheckEquals(8192, config.Async.QueueCapacity, "Async.QueueCapacity should default to 8192");
     CheckEquals(ASWLog::AsyncOverflowPolicy::Block, config.Async.OverflowPolicy, "Async.OverflowPolicy should default to Block");

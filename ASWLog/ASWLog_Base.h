@@ -136,6 +136,7 @@ private:
     // m_ConfigMutex held, and the derived logger with its own lock held (see GetConfigUnlocked()).
     mutable Detail::TMutex m_ConfigMutex;
     std::shared_ptr<const TASWLogConfig> m_Config{ std::make_shared<const TASWLogConfig>() };
+    std::atomic<bool> m_HasBeforeWrite{ false }; // The config has an OnBeforeWrite hook; read for each written entry
 
     // When ReportError() last reported each ErrorKind, and how many it left out since (see
     // TASWLogConfig::ErrorReportInterval). Guarded by m_ErrorReportMutex.
@@ -155,6 +156,8 @@ private:
     std::vector<TBacktraceEntry> TakeBacktrace() noexcept;
     void WriteBacktrace();
     void WriteErrorToStdErr(const TASWLogError& error) const;
+    void WriteOrKeep(const TASWLogRecord& record);
+    void WriteThroughHook(const TASWLogRecord& record);
 
 protected:
     std::atomic<bool> m_IsInitialized{ false };
@@ -286,7 +289,8 @@ protected:
     }
 
     // Called by Write() with each entry this logger writes: it passed the enabled, Level::Off and minimum level checks
-    // (see Write()), and has its Timestamp, ProcessId and ThreadId filled in. Called on the logging thread. May throw:
+    // (see Write()), has its Timestamp, ProcessId and ThreadId filled in, and is as the config's OnBeforeWrite hook, if
+    // any, changed it (the backtrace's entries were changed when kept). Called on the logging thread. May throw:
     // Write() catches the exception and drops the entry, so it never reaches the application.
     virtual void WriteRecord(const TASWLogRecord& record) = 0;
 

@@ -430,6 +430,9 @@ TTest_ASWLog_TextLogBase::TTest_ASWLog_TextLogBase()
     RegisterTest(&TTest_ASWLog_TextLogBase::Test_Multiline_EscapeKeepsEachEntryOnOneLine, "Multiline_EscapeKeepsEachEntryOnOneLine");
     RegisterTest(&TTest_ASWLog_TextLogBase::Test_Multiline_LogRawStaysAsIs, "Multiline_LogRawStaysAsIs");
     RegisterTest(&TTest_ASWLog_TextLogBase::Test_Multiline_PreserveWritesLineBreaksAsTheyAre, "Multiline_PreserveWritesLineBreaksAsTheyAre");
+    RegisterTest(&TTest_ASWLog_TextLogBase::Test_OnBeforeWrite_RunsOnEveryLoggingThread, "OnBeforeWrite_RunsOnEveryLoggingThread");
+    RegisterTest(&TTest_ASWLog_TextLogBase::Test_OnBeforeWrite_RunsOutsideTheLockBeforeQueuing, "OnBeforeWrite_RunsOutsideTheLockBeforeQueuing");
+    RegisterTest(&TTest_ASWLog_TextLogBase::Test_OnBeforeWrite_SkipsTheLoggersOwnLines, "OnBeforeWrite_SkipsTheLoggersOwnLines");
     RegisterTest(&TTest_ASWLog_TextLogBase::Test_OnLogEntry_CallbackCanReconfigureTheLogger, "OnLogEntry_CallbackCanReconfigureTheLogger");
     RegisterTest(&TTest_ASWLog_TextLogBase::Test_Reconfigure_AppliesNewConfigButKeepsLevel, "Reconfigure_AppliesNewConfigButKeepsLevel");
     RegisterTest(&TTest_ASWLog_TextLogBase::Test_Reconfigure_IsSafeWhileOtherThreadsLog, "Reconfigure_IsSafeWhileOtherThreadsLog");
@@ -1435,6 +1438,162 @@ void TTest_ASWLog_TextLogBase::Test_Multiline_PreserveWritesLineBreaksAsTheyAre(
 
     // Assert: no line break converted to the line ending
     CheckTrue(output.Lines == std::vector<std::string>{ "[INFO]: a\r\nb\nc\rd\n\r\n" }, "The message should be written as it is");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_TextLogBase::Test_OnBeforeWrite_RunsOnEveryLoggingThread()
+{
+    // Arrange: a synchronous and an asynchronous logger whose hook changes the message and a field of each entry, and
+    // drops every fourth, while several threads log (for ThreadSanitizer)
+    constexpr int ThreadCount = 4;
+    constexpr int EntryCount = 200;
+    std::atomic<int> hookCount{ 0 };
+    const auto hook = [&hookCount](ASWLog::TASWPendingEntry& entry) {
+            hookCount.fetch_add(1);
+            const auto* index = entry.FindField("index");
+            if (index != nullptr && index->GetInt() % 4 == 3)
+                return false;
+
+            entry.SetMessage(std::format("hooked {}", entry.GetRecord().Message));
+            entry.SetField("index", "x");
+            return true;
+        };
+
+    TMemoryOutput output;
+    TMemoryOutput asyncOutput;
+    auto config = MakeQuietConfig();
+    config.OnBeforeWrite = hook;
+    auto asyncConfig = MakeAsyncConfig();
+    asyncConfig.OnBeforeWrite = hook;
+    TMemoryTextLog log(output);
+    TMemoryTextLog asyncLog(asyncOutput);
+    CheckTrue(log.Initialize(config), "Initialize should succeed");
+    CheckTrue(asyncLog.Initialize(asyncConfig), "Initialize should succeed (async)");
+
+    // Act
+    std::vector<std::thread> threads;
+    for (int threadIndex = 0; threadIndex < ThreadCount; ++threadIndex)
+    {
+        threads.emplace_back([&log, &asyncLog] {
+                for (int index = 0; index < EntryCount; ++index)
+                {
+                    log.LogInfo("entry", { { "index", index } });
+                    asyncLog.LogInfo("entry", { { "index", index } });
+                }
+            });
+    }
+
+    for (auto& thread : threads)
+        thread.join();
+
+    asyncLog.Flush(); // Waits for the queued entries
+
+    // Assert
+    constexpr std::size_t KeptCount = ThreadCount * EntryCount * 3 / 4;
+    const std::vector<std::string> expected(KeptCount, "[INFO][index=\"x\"]: hooked entry\n");
+    CheckEquals(2 * ThreadCount * EntryCount, hookCount.load(), "The hook should run once for each entry");
+    CheckTrue(output.Lines == expected, "Every kept entry should be written as the hook changed it");
+    CheckTrue(asyncOutput.Lines == expected, "Every kept queued entry should be written as the hook changed it");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_TextLogBase::Test_OnBeforeWrite_RunsOutsideTheLockBeforeQueuing()
+{
+    // Arrange: a hook that redacts a token in the message and the user field, for a synchronous and an asynchronous
+    // logger, both with OnLogEntry
+    TMemoryOutput output;
+    TMemoryOutput asyncOutput;
+    TMemoryTextLog log(output);
+    TMemoryTextLog asyncLog(asyncOutput);
+    bool wasMutexFree = false;
+    std::thread::id hookThreadId;
+    std::string seenLine;
+    std::string seenMessage;
+    std::mutex asyncSeenMutex;
+    std::string asyncSeenLine;
+    std::atomic<bool> isAsyncCalled{ false };
+
+    const auto redact = [](ASWLog::TASWPendingEntry& entry) {
+            if (entry.GetRecord().Message.starts_with("token="))
+                entry.SetMessage("token=***");
+
+            if (entry.FindField("user") != nullptr)
+                entry.SetField("user", "***");
+        };
+
+    auto config = MakeQuietConfig();
+    config.OnLogEntryMinimumLevel = ASWLog::Level::Info;
+    config.OnBeforeWrite = [&log, &wasMutexFree, &redact](ASWLog::TASWPendingEntry& entry) {
+            wasMutexFree = log.IsMutexFree();
+            redact(entry);
+            return true;
+        };
+    config.OnLogEntry = [&seenLine, &seenMessage](const ASWLog::TASWLogRecord& record, std::string_view line) {
+            seenMessage = record.Message;
+            seenLine = line;
+        };
+
+    auto asyncConfig = MakeAsyncConfig();
+    asyncConfig.OnLogEntryMinimumLevel = ASWLog::Level::Info;
+    asyncConfig.OnBeforeWrite = [&hookThreadId, &redact](ASWLog::TASWPendingEntry& entry) {
+            hookThreadId = std::this_thread::get_id();
+            redact(entry);
+            return true;
+        };
+    asyncConfig.OnLogEntry = [&](const ASWLog::TASWLogRecord& /*record*/, std::string_view line) {
+            {
+                std::lock_guard<std::mutex> lock(asyncSeenMutex);
+                asyncSeenLine = line;
+            }
+
+            isAsyncCalled.store(true);
+        };
+    CheckTrue(log.Initialize(config), "Initialize should succeed");
+    CheckTrue(asyncLog.Initialize(asyncConfig), "Initialize should succeed (async)");
+
+    // Act
+    log.LogInfo("token=abc", { { "user", "amy" } });
+    asyncLog.LogInfo("token=abc", { { "user", "amy" } });
+    const bool wasAsyncCalled = WaitUntil([&isAsyncCalled] {
+            return isAsyncCalled.load();
+        });
+
+    // Assert
+    const std::string expected = "[INFO][user=\"***\"]: token=***\n";
+    CheckTrue(wasMutexFree, "The hook should run before the logger takes its lock");
+    CheckTrue(output.Lines == std::vector<std::string>{ expected }, "The line should be written as the hook changed it");
+    CheckEquals(expected, seenLine, "OnLogEntry should get the changed line");
+    CheckEquals(std::string("token=***"), seenMessage, "OnLogEntry should get the changed record");
+    CheckTrue(hookThreadId == std::this_thread::get_id(), "An asynchronous logger should run the hook on the logging thread");
+    CheckTrue(asyncOutput.Lines == std::vector<std::string>{ expected }, "A queued line should be written as the hook changed it");
+    CheckTrue(wasAsyncCalled, "The asynchronous OnLogEntry should be called");
+    std::lock_guard<std::mutex> lock(asyncSeenMutex);
+    CheckEquals(expected, asyncSeenLine, "The asynchronous OnLogEntry should get the changed line");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_TextLogBase::Test_OnBeforeWrite_SkipsTheLoggersOwnLines()
+{
+    // Arrange: a hook that drops every entry, with a startup banner and the shutdown line
+    TMemoryOutput output;
+    int hookCount = 0;
+    auto config = MakeQuietConfig();
+    config.Startup.Banner = "banner";
+    config.Shutdown.WriteLine = true;
+    config.OnBeforeWrite = [&hookCount](ASWLog::TASWPendingEntry& /*entry*/) {
+            ++hookCount;
+            return false;
+        };
+
+    // Act
+    {
+        TMemoryTextLog log(output);
+        CheckTrue(log.Initialize(config), "Initialize should succeed");
+        log.LogError("dropped");
+    }
+
+    // Assert
+    CheckEquals(1, hookCount, "The hook should see only the application's entry");
+    AssertEquals(std::size_t(2), output.Lines.size(), "Only the banner and the shutdown line should be written");
+    CheckEquals(std::string("[INFO]: banner\n"), output.Lines[0], "The startup banner should be written");
+    CheckContains(output.Lines[1], "Logger shutdown", "The shutdown line should be written");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_TextLogBase::Test_OnLogEntry_CallbackCanReconfigureTheLogger()

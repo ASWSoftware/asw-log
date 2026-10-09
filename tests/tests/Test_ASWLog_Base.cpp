@@ -306,6 +306,11 @@ TTest_ASWLog_Base::TTest_ASWLog_Base()
     RegisterTest(&TTest_ASWLog_Base::Test_LogFormatMethods_SkipFormattingWhenNotWritten, "LogFormatMethods_SkipFormattingWhenNotWritten");
     RegisterTest(&TTest_ASWLog_Base::Test_LogLevelConvenienceMethods, "LogLevelConvenienceMethods");
     RegisterTest(&TTest_ASWLog_Base::Test_LogMethods_PassRecordsToWrite, "LogMethods_PassRecordsToWrite");
+    RegisterTest(&TTest_ASWLog_Base::Test_OnBeforeWrite_DropsOrChangesEntries, "OnBeforeWrite_DropsOrChangesEntries");
+    RegisterTest(&TTest_ASWLog_Base::Test_OnBeforeWrite_EntriesLoggedInsideTheHookAreWrittenAsIs, "OnBeforeWrite_EntriesLoggedInsideTheHookAreWrittenAsIs");
+    RegisterTest(&TTest_ASWLog_Base::Test_OnBeforeWrite_ReconfigureSetsAndClearsTheHook, "OnBeforeWrite_ReconfigureSetsAndClearsTheHook");
+    RegisterTest(&TTest_ASWLog_Base::Test_OnBeforeWrite_SeesEntriesThatPassTheLevelChecks, "OnBeforeWrite_SeesEntriesThatPassTheLevelChecks");
+    RegisterTest(&TTest_ASWLog_Base::Test_OnBeforeWrite_ThrowingHookDropsTheEntryAndReports, "OnBeforeWrite_ThrowingHookDropsTheEntryAndReports");
     RegisterTest(&TTest_ASWLog_Base::Test_ReportError_FailureInHandlerIsNotReportedAgain, "ReportError_FailureInHandlerIsNotReportedAgain");
     RegisterTest(&TTest_ASWLog_Base::Test_ReportError_ThrottlesEachKindSeparately, "ReportError_ThrottlesEachKindSeparately");
     RegisterTest(&TTest_ASWLog_Base::Test_ReportError_ThrowingHandlerDoesNotEscape, "ReportError_ThrowingHandlerDoesNotEscape");
@@ -880,6 +885,174 @@ void TTest_ASWLog_Base::Test_LogMethods_PassRecordsToWrite()
     checkRecord(line, "LogForceRawFmt", ASWLog::Level::Info, "force raw 3", true, true);
 
     CheckEquals(9, logger.WriteRecordCount, "Each call should pass exactly one record to WriteRecord()");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_Base::Test_OnBeforeWrite_DropsOrChangesEntries()
+{
+    // Arrange: a hook that drops noisy entries and redacts secrets, raw ones included
+    TTestLogger logger;
+    std::vector<std::string> seen;
+    ASWLog::TASWLogConfig config;
+    config.OnBeforeWrite = [&seen](ASWLog::TASWPendingEntry& entry) {
+            const auto& record = entry.GetRecord();
+            seen.push_back(std::format("{}|{}{}", ASWLog::Level_ToString(record.LogLevel), record.Message, record.Raw ? "|raw" : ""));
+            if (record.Message.starts_with("noisy"))
+                return false;
+
+            const auto secretAt = record.Message.find("secret");
+            if (secretAt != std::string_view::npos)
+            {
+                std::string redacted(record.Message);
+                entry.SetMessage(redacted.replace(secretAt, 6, "***"));
+            }
+
+            return true;
+        };
+    logger.Initialize(config);
+
+    // Act
+    logger.LogInfo("first");
+    logger.LogWarn("noisy entry");
+    logger.LogError("password=secret");
+    logger.LogRaw(ASWLog::Level::Info, "raw secret body\n");
+    logger.LogForceRaw(ASWLog::Level::Debug, "noisy raw");
+
+    // Assert
+    const std::vector<std::string> expectedSeen{ "INFO|first", "WARN|noisy entry", "ERROR|password=secret",
+                                                 "INFO|raw secret body\n|raw", "DEBUG|noisy raw|raw" };
+    const std::vector<std::string> expectedWritten{ "INFO|first", "ERROR|password=***", "INFO|raw *** body\n" };
+    CheckTrue(seen == expectedSeen, "The hook should see every entry, raw ones flagged");
+    CheckTrue(logger.Written == expectedWritten, "Dropped entries should be left out and changed ones written as changed");
+    CheckTrue(logger.LastRecord.Raw, "A changed raw entry should stay raw");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_Base::Test_OnBeforeWrite_EntriesLoggedInsideTheHookAreWrittenAsIs()
+{
+    // Arrange: a hook that logs to its own logger and to another one that has a hook
+    TTestLogger logger;
+    TTestLogger other;
+    int hookCount = 0;
+    int otherHookCount = 0;
+    ASWLog::TASWLogConfig config;
+    config.OnBeforeWrite = [&](ASWLog::TASWPendingEntry& entry) {
+            ++hookCount;
+            if (entry.GetRecord().Message == "outer")
+            {
+                logger.LogInfo("inner");
+                other.LogInfo("to_other");
+            }
+
+            entry.SetMessage(std::format("changed_{}", entry.GetRecord().Message));
+            return true;
+        };
+    ASWLog::TASWLogConfig otherConfig;
+    otherConfig.OnBeforeWrite = [&otherHookCount](ASWLog::TASWPendingEntry& entry) {
+            ++otherHookCount;
+            entry.SetMessage(std::format("other_{}", entry.GetRecord().Message));
+            return true;
+        };
+    logger.Initialize(config);
+    other.Initialize(otherConfig);
+
+    // Act
+    logger.LogInfo("outer");
+    logger.LogInfo("next");
+    other.LogInfo("after");
+
+    // Assert
+    CheckTrue(logger.Written == std::vector<std::string>{ "INFO|inner", "INFO|changed_outer", "INFO|changed_next" },
+        "An entry logged inside the hook should be written as is, and the hook should run again afterwards");
+    CheckTrue(other.Written == std::vector<std::string>{ "INFO|to_other", "INFO|other_after" },
+        "Another logger's hook should be skipped inside a hook, and run again afterwards");
+    CheckEquals(2, hookCount, "The hook should run once for each of its logger's entries logged outside it");
+    CheckEquals(1, otherHookCount, "The other hook should run only for the entry logged outside a hook");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_Base::Test_OnBeforeWrite_ReconfigureSetsAndClearsTheHook()
+{
+    // Arrange
+    TTestLogger logger;
+    ASWLog::TASWLogConfig config;
+    logger.Initialize(config);
+    auto dropAllConfig = config;
+    dropAllConfig.OnBeforeWrite = [](ASWLog::TASWPendingEntry& /*entry*/) {
+            return false;
+        };
+
+    // Act
+    logger.LogInfo("before");
+    const bool setHook = logger.Reconfigure(dropAllConfig);
+    logger.LogInfo("dropped");
+    const bool clearedHook = logger.Reconfigure(config);
+    logger.LogInfo("after");
+
+    // Assert
+    CheckTrue(setHook && clearedHook, "Reconfigure should succeed");
+    CheckTrue(logger.Written == std::vector<std::string>{ "INFO|before", "INFO|after" },
+        "The hook should apply from the Reconfigure() that sets it until the one that clears it");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_Base::Test_OnBeforeWrite_SeesEntriesThatPassTheLevelChecks()
+{
+    // Arrange: a backtrace of Debug entries; the hook marks what it sees and drops one Debug entry
+    TTestLogger logger;
+    std::vector<std::string> seen;
+    auto config = MakeBacktraceConfig(5);
+    config.OnBeforeWrite = [&seen](ASWLog::TASWPendingEntry& entry) {
+            seen.emplace_back(entry.GetRecord().Message);
+            if (entry.GetRecord().Message == "dropped_debug")
+                return false;
+
+            entry.SetMessage(std::format("h:{}", entry.GetRecord().Message));
+            return true;
+        };
+    logger.Initialize(config);
+
+    // Act
+    logger.LogTrace("trace_1"); // Below the backtrace's level: filtered
+    logger.LogDebug("debug_1"); // Kept, as changed
+    logger.LogDebug("dropped_debug"); // Not kept
+    logger.LogInfo("info_1");
+    logger.LogError("error_1"); // Writes the backtrace, whose entries aren't hooked again
+    logger.SetEnabled(false);
+    logger.LogError("disabled");
+
+    // Assert
+    const std::vector<std::string> expectedWritten{ "INFO|h:info_1", "INFO|Backtrace: the last 1 entry below the minimum level|forced",
+                                                    "DEBUG|h:debug_1|forced", "INFO|Backtrace end|forced", "ERROR|h:error_1" };
+    CheckTrue(seen == std::vector<std::string>{ "debug_1", "dropped_debug", "info_1", "error_1" },
+        "The hook should see each entry that passes the level checks once, but not the backtrace's markers");
+    CheckTrue(logger.Written == expectedWritten, "The backtrace should keep the entries as the hook changed them");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_Base::Test_OnBeforeWrite_ThrowingHookDropsTheEntryAndReports()
+{
+    // Arrange
+    TTestLogger logger;
+    std::vector<ASWLog::TASWLogError> reports;
+    ASWLog::TASWLogConfig config;
+    config.ErrorReportInterval = std::chrono::milliseconds(0);
+    config.OnError = [&reports](const ASWLog::TASWLogError& error) {
+            reports.push_back(error);
+        };
+    config.OnBeforeWrite = [](ASWLog::TASWPendingEntry& entry) {
+            if (entry.GetRecord().Message == "bad")
+                throw std::runtime_error("boom");
+
+            return true;
+        };
+    logger.Initialize(config);
+
+    // Act
+    logger.LogError("bad");
+    logger.LogError("good");
+
+    // Assert
+    CheckTrue(logger.Written == std::vector<std::string>{ "ERROR|good" }, "Only the entry the hook didn't throw for should be written");
+    AssertEquals(std::size_t(1), reports.size(), "The dropped entry should be reported");
+    CheckEquals(ASWLog::ErrorKind::Exception, reports[0].Kind, "A throwing hook should be reported as an Exception");
+    CheckEquals(std::string("Dropped an entry, OnBeforeWrite threw: boom"), reports[0].Message,
+        "The report should name the hook and give the exception's what()");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_Base::Test_ReportError_FailureInHandlerIsNotReportedAgain()

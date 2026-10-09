@@ -67,6 +67,9 @@ private: // Test methods
     void Test_Multiline_EscapeKeepsEachEntryOnOneLine();
     void Test_Multiline_LogRawStaysAsIs();
     void Test_Multiline_PreserveWritesLineBreaksAsTheyAre();
+    void Test_OnBeforeWrite_RunsOnEveryLoggingThread();
+    void Test_OnBeforeWrite_RunsOutsideTheLockBeforeQueuing();
+    void Test_OnBeforeWrite_SkipsTheLoggersOwnLines();
     void Test_OnLogEntry_CallbackCanReconfigureTheLogger();
     void Test_Reconfigure_AppliesNewConfigButKeepsLevel();
     void Test_Reconfigure_IsSafeWhileOtherThreadsLog();

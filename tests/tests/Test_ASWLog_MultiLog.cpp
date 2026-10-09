@@ -105,9 +105,13 @@ public:
     std::vector<ASWLog::TASWLogRecord> Records; // Every field but Message
     bool FlushResult = true; // Returned by Flush()
     bool ReconfigureResult = true; // Returned by Reconfigure()
+    bool WasInitialized = false; // Initialize() was called
+    bool InitializeHadBeforeWrite = false; // The config passed to Initialize() had an OnBeforeWrite hook
 
-    bool Initialize(const ASWLog::TASWLogConfig& /*config*/) noexcept override
+    bool Initialize(const ASWLog::TASWLogConfig& config) noexcept override
     {
+        WasInitialized = true;
+        InitializeHadBeforeWrite = config.OnBeforeWrite != nullptr;
         return true;
     }
 
@@ -285,6 +289,7 @@ TTest_ASWLog_MultiLog::TTest_ASWLog_MultiLog()
     RegisterTest(&TTest_ASWLog_MultiLog::Test_Log_ThrowingSinkDoesNotStopOtherSinks, "Log_ThrowingSinkDoesNotStopOtherSinks");
     RegisterTest(&TTest_ASWLog_MultiLog::Test_LogFmt_FormatsOnceForAllSinks, "LogFmt_FormatsOnceForAllSinks");
     RegisterTest(&TTest_ASWLog_MultiLog::Test_LogForce_BypassesCompositeGate, "LogForce_BypassesCompositeGate");
+    RegisterTest(&TTest_ASWLog_MultiLog::Test_OnBeforeWrite_RunsOnceBeforeTheFanOut, "OnBeforeWrite_RunsOnceBeforeTheFanOut");
     RegisterTest(&TTest_ASWLog_MultiLog::Test_Reconfigure_PassesConfigToEverySink, "Reconfigure_PassesConfigToEverySink");
     RegisterTest(&TTest_ASWLog_MultiLog::Test_RemoveAllLoggers_ClearsRegistrationAndReturnsCount, "RemoveAllLoggers_ClearsRegistrationAndReturnsCount");
     RegisterTest(&TTest_ASWLog_MultiLog::Test_RemoveLogger_StopsReceivingEntries, "RemoveLogger_StopsReceivingEntries");
@@ -846,6 +851,50 @@ void TTest_ASWLog_MultiLog::Test_LogForce_BypassesCompositeGate()
 
     // Assert
     CheckContains(ReadFileText(fileA), "forced_past_composite_gate", "LogForce should bypass the composite's own MinimumLevel gate");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_MultiLog::Test_OnBeforeWrite_RunsOnceBeforeTheFanOut()
+{
+    // Arrange: the second sink has a hook of its own, set directly
+    TRecordingLogger first;
+    TRecordingLogger second;
+    ASWLog::TASWLogConfig secondConfig;
+    secondConfig.OnBeforeWrite = [](ASWLog::TASWPendingEntry& entry) {
+            entry.SetMessage(std::format("{}+second", entry.GetRecord().Message));
+            return true;
+        };
+    second.Reconfigure(secondConfig);
+
+    ASWLog::TASWMultiLog multiLog;
+    multiLog.AddLogger(first);
+    multiLog.AddLogger(second);
+    int hookCount = 0;
+    ASWLog::TASWLogConfig config;
+    config.OnBeforeWrite = [&hookCount](ASWLog::TASWPendingEntry& entry) {
+            ++hookCount;
+            if (entry.GetRecord().Message == "dropped")
+                return false;
+
+            entry.SetMessage(std::format("multi:{}", entry.GetRecord().Message));
+            return true;
+        };
+    CheckTrue(multiLog.Initialize(config), "Initialize should succeed");
+
+    // Act
+    multiLog.LogInfo("entry");
+    multiLog.LogInfo("dropped");
+    const bool reconfigured = multiLog.Reconfigure(config);
+    multiLog.LogInfo("after");
+
+    // Assert
+    CheckEquals(3, hookCount, "The multi-log's hook should run once per entry, not once per sink");
+    CheckTrue(first.WasInitialized && !first.InitializeHadBeforeWrite, "The config passed to a sink's Initialize() should have no hook");
+    CheckTrue(reconfigured, "Reconfigure should succeed");
+    CheckNull(first.GetConfig()->OnBeforeWrite, "The config passed to a sink's Reconfigure() should have no hook");
+    CheckTrue(first.Calls == std::vector<std::string>{ "Log:multi:entry", "Reconfigure", "Log:multi:after" },
+        "The sinks should get the entries as the multi-log's hook changed them, not the dropped one");
+    CheckTrue(second.Calls == std::vector<std::string>{ "Reconfigure", "Log:multi:entry+second", "Reconfigure", "Log:multi:after" },
+        "A sink's own hook should run after the multi-log's, until the multi-log's Reconfigure() replaces its config");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_MultiLog::Test_Reconfigure_PassesConfigToEverySink()

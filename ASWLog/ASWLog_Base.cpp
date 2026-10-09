@@ -79,6 +79,28 @@ public:
     TReportingErrorScope& operator=(const TReportingErrorScope&) = delete;
 };
 
+// True while this thread is in a logger's OnBeforeWrite hook (see TASWLogBase::WriteThroughHook()). Read only by a
+// logger that has a hook, since a thread_local read is a library call with some compilers (e.g. MinGW's GCC).
+thread_local bool IsRunningBeforeWrite = false;
+
+// Sets IsRunningBeforeWrite while alive (hooks don't nest: an entry logged inside one skips them)
+class TRunningBeforeWriteScope
+{
+public:
+    TRunningBeforeWriteScope() noexcept
+    {
+        IsRunningBeforeWrite = true;
+    }
+
+    ~TRunningBeforeWriteScope()
+    {
+        IsRunningBeforeWrite = false;
+    }
+
+    TRunningBeforeWriteScope(const TRunningBeforeWriteScope&) = delete;
+    TRunningBeforeWriteScope& operator=(const TRunningBeforeWriteScope&) = delete;
+};
+
 //---------------------------------------------------------------------------
 
 void ForgetCopiedViews(TASWLogRecord& record) noexcept;
@@ -319,6 +341,8 @@ std::shared_ptr<const TASWLogConfig> TASWLogBase::SetConfig(const TASWLogConfig&
         m_Config.swap(snapshot);
     }
 
+    m_HasBeforeWrite.store(config.OnBeforeWrite != nullptr, std::memory_order_relaxed);
+
     if (KeepsBacktrace())
         ApplyBacktraceConfig(config.Backtrace);
 
@@ -374,18 +398,11 @@ void TASWLogBase::Write(const TASWLogRecord& record) noexcept
     // never throw into the application, so the entry is dropped instead
     try
     {
-        // Let in only for the backtrace. Read again: if the minimum level changed since the gate, the entry is kept or
-        // written as if it had been logged just before or after the change.
-        if (!record.Forced && record.LogLevel < GetMinimumLevelFor(record))
-        {
-            KeepInBacktrace(stampedRecord);
-            return;
-        }
-
-        if (m_HasBacktrace.load(std::memory_order_relaxed) && record.LogLevel >= m_BacktraceDumpLevel.load(std::memory_order_relaxed))
-            WriteBacktrace();
-
-        WriteRecord(stampedRecord);
+        // An entry logged from inside a hook is written as it is, so a hook that logs doesn't recurse
+        if (m_HasBeforeWrite.load(std::memory_order_relaxed) && !IsRunningBeforeWrite)
+            WriteThroughHook(stampedRecord);
+        else
+            WriteOrKeep(stampedRecord);
     }
     catch (...)
     {
@@ -435,6 +452,63 @@ void TASWLogBase::WriteBacktrace()
     }
 
     writeMarker(Detail::BacktraceEndText);
+}
+
+//---------------------------------------------------------------------------
+/*
+    TASWLogBase::WriteOrKeep
+
+    Write()'s last step, for a stamped entry that passed the gate (and the hook, if any): keeps it in the backtrace if
+    only the backtrace let it in, else writes the backtrace first if the entry's level dumps it, then the entry.
+*/
+void TASWLogBase::WriteOrKeep(const TASWLogRecord& record)
+{
+    // Read again: if the minimum level changed since the gate, the entry is kept or written as if it had been logged
+    // just before or after the change
+    if (!record.Forced && record.LogLevel < GetMinimumLevelFor(record))
+    {
+        KeepInBacktrace(record);
+        return;
+    }
+
+    if (m_HasBacktrace.load(std::memory_order_relaxed) && record.LogLevel >= m_BacktraceDumpLevel.load(std::memory_order_relaxed))
+        WriteBacktrace();
+
+    WriteRecord(record);
+}
+
+//---------------------------------------------------------------------------
+/*
+    TASWLogBase::WriteThroughHook
+
+    Passes a stamped entry to the config's OnBeforeWrite hook, then on to WriteOrKeep() as the hook changed it, unless
+    the hook drops it. A hook that throws drops the entry, which is reported.
+*/
+void TASWLogBase::WriteThroughHook(const TASWLogRecord& record)
+{
+    const auto config = GetConfig();
+    if (config->OnBeforeWrite == nullptr)
+    {
+        WriteOrKeep(record); // Reconfigured without a hook since Write() checked
+        return;
+    }
+
+    TASWPendingEntry entry(record);
+    bool isKept = false;
+
+    try
+    {
+        TRunningBeforeWriteScope runningScope;
+        isKept = config->OnBeforeWrite(entry);
+    }
+    catch (...)
+    {
+        ReportError(*config, MakeExceptionError("Dropped an entry, OnBeforeWrite threw"));
+        return;
+    }
+
+    if (isKept)
+        WriteOrKeep(entry.GetRecord());
 }
 
 //---------------------------------------------------------------------------

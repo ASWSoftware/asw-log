@@ -31,6 +31,29 @@ limitations under the License.
 namespace ASWLog
 {
 
+namespace
+{
+
+TASWLogConfig MakeSinkConfig(const TASWLogConfig& config);
+
+//---------------------------------------------------------------------------
+
+/*
+  MakeSinkConfig
+
+  The config a multi-log passes to its loggers: its own, without the OnBeforeWrite hook, which the multi-log calls
+  itself, once per entry
+*/
+TASWLogConfig MakeSinkConfig(const TASWLogConfig& config)
+{
+    TASWLogConfig sinkConfig = config;
+    sinkConfig.OnBeforeWrite = nullptr;
+
+    return sinkConfig;
+}
+
+} // namespace
+
 //---------------------------------------------------------------------------
 
 /////////////////////////////////////////////////////////////////////////////
@@ -151,10 +174,11 @@ bool TASWMultiLog::Initialize(const TASWLogConfig& config) noexcept
             m_IsInitialized.store(true, std::memory_order_release);
         }
 
+        const auto sinkConfig = MakeSinkConfig(config);
         bool allSucceeded = true;
         for (auto* sink : SnapshotSinks())
         {
-            if (!sink->Initialize(config) && !sink->IsOpen())
+            if (!sink->Initialize(sinkConfig) && !sink->IsOpen())
                 allSucceeded = false;
         }
 
@@ -221,10 +245,11 @@ bool TASWMultiLog::Reconfigure(const TASWLogConfig& config) noexcept
             previousConfig = SetConfig(config);
         }
 
+        const auto sinkConfig = MakeSinkConfig(config);
         bool allSucceeded = true;
         for (auto* sink : SnapshotSinks())
         {
-            if (!sink->Reconfigure(config))
+            if (!sink->Reconfigure(sinkConfig))
                 allSucceeded = false;
         }
 

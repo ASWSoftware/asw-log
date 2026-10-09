@@ -122,6 +122,20 @@ see [0.26.1](#0261---2026-09-17) for the initial versioned baseline.
   including your own (a JSON line has no line breaks), and to the
   fixed-layout crash and backtrace lines; `LogRaw()` entries written as is
   stay as they are.
+- A hook to drop or change entries before they are written:
+  `OnBeforeWrite`, e.g. to redact secrets or personal data, or to drop
+  noisy entries by content, category or field. It gets a `TASWPendingEntry`
+  for each entry that passes the level checks (`LogRaw()` entries
+  included): return false to drop it, or change it with `SetMessage()`,
+  `SetField()` and `RemoveField()` (read with `GetRecord()`, `FindField()`
+  and `ForEachField()`); level, time and category stay as they are. It runs
+  on the logging thread before the logger's lock or queue, so it may log
+  elsewhere; an entry logged from inside it is written as is. Entries the
+  backtrace keeps are kept as changed, `OnLogEntry` sees the changed entry,
+  and a hook that throws drops the entry and reports it (`OnError`). The
+  logger's own lines (startup, shutdown, backtrace markers, crash lines)
+  don't pass through it. A multi-log runs its hook once per entry and
+  passes its config on without it.
 
 ### Changed
 

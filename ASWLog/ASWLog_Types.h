@@ -39,6 +39,7 @@ limitations under the License.
 #include <string>
 #include <string_view>
 #include <system_error>
+#include <vector>
 //---------------------------------------------------------------------------
 #include "ASWLog_Fields.h"
 //---------------------------------------------------------------------------
@@ -501,6 +502,61 @@ struct TASWLogRecord
     {
         return (Fields != nullptr && !Fields->empty()) || Scope != nullptr;
     }
+};
+
+//---------------------------------------------------------------------------
+
+/////////////////////////////////////////////////////////////////////////////
+// TASWPendingEntry
+//
+// An entry about to be written, as TASWLogConfig::OnBeforeWrite gets it: the hook reads the record and may change its
+// message and fields before the logger writes it. The entry owns what the hook sets, so the hook's own strings may be
+// temporaries. Its level, time, ids, category, location and flags can't be changed (the logger has already checked
+// the level). Only valid during the hook's call.
+/////////////////////////////////////////////////////////////////////////////
+class TASWPendingEntry
+{
+private:
+    TASWLogRecord m_Record; // Its Message and Fields refer to the copies below once the hook has set them
+    std::string m_Message;
+    Detail::TOwnedFields m_Fields; // After a field change: all the entry's fields, each key once
+    std::span<const TASWLogField> m_FieldsView; // What m_Record.Fields points to after a field change
+    std::vector<Detail::TOwnedFields> m_ReplacedFields; // Kept, so a ForEachField() under way can finish
+
+private:
+    void ReplaceFields(std::span<const TASWLogField> fields);
+
+public:
+    explicit TASWPendingEntry(const TASWLogRecord& record) noexcept;
+
+    TASWPendingEntry(const TASWPendingEntry&) = delete;
+    TASWPendingEntry& operator=(const TASWPendingEntry&) = delete;
+
+    // The value of the entry's field 'key' (its own, or its scopes'; see TASWLogRecord::ForEachField()), or null if it
+    // has none. Valid until the hook changes the fields or returns.
+    [[nodiscard]] const TASWLogValue* FindField(std::string_view key) const noexcept;
+
+    // Calls visit(field) for each of the entry's fields, each key once (see TASWLogRecord::ForEachField()). The hook
+    // may change the fields from inside visit; the visit then goes on over the fields as they were when it started.
+    template<typename TVisit>
+    void ForEachField(TVisit&& visit) const
+    {
+        m_Record.ForEachField(visit);
+    }
+
+    // The entry as it will be written, with the hook's changes so far
+    [[nodiscard]] const TASWLogRecord& GetRecord() const noexcept;
+
+    // Removes the field 'key' (its own, or a scope's, for this entry only), if it has one. Throws std::bad_alloc if
+    // the fields can't be copied; they are then unchanged.
+    void RemoveField(std::string_view key);
+
+    // Sets the field 'key' to 'value' (copied, text included): replaces its value where it is, or adds it after the
+    // others. Throws like RemoveField().
+    void SetField(std::string_view key, const TASWLogValue& value);
+
+    // Replaces the entry's message, e.g. with a redacted copy
+    void SetMessage(std::string message) noexcept;
 };
 
 //---------------------------------------------------------------------------

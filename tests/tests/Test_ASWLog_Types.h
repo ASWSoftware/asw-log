@@ -49,6 +49,11 @@ private: // Test methods
     void Test_LineEnding_ToString();
     void Test_MultilineMode_FromString();
     void Test_MultilineMode_ToString();
+    void Test_PendingEntry_ChangingFieldsWhileVisitingIsSafe();
+    void Test_PendingEntry_FindsFieldsOfTheEntryAndItsScopes();
+    void Test_PendingEntry_RemoveFieldRemovesItForThisEntry();
+    void Test_PendingEntry_SetFieldReplacesOrAddsACopy();
+    void Test_PendingEntry_SetMessageOwnsTheText();
     void Test_LogError_ToString();
     void Test_TimePrecision_FromString();
     void Test_TimePrecision_ToString();

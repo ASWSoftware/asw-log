@@ -56,6 +56,7 @@ private: // Test methods
     void Test_Log_ThrowingSinkDoesNotStopOtherSinks();
     void Test_LogFmt_FormatsOnceForAllSinks();
     void Test_LogForce_BypassesCompositeGate();
+    void Test_OnBeforeWrite_RunsOnceBeforeTheFanOut();
     void Test_Reconfigure_PassesConfigToEverySink();
     void Test_RemoveAllLoggers_ClearsRegistrationAndReturnsCount();
     void Test_RemoveLogger_StopsReceivingEntries();

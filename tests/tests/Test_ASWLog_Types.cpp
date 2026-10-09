@@ -25,9 +25,13 @@ limitations under the License.
 #include "Test_ASWLog_Types.h"
 //---------------------------------------------------------------------------
 #include <cstddef>
+#include <format>
 #include <optional>
+#include <span>
 #include <string>
+#include <string_view>
 #include <system_error>
+#include <vector>
 //---------------------------------------------------------------------------
 #include "ASWUnitTests_Registry.h"
 //---------------------------------------------------------------------------
@@ -36,6 +40,25 @@ limitations under the License.
 
 namespace ASWUnitTests
 {
+
+namespace
+{
+
+// "key=value" for each of the entry's fields, in the order ForEachField() gives them (text values as they are)
+std::vector<std::string> DescribeFields(const ASWLog::TASWPendingEntry& entry)
+{
+    std::vector<std::string> fields;
+    entry.ForEachField([&fields](const ASWLog::TASWLogField& field) {
+                if (field.Value.GetKind() == ASWLog::ValueKind::Text)
+                    fields.push_back(std::format("{}={}", field.Key, field.Value.GetText()));
+                else
+                    fields.push_back(std::format("{}={}", field.Key, field.Value.GetInt()));
+            });
+
+    return fields;
+}
+
+} // namespace
 
 //---------------------------------------------------------------------------
 TTest_ASWLog_Types::TTest_ASWLog_Types()
@@ -55,6 +78,11 @@ TTest_ASWLog_Types::TTest_ASWLog_Types()
     RegisterTest(&TTest_ASWLog_Types::Test_LogError_ToString, "LogError_ToString");
     RegisterTest(&TTest_ASWLog_Types::Test_MultilineMode_FromString, "MultilineMode_FromString");
     RegisterTest(&TTest_ASWLog_Types::Test_MultilineMode_ToString, "MultilineMode_ToString");
+    RegisterTest(&TTest_ASWLog_Types::Test_PendingEntry_ChangingFieldsWhileVisitingIsSafe, "PendingEntry_ChangingFieldsWhileVisitingIsSafe");
+    RegisterTest(&TTest_ASWLog_Types::Test_PendingEntry_FindsFieldsOfTheEntryAndItsScopes, "PendingEntry_FindsFieldsOfTheEntryAndItsScopes");
+    RegisterTest(&TTest_ASWLog_Types::Test_PendingEntry_RemoveFieldRemovesItForThisEntry, "PendingEntry_RemoveFieldRemovesItForThisEntry");
+    RegisterTest(&TTest_ASWLog_Types::Test_PendingEntry_SetFieldReplacesOrAddsACopy, "PendingEntry_SetFieldReplacesOrAddsACopy");
+    RegisterTest(&TTest_ASWLog_Types::Test_PendingEntry_SetMessageOwnsTheText, "PendingEntry_SetMessageOwnsTheText");
     RegisterTest(&TTest_ASWLog_Types::Test_TimePrecision_FromString, "TimePrecision_FromString");
     RegisterTest(&TTest_ASWLog_Types::Test_TimePrecision_ToString, "TimePrecision_ToString");
     RegisterTest(&TTest_ASWLog_Types::Test_TimeZone_FromString, "TimeZone_FromString");
@@ -338,6 +366,141 @@ void TTest_ASWLog_Types::Test_MultilineMode_ToString()
     CheckEquals(std::string("PRESERVE"), std::string(ASWLog::MultilineMode_ToString(ASWLog::MultilineMode::Preserve)), "Preserve should stringify as PRESERVE");
     CheckEquals(std::string("INDENT"), std::string(ASWLog::MultilineMode_ToString(ASWLog::MultilineMode::Indent)), "Indent should stringify as INDENT");
     CheckEquals(std::string("ESCAPE"), std::string(ASWLog::MultilineMode_ToString(ASWLog::MultilineMode::Escape)), "Escape should stringify as ESCAPE");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_Types::Test_PendingEntry_ChangingFieldsWhileVisitingIsSafe()
+{
+    // Arrange: text fields from a scope, then (after the first change) the entry's own copies
+    ASWLog::TASWLogScope scope{ { "a", "1" }, { "b", "2" }, { "c", "3" } };
+    ASWLog::TASWLogRecord record;
+    record.Scope = ASWLog::TASWLogScope::GetCurrent();
+    ASWLog::TASWPendingEntry entry(record);
+    std::vector<std::string> firstVisit;
+    std::vector<std::string> secondVisit;
+
+    // Act: each change replaces the copies the visit is going over (a visit over freed copies is undefined behavior,
+    // which AddressSanitizer reports; without it the freed memory usually still holds the old fields)
+    entry.ForEachField([&](const ASWLog::TASWLogField& field) {
+            firstVisit.push_back(std::format("{}={}", field.Key, field.Value.GetText()));
+            entry.SetField(field.Key, "x");
+        });
+    entry.ForEachField([&](const ASWLog::TASWLogField& field) {
+            secondVisit.push_back(std::format("{}={}", field.Key, field.Value.GetText()));
+            entry.SetField(field.Key, std::string(field.Value.GetText()) + "y");
+        });
+
+    // Assert
+    CheckTrue(firstVisit == std::vector<std::string>{ "a=1", "b=2", "c=3" }, "The first visit should go over the fields as they were");
+    CheckTrue(secondVisit == std::vector<std::string>{ "a=x", "b=x", "c=x" }, "The second visit should go over the first visit's changes");
+    CheckTrue(DescribeFields(entry) == std::vector<std::string>{ "a=xy", "b=xy", "c=xy" }, "Every change should be kept");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_Types::Test_PendingEntry_FindsFieldsOfTheEntryAndItsScopes()
+{
+    // Arrange: a scope and the entry's own fields, one of which replaces the scope's
+    ASWLog::TASWLogScope scope{ { "requestId", "8f3a" }, { "user", "amy" } };
+    const ASWLog::TASWLogField own[] = { { "user", "bob" }, { "orderId", 17 } };
+    const std::span<const ASWLog::TASWLogField> ownFields(own);
+    ASWLog::TASWLogRecord record;
+    record.Fields = &ownFields;
+    record.Scope = ASWLog::TASWLogScope::GetCurrent();
+    const ASWLog::TASWPendingEntry entry(record);
+
+    // Act
+    const auto* requestId = entry.FindField("requestId");
+    const auto* user = entry.FindField("user");
+    const auto* orderId = entry.FindField("orderId");
+    const auto* missing = entry.FindField("missing");
+
+    // Assert
+    AssertNotNull(requestId, "A scope's field should be found");
+    AssertNotNull(user, "A field the entry and its scope both have should be found");
+    AssertNotNull(orderId, "The entry's own field should be found");
+    CheckEquals(std::string("8f3a"), std::string(requestId->GetText()), "The scope's value should be returned");
+    CheckEquals(std::string("bob"), std::string(user->GetText()), "The entry's own value should beat the scope's");
+    CheckEquals(17, orderId->GetInt(), "The entry's own value should be returned");
+    CheckNull(missing, "A field the entry doesn't have should give null");
+    CheckTrue(DescribeFields(entry) == std::vector<std::string>{ "requestId=8f3a", "user=bob", "orderId=17" },
+        "ForEachField() should give each key once, as written");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_Types::Test_PendingEntry_RemoveFieldRemovesItForThisEntry()
+{
+    // Arrange
+    ASWLog::TASWLogScope scope{ { "user", "amy" }, { "requestId", "8f3a" } };
+    const ASWLog::TASWLogField own[] = { { "user", "bob" }, { "orderId", 17 } };
+    const std::span<const ASWLog::TASWLogField> ownFields(own);
+    ASWLog::TASWLogRecord record;
+    record.Fields = &ownFields;
+    record.Scope = ASWLog::TASWLogScope::GetCurrent();
+    ASWLog::TASWPendingEntry entry(record);
+
+    // Act
+    entry.RemoveField("missing");
+    const auto* fieldsAfterMissing = entry.GetRecord().Fields;
+    entry.RemoveField("user");
+
+    // Assert
+    CheckSame(record.Fields, fieldsAfterMissing, "Removing a field the entry doesn't have should change nothing");
+    CheckTrue(DescribeFields(entry) == std::vector<std::string>{ "requestId=8f3a", "orderId=17" },
+        "The field should be gone, its own value and the scope's");
+    CheckNull(entry.GetRecord().Scope, "The entry's fields should no longer depend on the scope");
+    CheckEquals(std::string("amy"), std::string(ASWLog::TASWLogScope::GetCurrent()->GetFields()[0].Value.GetText()),
+        "The scope itself should keep the field");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_Types::Test_PendingEntry_SetFieldReplacesOrAddsACopy()
+{
+    // Arrange
+    ASWLog::TASWLogScope scope{ { "requestId", "8f3a" }, { "user", "amy" } };
+    const ASWLog::TASWLogField own[] = { { "orderId", 17 } };
+    const std::span<const ASWLog::TASWLogField> ownFields(own);
+    ASWLog::TASWLogRecord record;
+    record.Fields = &ownFields;
+    record.Scope = ASWLog::TASWLogScope::GetCurrent();
+    ASWLog::TASWPendingEntry entry(record);
+
+    // Act: the key and value of the added field are temporaries
+    entry.SetField("user", "***");
+    {
+        std::string key = "token";
+        std::string value = "secret_value";
+        entry.SetField(key, value);
+        key.assign(key.size(), '?');
+        value.assign(value.size(), '?');
+    }
+    entry.SetField("orderId", 18);
+
+    // Assert
+    CheckTrue(DescribeFields(entry) == std::vector<std::string>{ "requestId=8f3a", "user=***", "orderId=18", "token=secret_value" },
+        "A field should be replaced where it is, and a new one added after the others, as a copy");
+    CheckSame(record.Fields, &ownFields, "The record the entry was made from should be unchanged");
+    CheckEquals(17, ownFields[0].Value.GetInt(), "The caller's fields should be unchanged");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_Types::Test_PendingEntry_SetMessageOwnsTheText()
+{
+    // Arrange
+    ASWLog::TASWLogRecord record;
+    record.LogLevel = ASWLog::Level::Warn;
+    record.Raw = true;
+    record.Message = "password=secret";
+    record.Category = "Net";
+    ASWLog::TASWPendingEntry entry(record);
+
+    // Act: the new message is a temporary
+    {
+        std::string redacted = "password=***";
+        entry.SetMessage(redacted);
+        redacted.assign(redacted.size(), '?');
+    }
+
+    // Assert
+    CheckEquals(std::string("password=***"), std::string(entry.GetRecord().Message), "The entry should own its new message");
+    CheckEquals(std::string("password=secret"), std::string(record.Message), "The original record should be unchanged");
+    CheckEquals(ASWLog::Level::Warn, entry.GetRecord().LogLevel, "The level should be kept");
+    CheckTrue(entry.GetRecord().Raw, "The flags should be kept");
+    CheckEquals(std::string("Net"), std::string(entry.GetRecord().Category), "The category should be kept");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_Types::Test_TimePrecision_FromString()

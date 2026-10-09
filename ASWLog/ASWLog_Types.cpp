@@ -30,6 +30,8 @@ limitations under the License.
 #include <iomanip>
 #include <iostream>
 #include <sstream>
+#include <utility>
+#include <vector>
 //---------------------------------------------------------------------------
 #include "ASWLog_Utils.h"
 //---------------------------------------------------------------------------
@@ -205,6 +207,102 @@ std::string TASWLogError::ToString() const
         text += std::format(" ({} more not reported)", SuppressedCount);
 
     return text;
+}
+
+//---------------------------------------------------------------------------
+
+/////////////////////////////////////////////////////////////////////////////
+// TASWPendingEntry
+/////////////////////////////////////////////////////////////////////////////
+
+//---------------------------------------------------------------------------
+TASWPendingEntry::TASWPendingEntry(const TASWLogRecord& record) noexcept
+    : m_Record(record)
+{
+}
+
+//---------------------------------------------------------------------------
+const TASWLogValue* TASWPendingEntry::FindField(std::string_view key) const noexcept
+{
+    const TASWLogValue* value = nullptr;
+    m_Record.ForEachField([key, &value](const TASWLogField& field) {
+            if (field.Key == key)
+                value = &field.Value;
+        });
+
+    return value;
+}
+
+//---------------------------------------------------------------------------
+const TASWLogRecord& TASWPendingEntry::GetRecord() const noexcept
+{
+    return m_Record;
+}
+
+//---------------------------------------------------------------------------
+void TASWPendingEntry::RemoveField(std::string_view key)
+{
+    if (FindField(key) == nullptr)
+        return;
+
+    std::vector<TASWLogField> fields;
+    m_Record.ForEachField([key, &fields](const TASWLogField& field) {
+            if (field.Key != key)
+                fields.push_back(field);
+        });
+
+    ReplaceFields(fields);
+}
+
+//---------------------------------------------------------------------------
+/*
+    TASWPendingEntry::ReplaceFields
+
+    Makes 'fields' (copied; they may refer to the current copies) the entry's only fields, in place of its own and its
+    scopes'. The copies they replace are kept until the entry ends, so a ForEachField() under way can finish.
+*/
+void TASWPendingEntry::ReplaceFields(std::span<const TASWLogField> fields)
+{
+    Detail::TOwnedFields replacement;
+    replacement.Assign(fields);
+
+    if (!m_Fields.Get().empty())
+        m_ReplacedFields.push_back(std::move(m_Fields));
+
+    m_Fields = std::move(replacement);
+    m_FieldsView = m_Fields.Get();
+    m_Record.Fields = &m_FieldsView;
+    m_Record.Scope = nullptr;
+}
+
+//---------------------------------------------------------------------------
+void TASWPendingEntry::SetField(std::string_view key, const TASWLogValue& value)
+{
+    std::vector<TASWLogField> fields;
+    bool isReplaced = false;
+    m_Record.ForEachField([key, &value, &fields, &isReplaced](const TASWLogField& field) {
+            if (field.Key == key)
+            {
+                fields.push_back(TASWLogField{ field.Key, value });
+                isReplaced = true;
+            }
+            else
+            {
+                fields.push_back(field);
+            }
+        });
+
+    if (!isReplaced)
+        fields.push_back(TASWLogField{ key, value });
+
+    ReplaceFields(fields);
+}
+
+//---------------------------------------------------------------------------
+void TASWPendingEntry::SetMessage(std::string message) noexcept
+{
+    m_Message = std::move(message);
+    m_Record.Message = m_Message;
 }
 
 //---------------------------------------------------------------------------

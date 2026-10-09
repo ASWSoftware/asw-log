@@ -44,6 +44,8 @@ ASWLog is a thread-safe light-weight C++ logging tool for Windows and Linux proj
 - Multi-line messages (e.g. an HTTP body) written as they are, or, with `TASWLogConfig::Line.Multiline`, each line after
   the first marked with `    | ` (`MultilineMode::Indent`) or the line breaks escaped as `\r` and `\n`
   (`MultilineMode::Escape`), so that every entry is recognizable as one.
+- A hook to drop or change entries before they are written (`TASWLogConfig::OnBeforeWrite`), e.g. to redact secrets
+  or drop noisy entries by content, category or field.
 - Structured fields per entry, e.g. `logger.LogInfo("Order placed", {{"orderId", 17}})`, and scoped context that every
   entry on the thread carries, e.g. `ASWLog::TASWLogScope scope{{"requestId", id}};` (`ASWLog_Fields.h`).
 - Extensible: assign your own formatter (`IASWLogFormatter`) to `TASWLogConfig::Line.Formatter` for your own line layout,

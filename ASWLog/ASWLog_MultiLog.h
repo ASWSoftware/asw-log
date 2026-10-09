@@ -62,6 +62,10 @@ namespace ASWLog
 // It keeps no backtrace either (each sink keeps its own, see
 // TASWBacktraceConfig), so its minimum level must be at or below the
 // sinks' Backtrace.LowestLevel for their backtraces to get those entries.
+// Its OnBeforeWrite hook runs once per entry, before the fan-out, and the
+// sinks get the entry as the hook changed it; the config it passes to them
+// has no hook (a sink initialized on its own keeps its own hook, which runs
+// after this one's).
 /////////////////////////////////////////////////////////////////////////////
 class TASWMultiLog : public TASWLogBase
 {
@@ -112,11 +116,13 @@ public:
     // Fans out to every registered sink, tolerating sinks that are already initialized/open (their own Initialize()
     // may correctly return false in that case, e.g. a singleton initialized elsewhere before being added here) rather
     // than treating that as a failure. Returns true only if every sink ends up initialized or open. Returns false without
-    // doing anything if this composite is already initialized; after Close() it can be initialized again. Thread-safe.
+    // doing anything if this composite is already initialized; after Close() it can be initialized again. The sinks get
+    // the config without its OnBeforeWrite hook, which this composite calls itself. Thread-safe.
     bool Initialize(const TASWLogConfig& config) noexcept override;
-    // Stores the config and passes it to every registered sink's Reconfigure(), even if one fails. Returns true only if
-    // every sink's Reconfigure() succeeds; false without doing anything if this composite isn't initialized. A sink
-    // that needs settings of its own is reconfigured directly instead. Thread-safe.
+    // Stores the config and passes it (without OnBeforeWrite, as Initialize() does) to every registered sink's
+    // Reconfigure(), even if one fails. Returns true only if every sink's Reconfigure() succeeds; false without doing
+    // anything if this composite isn't initialized. A sink that needs settings of its own is reconfigured directly
+    // instead. Thread-safe.
     bool Reconfigure(const TASWLogConfig& config) noexcept override;
 
     bool Open() noexcept override;

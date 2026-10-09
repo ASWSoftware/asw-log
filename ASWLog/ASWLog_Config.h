@@ -301,6 +301,21 @@ struct TASWLogConfig
     TASWAsyncConfig Async;
     TASWBacktraceConfig Backtrace;
 
+    // --- Pre-write Hook ---
+    // A last chance for the application to drop or change each of its entries before the logger writes it, e.g. to
+    // redact secrets or personal data, or to drop noisy entries by content or category. Return false to drop the entry;
+    // to change it, call entry.SetMessage(), SetField() or RemoveField(). Called for each application entry that passes
+    // the level checks (LogRaw() entries included, with record.Raw set; those the backtrace keeps too, which it then
+    // keeps as changed), on the logging thread, before the logger takes its lock or queues the entry, so it may log to
+    // another logger, and threads that log at the same time call it at the same time (keep it thread-safe and quick).
+    // An entry logged from inside the hook, on its thread, skips the hooks and is written as it is. The
+    // logger's own lines (startup, shutdown, backtrace markers, crash lines) don't pass through it. If it throws, the
+    // entry is dropped and the exception reported (see OnError). OnLogEntry gets the changed entry. A multi-log calls
+    // its hook once per entry and passes the changed entry on; the config it passes to its loggers has no hook. With no
+    // hook set, a written entry costs one more flag check.
+    using BeforeWriteCallback = std::function<bool (TASWPendingEntry& entry)>;
+    BeforeWriteCallback OnBeforeWrite;
+
     // --- Log Entry Callback Options ---
     // Receives the entry's record (with its time and ids) and the line as written. Both are only valid during the call.
     using LogCallback = std::function<void (const TASWLogRecord& record, std::string_view formattedLine)>;
