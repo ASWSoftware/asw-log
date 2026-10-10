@@ -244,6 +244,16 @@ see [0.26.1](#0261---2026-09-17) for the initial versioned baseline.
   Windows and UTF-32 on Linux); invalid input becomes U+FFFD. `std::format`
   has no `char16_t` format strings, so `char16_t` text goes in as a message
   or through `Wide()`.
+- CMake install and package files: `cmake --install` on the repository root
+  installs the static library, the headers (to `include/ASWLog`, so code
+  includes them as before, e.g. `#include "ASWLog_FileLog.h"`) and
+  `ASWLogConfig.cmake`, after which `find_package(ASWLog CONFIG)` gives the
+  `ASWLog::ASWLog` target. A requested version is met by any later release
+  with the same major version. The install rules are on by default only when
+  ASWLog is the top-level project (option `ASWLOG_INSTALL`). A Debug build of
+  the library is now named `ASWLogd` (e.g. `ASWLogd.lib`), so Debug and
+  Release can share an install prefix; nothing changes for code that links to
+  the `ASWLog::ASWLog` target.
 
 ### Changed
 

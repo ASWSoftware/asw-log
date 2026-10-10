@@ -107,6 +107,27 @@ Either way, only the library is built. When ASWLog is the top-level project, `-D
 `-DASWLOG_BUILD_TESTS=ON` also build the example and the unit tests, and `ASWLOG_WARNINGS` (on by default only there)
 compiles the library with extra warnings.
 
+To use a prebuilt copy instead, build and install the library from the repository root (a Debug build is named
+`ASWLogd`, so Debug and Release can share one install prefix):
+
+```
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build --config Release
+cmake --install build --config Release --prefix C:/Libraries/ASWLog
+```
+
+and find it with `find_package` (pass the prefix in `CMAKE_PREFIX_PATH`):
+
+```
+find_package(ASWLog 1.0 CONFIG REQUIRED)
+target_link_libraries(MyApp PRIVATE ASWLog::ASWLog)
+```
+
+The headers are installed to `<prefix>/include/ASWLog`, the target's include folder, so code includes them as it does
+from the sources (`#include "ASWLog_FileLog.h"`). A requested version is met by any later release with the same major
+version. The install rules are on by default only when ASWLog is the top-level project; set `ASWLOG_INSTALL` to change
+that. `tests/package` is a small project that builds against an installed copy; CI runs it.
+
 The `example/cmake` folder contains a portable CMake project for building the example with CMake, JetBrains CLion,
 Visual Studio, Clang, or MinGW. From the repository root, configure and build it with:
 

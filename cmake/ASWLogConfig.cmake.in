@@ -1,0 +1,14 @@
+# The CMake package file of an installed ASWLog (see the root CMakeLists.txt). After
+#     find_package(ASWLog CONFIG REQUIRED)
+# link to the ASWLog::ASWLog target.
+
+@PACKAGE_INIT@
+
+include(CMakeFindDependencyMacro)
+
+# ASWLog::ASWLog links to Threads::Threads (TASWTextLogBase runs a std::thread).
+find_dependency(Threads)
+
+include("${CMAKE_CURRENT_LIST_DIR}/ASWLogTargets.cmake")
+
+check_required_components(ASWLog)
