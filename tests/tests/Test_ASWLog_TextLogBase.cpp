@@ -255,6 +255,21 @@ public:
     }
 };
 
+// A formatter that formats raw entries too, as "raw|message", and the others as "line|message"
+class TRawFormattingFormatter final : public ASWLog::IASWLogFormatter
+{
+public:
+    std::string Format(const ASWLog::TASWLogRecord& record, const ASWLog::TASWLogConfig& /*config*/) const override
+    {
+        return std::string(record.Raw ? "raw|" : "line|").append(record.Message);
+    }
+
+    bool FormatsRawEntries() const noexcept override
+    {
+        return true;
+    }
+};
+
 // A faulty user formatter: throws for every line (IASWLogFormatter::Format() may throw; the line is then dropped)
 class TThrowingFormatter final : public ASWLog::IASWLogFormatter
 {
@@ -409,7 +424,15 @@ TTest_ASWLog_TextLogBase::TTest_ASWLog_TextLogBase()
     RegisterTest(&TTest_ASWLog_TextLogBase::Test_Log_FormatsFiltersAndCallsAfterEntry, "Log_FormatsFiltersAndCallsAfterEntry");
     RegisterTest(&TTest_ASWLog_TextLogBase::Test_Log_MinimumLevelOffAllowsOnlyForcedEntries, "Log_MinimumLevelOffAllowsOnlyForcedEntries");
     RegisterTest(&TTest_ASWLog_TextLogBase::Test_Log_ThrowingWriteDoesNotEscape, "Log_ThrowingWriteDoesNotEscape");
+    RegisterTest(&TTest_ASWLog_TextLogBase::Test_LogRaw_FormatterCanFormatRawEntries, "LogRaw_FormatterCanFormatRawEntries");
     RegisterTest(&TTest_ASWLog_TextLogBase::Test_LogRaw_WritesMessageAsIs, "LogRaw_WritesMessageAsIs");
+    RegisterTest(&TTest_ASWLog_TextLogBase::Test_Multiline_AppliesToEveryFormattersLine, "Multiline_AppliesToEveryFormattersLine");
+    RegisterTest(&TTest_ASWLog_TextLogBase::Test_Multiline_EscapeKeepsEachEntryOnOneLine, "Multiline_EscapeKeepsEachEntryOnOneLine");
+    RegisterTest(&TTest_ASWLog_TextLogBase::Test_Multiline_LogRawStaysAsIs, "Multiline_LogRawStaysAsIs");
+    RegisterTest(&TTest_ASWLog_TextLogBase::Test_Multiline_PreserveWritesLineBreaksAsTheyAre, "Multiline_PreserveWritesLineBreaksAsTheyAre");
+    RegisterTest(&TTest_ASWLog_TextLogBase::Test_OnBeforeWrite_RunsOnEveryLoggingThread, "OnBeforeWrite_RunsOnEveryLoggingThread");
+    RegisterTest(&TTest_ASWLog_TextLogBase::Test_OnBeforeWrite_RunsOutsideTheLockBeforeQueuing, "OnBeforeWrite_RunsOutsideTheLockBeforeQueuing");
+    RegisterTest(&TTest_ASWLog_TextLogBase::Test_OnBeforeWrite_SkipsTheLoggersOwnLines, "OnBeforeWrite_SkipsTheLoggersOwnLines");
     RegisterTest(&TTest_ASWLog_TextLogBase::Test_OnLogEntry_CallbackCanReconfigureTheLogger, "OnLogEntry_CallbackCanReconfigureTheLogger");
     RegisterTest(&TTest_ASWLog_TextLogBase::Test_Reconfigure_AppliesNewConfigButKeepsLevel, "Reconfigure_AppliesNewConfigButKeepsLevel");
     RegisterTest(&TTest_ASWLog_TextLogBase::Test_Reconfigure_IsSafeWhileOtherThreadsLog, "Reconfigure_IsSafeWhileOtherThreadsLog");
@@ -617,7 +640,7 @@ void TTest_ASWLog_TextLogBase::Test_Async_DropNewestReportsAndMarksDroppedEntrie
     CheckEquals(1, errors.size(), "The drop should be reported once");
     if (errors.size() == 1)
     {
-        CheckEquals(static_cast<int>(ASWLog::ErrorKind::EntriesDropped), static_cast<int>(errors[0].Kind), "The report should be EntriesDropped");
+        CheckEquals(ASWLog::ErrorKind::EntriesDropped, errors[0].Kind, "The report should be EntriesDropped");
         CheckContains(errors[0].Message, "Dropped 3 entries", "The report should say how many were dropped");
     }
 }
@@ -1056,22 +1079,15 @@ void TTest_ASWLog_TextLogBase::Test_Initialize_ThrowingFormatterStillInitializes
 
     TMemoryTextLog log(output);
     bool initialized = false;
-    bool threw = false;
 
     // Act
-    try
-    {
-        initialized = log.Initialize(config);
-        log.LogInfo("formatted"); // Dropped, since its line can't be formatted
-        log.LogRaw(ASWLog::Level::Info, "raw"); // Written: raw entries don't use the formatter
-    }
-    catch (...)
-    {
-        threw = true;
-    }
+    CheckNoThrow([&] {
+            initialized = log.Initialize(config);
+            log.LogInfo("formatted"); // Dropped, since its line can't be formatted
+            log.LogRaw(ASWLog::Level::Info, "raw"); // Written: raw entries don't use the formatter
+        }, "A throwing formatter should not throw out of Initialize() or the Log* methods");
 
     // Assert
-    CheckFalse(threw, "A throwing formatter should not throw out of Initialize() or the Log* methods");
     CheckTrue(initialized, "Initialize() should succeed: the startup lines are best effort once the output is open");
     CheckTrue(log.IsOpen(), "The logger should be open");
     CheckTrue(output.Lines == std::vector<std::string>{ "raw" }, "Only the raw entry should be written");
@@ -1167,7 +1183,7 @@ void TTest_ASWLog_TextLogBase::Test_Log_DroppedWhenNotReadyOrNotPrepared()
     log.LogInfo("after_close");
 
     // Assert
-    CheckTrue(output.Lines.empty(), "No entry should be written");
+    CheckEmpty(output.Lines, "No entry should be written");
     CheckEquals(0, callbackCount, "OnLogEntry should not be called for a dropped entry");
     CheckEquals(afterEntryCountAtStart + 1, output.AfterEntryCount,
         "AfterEntryUnlocked should be skipped when EnsureReadyUnlocked fails, but called when only PrepareWriteUnlocked drops the line");
@@ -1229,7 +1245,7 @@ void TTest_ASWLog_TextLogBase::Test_Log_MinimumLevelOffAllowsOnlyForcedEntries()
 
     // Assert
     CheckTrue(initialized, "Initialize should succeed");
-    CheckTrue(log.GetMinimumLevel() == ASWLog::Level::Off, "InitialMinimumLevel should seed the minimum level");
+    CheckEquals(ASWLog::Level::Off, log.GetMinimumLevel(), "InitialMinimumLevel should seed the minimum level");
     CheckEquals(0, linesAfterInitialize,
         "With the minimum level at Off, Initialize should write no startup lines");
     CheckTrue(output.Lines == std::vector<std::string>{ "[INFO]: forced\n", "forced_raw\n" },
@@ -1251,25 +1267,52 @@ void TTest_ASWLog_TextLogBase::Test_Log_ThrowingWriteDoesNotEscape()
     CheckTrue(log.Initialize(config), "Initialize should succeed");
 
     // Act
-    bool threw = false;
     log.ThrowsOnWrite = true;
-    try
-    {
-        log.LogInfo("write_throws");
-        log.LogForceRaw(ASWLog::Level::Error, "write_throws_raw");
-    }
-    catch (...)
-    {
-        threw = true;
-    }
+    CheckNoThrow([&] {
+            log.LogInfo("write_throws");
+            log.LogForceRaw(ASWLog::Level::Error, "write_throws_raw");
+        }, "An exception from WriteLineUnlocked should not reach the caller");
     log.ThrowsOnWrite = false;
     log.LogInfo("after_throw"); // Would deadlock if the throw had left the mutex locked
 
     // Assert
-    CheckFalse(threw, "An exception from WriteLineUnlocked should not reach the caller");
     CheckTrue(output.Lines == std::vector<std::string>{ "[INFO]: after_throw\n" }, "Logging should work after a failed write");
     CheckTrue(reportedMessages == std::vector<std::string>{ "Dropped an entry: write failed", "Dropped an entry: write failed" },
         "Each dropped entry should be reported");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_TextLogBase::Test_LogRaw_FormatterCanFormatRawEntries()
+{
+    // Arrange: a synchronous and an asynchronous logger whose formatter formats raw entries too
+    TMemoryOutput syncOutput;
+    TMemoryOutput asyncOutput;
+    auto syncConfig = MakeQuietConfig();
+    syncConfig.Line.Formatter = std::make_shared<const TRawFormattingFormatter>();
+    auto asyncConfig = MakeAsyncConfig();
+    asyncConfig.Line.Formatter = syncConfig.Line.Formatter;
+    TMemoryTextLog syncLog(syncOutput);
+    TMemoryTextLog asyncLog(asyncOutput);
+    CheckTrue(syncLog.Initialize(syncConfig), "Initialize should succeed");
+    CheckTrue(asyncLog.Initialize(asyncConfig), "Initialize should succeed (async)");
+
+    const auto logEntries = [](TMemoryTextLog& log) {
+            log.LogRaw(ASWLog::Level::Debug, "filtered_raw");
+            log.LogRaw(ASWLog::Level::Info, "partial");
+            log.LogForceRaw(ASWLog::Level::Trace, "forced\n");
+            log.LogInfo("formatted");
+        };
+
+    // Act
+    logEntries(syncLog);
+    logEntries(asyncLog);
+    asyncLog.Flush(); // Waits for the queued entries
+
+    // Assert
+    const std::vector<std::string> expected{ "raw|partial\n", "raw|forced\n\n", "line|formatted\n" };
+    CheckTrue(syncOutput.Lines == expected, "Raw entries should be formatted and get the line ending");
+    CheckTrue(syncOutput.EndsLine == std::vector<bool>{ true, true, true }, "A formatted raw entry should end its line");
+    CheckTrue(asyncOutput.Lines == expected, "Queued raw entries should be formatted and get the line ending");
+    CheckTrue(asyncOutput.EndsLine == std::vector<bool>{ true, true, true }, "A queued formatted raw entry should end its line");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_TextLogBase::Test_LogRaw_WritesMessageAsIs()
@@ -1287,6 +1330,270 @@ void TTest_ASWLog_TextLogBase::Test_LogRaw_WritesMessageAsIs()
     // Assert
     CheckTrue(output.Lines == std::vector<std::string>{ "partial", " line\n" }, "Raw entries should be written as is, without a format or a line ending");
     CheckTrue(output.EndsLine == std::vector<bool>{ false, false }, "A raw entry doesn't end its line");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_TextLogBase::Test_Multiline_AppliesToEveryFormattersLine()
+{
+    // Arrange: Indent with CRLF endings, for the built-in layout, a pattern, a user's own formatter and JSON
+    auto config = MakeQuietConfig();
+    config.Line.Multiline = ASWLog::MultilineMode::Indent;
+    config.Line.Ending = ASWLog::LineEnding::CRLF;
+
+    const auto logWith = [&config](std::shared_ptr<const ASWLog::IASWLogFormatter> formatter) {
+            TMemoryOutput output;
+            auto formatterConfig = config;
+            formatterConfig.Line.Formatter = std::move(formatter);
+            TMemoryTextLog log(output);
+            if (log.Initialize(formatterConfig))
+                log.LogInfo("first\nsecond");
+
+            return output.Lines;
+        };
+
+    // Act
+    const auto textLines = logWith(nullptr);
+    const auto patternLines = logWith(std::make_shared<const ASWLog::TASWPatternFormatter>("{level}|{message} <"));
+    const auto ownLines = logWith(std::make_shared<const TPipeFormatter>());
+    const auto jsonLines = logWith(std::make_shared<const ASWLog::TASWJSONFormatter>());
+
+    // Assert
+    CheckTrue(textLines == std::vector<std::string>{ "[INFO]: first\r\n    | second\r\n" }, "The built-in layout's line should be indented");
+    CheckTrue(patternLines == std::vector<std::string>{ "INFO|first\r\n    | second <\r\n" }, "A pattern's line should be indented");
+    CheckTrue(ownLines == std::vector<std::string>{ "INFO|first\r\n    | second\r\n" }, "A user's own formatter's line should be indented");
+    CheckTrue(jsonLines == std::vector<std::string>{ "{\"level\":\"INFO\",\"message\":\"first\\nsecond\"}\r\n" },
+        "A JSON line has no line break to indent");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_TextLogBase::Test_Multiline_EscapeKeepsEachEntryOnOneLine()
+{
+    // Arrange: a logger that starts with Preserve and is reconfigured to Escape, and an asynchronous one
+    TMemoryOutput output;
+    TMemoryOutput asyncOutput;
+    std::vector<std::string> callbackLines;
+    auto config = MakeQuietConfig();
+    config.OnLogEntryMinimumLevel = ASWLog::Level::Info;
+    config.OnLogEntry = [&callbackLines](const ASWLog::TASWLogRecord& /*record*/, std::string_view line) {
+            callbackLines.emplace_back(line);
+        };
+    auto escapeConfig = config;
+    escapeConfig.Line.Multiline = ASWLog::MultilineMode::Escape;
+    auto asyncConfig = MakeAsyncConfig();
+    asyncConfig.Line.Multiline = ASWLog::MultilineMode::Escape;
+    TMemoryTextLog log(output);
+    TMemoryTextLog asyncLog(asyncOutput);
+    CheckTrue(log.Initialize(config), "Initialize should succeed");
+    CheckTrue(asyncLog.Initialize(asyncConfig), "Initialize should succeed (async)");
+
+    // Act
+    log.LogInfo("first\nline");
+    const bool reconfigured = log.Reconfigure(escapeConfig);
+    log.LogInfo("GET /\r\nHost: x\r\n");
+    asyncLog.LogInfo("GET /\r\nHost: x\r\n");
+    asyncLog.Flush(); // Waits for the queued entry
+
+    // Assert
+    const std::vector<std::string> expected{ "[INFO]: first\nline\n", "[INFO]: GET /\\r\\nHost: x\\r\\n\n" };
+    CheckTrue(reconfigured, "Reconfigure should succeed");
+    CheckTrue(output.Lines == expected, "After Reconfigure, the line breaks should be escaped");
+    CheckTrue(callbackLines == expected, "OnLogEntry should get the line as written");
+    CheckTrue(asyncOutput.Lines == std::vector<std::string>{ expected[1] }, "A queued line's line breaks should be escaped");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_TextLogBase::Test_Multiline_LogRawStaysAsIs()
+{
+    // Arrange: Indent, without and with a formatter that formats raw entries
+    TMemoryOutput output;
+    TMemoryOutput formattedOutput;
+    auto config = MakeQuietConfig();
+    config.Line.Multiline = ASWLog::MultilineMode::Indent;
+    auto formattedConfig = config;
+    formattedConfig.Line.Formatter = std::make_shared<const TRawFormattingFormatter>();
+    TMemoryTextLog log(output);
+    TMemoryTextLog formattedLog(formattedOutput);
+    CheckTrue(log.Initialize(config), "Initialize should succeed");
+    CheckTrue(formattedLog.Initialize(formattedConfig), "Initialize should succeed (formatted raw entries)");
+
+    // Act
+    log.LogRaw(ASWLog::Level::Info, "a\nb\n");
+    log.LogForceRaw(ASWLog::Level::Trace, "c\r\nd");
+    formattedLog.LogRaw(ASWLog::Level::Info, "a\nb");
+
+    // Assert
+    CheckTrue(output.Lines == std::vector<std::string>{ "a\nb\n", "c\r\nd" }, "Raw entries written as is should stay as they are");
+    CheckTrue(formattedOutput.Lines == std::vector<std::string>{ "raw|a\n    | b\n" },
+        "A raw entry the formatter formats should be indented like any formatted line");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_TextLogBase::Test_Multiline_PreserveWritesLineBreaksAsTheyAre()
+{
+    // Arrange: the default mode, with CRLF endings
+    TMemoryOutput output;
+    auto config = MakeQuietConfig();
+    config.Line.Ending = ASWLog::LineEnding::CRLF;
+    TMemoryTextLog log(output);
+    CheckTrue(log.Initialize(config), "Initialize should succeed");
+
+    // Act
+    log.LogInfo("a\r\nb\nc\rd\n");
+
+    // Assert: no line break converted to the line ending
+    CheckTrue(output.Lines == std::vector<std::string>{ "[INFO]: a\r\nb\nc\rd\n\r\n" }, "The message should be written as it is");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_TextLogBase::Test_OnBeforeWrite_RunsOnEveryLoggingThread()
+{
+    // Arrange: a synchronous and an asynchronous logger whose hook changes the message and a field of each entry, and
+    // drops every fourth, while several threads log (for ThreadSanitizer)
+    constexpr int ThreadCount = 4;
+    constexpr int EntryCount = 200;
+    std::atomic<int> hookCount{ 0 };
+    const auto hook = [&hookCount](ASWLog::TASWPendingEntry& entry) {
+            hookCount.fetch_add(1);
+            const auto* index = entry.FindField("index");
+            if (index != nullptr && index->GetInt() % 4 == 3)
+                return false;
+
+            entry.SetMessage(std::format("hooked {}", entry.GetRecord().Message));
+            entry.SetField("index", "x");
+            return true;
+        };
+
+    TMemoryOutput output;
+    TMemoryOutput asyncOutput;
+    auto config = MakeQuietConfig();
+    config.OnBeforeWrite = hook;
+    auto asyncConfig = MakeAsyncConfig();
+    asyncConfig.OnBeforeWrite = hook;
+    TMemoryTextLog log(output);
+    TMemoryTextLog asyncLog(asyncOutput);
+    CheckTrue(log.Initialize(config), "Initialize should succeed");
+    CheckTrue(asyncLog.Initialize(asyncConfig), "Initialize should succeed (async)");
+
+    // Act
+    std::vector<std::thread> threads;
+    for (int threadIndex = 0; threadIndex < ThreadCount; ++threadIndex)
+    {
+        threads.emplace_back([&log, &asyncLog] {
+                for (int index = 0; index < EntryCount; ++index)
+                {
+                    log.LogInfo("entry", { { "index", index } });
+                    asyncLog.LogInfo("entry", { { "index", index } });
+                }
+            });
+    }
+
+    for (auto& thread : threads)
+        thread.join();
+
+    asyncLog.Flush(); // Waits for the queued entries
+
+    // Assert
+    constexpr std::size_t KeptCount = ThreadCount * EntryCount * 3 / 4;
+    const std::vector<std::string> expected(KeptCount, "[INFO][index=\"x\"]: hooked entry\n");
+    CheckEquals(2 * ThreadCount * EntryCount, hookCount.load(), "The hook should run once for each entry");
+    CheckTrue(output.Lines == expected, "Every kept entry should be written as the hook changed it");
+    CheckTrue(asyncOutput.Lines == expected, "Every kept queued entry should be written as the hook changed it");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_TextLogBase::Test_OnBeforeWrite_RunsOutsideTheLockBeforeQueuing()
+{
+    // Arrange: a hook that redacts a token in the message and the user field, for a synchronous and an asynchronous
+    // logger, both with OnLogEntry
+    TMemoryOutput output;
+    TMemoryOutput asyncOutput;
+    TMemoryTextLog log(output);
+    TMemoryTextLog asyncLog(asyncOutput);
+    bool wasMutexFree = false;
+    std::thread::id hookThreadId;
+    std::string seenLine;
+    std::string seenMessage;
+    std::mutex asyncSeenMutex;
+    std::string asyncSeenLine;
+    std::atomic<bool> isAsyncCalled{ false };
+
+    const auto redact = [](ASWLog::TASWPendingEntry& entry) {
+            if (entry.GetRecord().Message.starts_with("token="))
+                entry.SetMessage("token=***");
+
+            if (entry.FindField("user") != nullptr)
+                entry.SetField("user", "***");
+        };
+
+    auto config = MakeQuietConfig();
+    config.OnLogEntryMinimumLevel = ASWLog::Level::Info;
+    config.OnBeforeWrite = [&log, &wasMutexFree, &redact](ASWLog::TASWPendingEntry& entry) {
+            wasMutexFree = log.IsMutexFree();
+            redact(entry);
+            return true;
+        };
+    config.OnLogEntry = [&seenLine, &seenMessage](const ASWLog::TASWLogRecord& record, std::string_view line) {
+            seenMessage = record.Message;
+            seenLine = line;
+        };
+
+    auto asyncConfig = MakeAsyncConfig();
+    asyncConfig.OnLogEntryMinimumLevel = ASWLog::Level::Info;
+    asyncConfig.OnBeforeWrite = [&hookThreadId, &redact](ASWLog::TASWPendingEntry& entry) {
+            hookThreadId = std::this_thread::get_id();
+            redact(entry);
+            return true;
+        };
+    asyncConfig.OnLogEntry = [&](const ASWLog::TASWLogRecord& /*record*/, std::string_view line) {
+            {
+                std::lock_guard<std::mutex> lock(asyncSeenMutex);
+                asyncSeenLine = line;
+            }
+
+            isAsyncCalled.store(true);
+        };
+    CheckTrue(log.Initialize(config), "Initialize should succeed");
+    CheckTrue(asyncLog.Initialize(asyncConfig), "Initialize should succeed (async)");
+
+    // Act
+    log.LogInfo("token=abc", { { "user", "amy" } });
+    asyncLog.LogInfo("token=abc", { { "user", "amy" } });
+    const bool wasAsyncCalled = WaitUntil([&isAsyncCalled] {
+            return isAsyncCalled.load();
+        });
+
+    // Assert
+    const std::string expected = "[INFO][user=\"***\"]: token=***\n";
+    CheckTrue(wasMutexFree, "The hook should run before the logger takes its lock");
+    CheckTrue(output.Lines == std::vector<std::string>{ expected }, "The line should be written as the hook changed it");
+    CheckEquals(expected, seenLine, "OnLogEntry should get the changed line");
+    CheckEquals(std::string("token=***"), seenMessage, "OnLogEntry should get the changed record");
+    CheckTrue(hookThreadId == std::this_thread::get_id(), "An asynchronous logger should run the hook on the logging thread");
+    CheckTrue(asyncOutput.Lines == std::vector<std::string>{ expected }, "A queued line should be written as the hook changed it");
+    CheckTrue(wasAsyncCalled, "The asynchronous OnLogEntry should be called");
+    std::lock_guard<std::mutex> lock(asyncSeenMutex);
+    CheckEquals(expected, asyncSeenLine, "The asynchronous OnLogEntry should get the changed line");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_TextLogBase::Test_OnBeforeWrite_SkipsTheLoggersOwnLines()
+{
+    // Arrange: a hook that drops every entry, with a startup banner and the shutdown line
+    TMemoryOutput output;
+    int hookCount = 0;
+    auto config = MakeQuietConfig();
+    config.Startup.Banner = "banner";
+    config.Shutdown.WriteLine = true;
+    config.OnBeforeWrite = [&hookCount](ASWLog::TASWPendingEntry& /*entry*/) {
+            ++hookCount;
+            return false;
+        };
+
+    // Act
+    {
+        TMemoryTextLog log(output);
+        CheckTrue(log.Initialize(config), "Initialize should succeed");
+        log.LogError("dropped");
+    }
+
+    // Assert
+    CheckEquals(1, hookCount, "The hook should see only the application's entry");
+    AssertEquals(std::size_t(2), output.Lines.size(), "Only the banner and the shutdown line should be written");
+    CheckEquals(std::string("[INFO]: banner\n"), output.Lines[0], "The startup banner should be written");
+    CheckContains(output.Lines[1], "Logger shutdown", "The shutdown line should be written");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_TextLogBase::Test_OnLogEntry_CallbackCanReconfigureTheLogger()
@@ -1349,7 +1656,7 @@ void TTest_ASWLog_TextLogBase::Test_Reconfigure_AppliesNewConfigButKeepsLevel()
     CheckTrue(reconfigured, "Reconfigure() should succeed once initialized");
     CheckTrue(output.Lines == std::vector<std::string>{ "[INFO]: first\n", "[DEBUG]: before\n", ": after\n" },
         "Entries after Reconfigure() should use the new line layout, and Reconfigure() should write no startup lines");
-    CheckEquals(static_cast<int>(ASWLog::Level::Debug), static_cast<int>(log.GetMinimumLevel()),
+    CheckEquals(ASWLog::Level::Debug, log.GetMinimumLevel(),
         "Reconfigure() should keep the minimum level set with SetMinimumLevel(), not apply InitialMinimumLevel");
     CheckTrue(log.ReconfiguredFromBanners == std::vector<std::string>{ "first", "second" },
         "ReconfigureUnlocked() should get the config it replaced (and not be called before Initialize())");

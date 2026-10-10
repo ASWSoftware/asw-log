@@ -218,11 +218,12 @@ std::vector<TBackupFile> ListBackups(const std::filesystem::path& logPath, std::
     return backups;
 }
 
-// Formats a UTC time for a backup file name: "YYYY-MM-DD_HHMMSS_mmm".
-std::string ToBackupTimeLabel(std::chrono::system_clock::time_point timePoint)
+// Formats a time in 'zone' for a backup file name: "YYYY-MM-DD_HHMMSS_mmm".
+std::string ToBackupTimeLabel(std::chrono::system_clock::time_point timePoint, TimeZone zone)
 {
-    // Cut from the ISO 8601 form "YYYY-MM-DDTHH:mm:ss.mmmZ", leaving out the characters not wanted in a file name
-    const auto isoTime = Time::ToISO8601String(timePoint);
+    // Cut from the ISO 8601 form "YYYY-MM-DDTHH:mm:ss.mmmZ" (or "...mmm+hh:mm" in local time), leaving out the
+    // characters not wanted in a file name
+    const auto isoTime = Time::ToISO8601String(timePoint, zone);
     const std::string_view iso(isoTime);
     return std::format("{}_{}{}{}_{}", iso.substr(0, 10), iso.substr(11, 2), iso.substr(14, 2), iso.substr(17, 2),
         iso.substr(20, 3));
@@ -708,7 +709,7 @@ bool TASWFileLog::InitializeUnlocked()
         return false;
     }
 
-    m_LastLogDateStr = Time::ToDateString(NowUTC());
+    m_LastLogDateStr = Time::ToDateString(NowUTC(), GetConfigUnlocked().Line.TimestampZone);
     return true;
 }
 
@@ -786,7 +787,7 @@ bool TASWFileLog::OpenUnlocked()
 
     if (m_LastLogDateStr.empty())
     {
-        m_LastLogDateStr = Time::ToDateString(NowUTC());
+        m_LastLogDateStr = Time::ToDateString(NowUTC(), GetConfigUnlocked().Line.TimestampZone);
     }
 
     m_IsOpen.store(true, std::memory_order_release);
@@ -807,7 +808,7 @@ bool TASWFileLog::PrepareWriteUnlocked(std::chrono::system_clock::time_point now
     {
         // Only rolls forward (ISO dates compare as text): an entry stamped just before midnight can get the lock after
         // another thread's entry has rolled the log over, and then goes into the new day's log
-        const auto currentDateStr = Time::ToDateString(now);
+        const auto currentDateStr = Time::ToDateString(now, GetConfigUnlocked().Line.TimestampZone);
         if (currentDateStr > m_LastLogDateStr)
         {
             // Name the backup for the day its content is from, not the day that just started. A log shared with other
@@ -826,7 +827,7 @@ bool TASWFileLog::PrepareWriteUnlocked(std::chrono::system_clock::time_point now
     if (GetConfigUnlocked().File.EnableRotation && m_FileStream.IsOpen() && m_FileStream.GetSize() >= GetConfigUnlocked().File.MaxFileSizeBytes &&
         IsRetryDue(m_LastRotationFailure, now, GetConfigUnlocked().File.RotationRetryDelay))
     {
-        RotateLogFilesUnlocked("size", ToBackupTimeLabel(now));
+        RotateLogFilesUnlocked("size", ToBackupTimeLabel(now, GetConfigUnlocked().Line.TimestampZone));
     }
 
     return m_FileStream.IsOpen();
@@ -843,16 +844,21 @@ bool TASWFileLog::PrepareWriteUnlocked(std::chrono::system_clock::time_point now
 
     Otherwise the file stays open: flushes what the previous flush mode may have buffered, and the other settings take
     effect with the next entry (a FlushMode::Periodic thread is started, stopped or given its new interval after the
-    lock is released, see GetWorkerIntervalUnlocked()).
+    lock is released, see GetWorkerIntervalUnlocked()). A new Line.TimestampZone makes the file's day today's date in
+    that zone, so daily rolling next rolls over at that zone's midnight.
 */
 bool TASWFileLog::ReconfigureUnlocked(const TASWLogConfig& previous)
 {
-    const auto& file = GetConfigUnlocked().File;
+    const auto& config = GetConfigUnlocked();
+    const auto& file = config.File;
     m_SyncsCrashLine.store(Level::Critical >= file.SyncToDiskAtLevel, std::memory_order_relaxed);
 
     if (file.ResolvePath() == previous.File.ResolvePath() &&
         file.AutoOpenClosePerWrite == previous.File.AutoOpenClosePerWrite)
     {
+        if (config.Line.TimestampZone != previous.Line.TimestampZone)
+            m_LastLogDateStr = Time::ToDateString(NowUTC(), config.Line.TimestampZone);
+
         if (m_FileStream.IsOpen())
             FlushUnlocked();
 
@@ -907,7 +913,7 @@ bool TASWFileLog::RotateLogFiles(std::string_view reasonTag)
 {
     TDeferredWorkRunner deferredWorkRunner(*this);
     std::lock_guard<std::mutex> lock(m_Mutex);
-    return RotateLogFilesUnlocked(reasonTag, ToBackupTimeLabel(NowUTC()));
+    return RotateLogFilesUnlocked(reasonTag, ToBackupTimeLabel(NowUTC(), GetConfigUnlocked().Line.TimestampZone));
 }
 
 //---------------------------------------------------------------------------
@@ -944,8 +950,9 @@ void TASWFileLog::RotateDailyLogFromEarlierDayUnlocked()
     const auto lastWriteUTC = now - std::chrono::duration_cast<std::chrono::system_clock::duration>(fileAge);
 
     // YYYY-MM-DD strings compare in date order
-    const auto lastWriteDateStr = Time::ToDateString(lastWriteUTC);
-    if (lastWriteDateStr < Time::ToDateString(now))
+    const auto zone = GetConfigUnlocked().Line.TimestampZone;
+    const auto lastWriteDateStr = Time::ToDateString(lastWriteUTC, zone);
+    if (lastWriteDateStr < Time::ToDateString(now, zone))
         RotateLogFilesUnlocked("daily", lastWriteDateStr);
 }
 

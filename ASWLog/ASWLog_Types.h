@@ -35,9 +35,13 @@ limitations under the License.
 #include <filesystem>
 #include <optional>
 #include <source_location>
+#include <span>
 #include <string>
 #include <string_view>
 #include <system_error>
+#include <vector>
+//---------------------------------------------------------------------------
+#include "ASWLog_Fields.h"
 //---------------------------------------------------------------------------
 
 namespace ASWLog
@@ -330,6 +334,92 @@ enum class LineEnding
 
 //---------------------------------------------------------------------------
 
+// How a text logger writes the line breaks inside an entry's line, e.g. of a message holding an HTTP body (see
+// TASWLineConfig::Multiline)
+enum class MultilineMode
+{
+    Preserve, // As they are, so a multi-line message spans several lines of the log
+    Indent,   // Each "\n" or "\r\n" as the line ending followed by "    | ", so each line after the first is marked
+    Escape,   // Each CR and LF as the two characters \r and \n, so the entry stays on one line
+};
+
+[[nodiscard]] std::optional<MultilineMode> MultilineMode_FromString(std::string_view str) noexcept;
+
+[[nodiscard]] constexpr std::string_view MultilineMode_ToString(MultilineMode mode) noexcept
+{
+    switch (mode)
+    {
+        case MultilineMode::Preserve:
+            return "PRESERVE";
+
+        case MultilineMode::Indent:
+            return "INDENT";
+
+        case MultilineMode::Escape:
+            return "ESCAPE";
+    }
+
+    return "UNKNOWN";
+}
+
+//---------------------------------------------------------------------------
+
+// How many digits of the second a timestamp shows (see TASWLineConfig::TimestampPrecision). The digits past the system
+// clock's resolution are 0: with nanoseconds, the last two with MSVC and MinGW on Windows (100 ns), the last three with
+// libc++ (1 us, e.g. RAD Studio).
+enum class TimePrecision
+{
+    Milliseconds, // .mmm
+    Microseconds, // .uuuuuu
+    Nanoseconds,  // .nnnnnnnnn
+};
+
+[[nodiscard]] std::optional<TimePrecision> TimePrecision_FromString(std::string_view str) noexcept;
+
+[[nodiscard]] constexpr std::string_view TimePrecision_ToString(TimePrecision precision) noexcept
+{
+    switch (precision)
+    {
+        case TimePrecision::Milliseconds:
+            return "MILLISECONDS";
+
+        case TimePrecision::Microseconds:
+            return "MICROSECONDS";
+
+        case TimePrecision::Nanoseconds:
+            return "NANOSECONDS";
+    }
+
+    return "UNKNOWN";
+}
+
+//---------------------------------------------------------------------------
+
+// The clock a timestamp is shown in (see TASWLineConfig::TimestampZone)
+enum class TimeZone
+{
+    UTC,   // "Z" suffix, e.g. 2026-09-28T21:02:44.342Z
+    Local, // The local time zone, with its offset from UTC, e.g. 2026-09-28T16:02:44.342-05:00
+};
+
+[[nodiscard]] std::optional<TimeZone> TimeZone_FromString(std::string_view str) noexcept;
+
+[[nodiscard]] constexpr std::string_view TimeZone_ToString(TimeZone zone) noexcept
+{
+    switch (zone)
+    {
+        case TimeZone::UTC:
+            return "UTC";
+
+        case TimeZone::Local:
+            return "LOCAL";
+    }
+
+    return "UNKNOWN";
+}
+
+//---------------------------------------------------------------------------
+
 /////////////////////////////////////////////////////////////////////////////
 // TASWLogError struct
 //
@@ -359,21 +449,114 @@ struct TASWLogError
 // callback. The Log* methods fill in the level, message, location and flags. Timestamp, ProcessId and ThreadId stay
 // zero until a logger knows it will write the entry: TASWLogBase::Write() then fills in those still zero, on the
 // calling thread before taking any lock, so they record the moment and thread of the call. A record passed on (e.g.
-// by a multi-log to its loggers) keeps them.
+// by a multi-log to its loggers) keeps them. A category logger (see TASWCategoryLog) fills in Category and, if it has
+// a level of its own, CategoryLevel.
 //
-// Message and Location refer to the caller's data, so they are only valid during the call; a logger, formatter or
-// callback that keeps a record beyond it must copy them.
+// Message, Category, Location, Fields and Scope refer to the caller's data, so they are only valid during the call; a
+// logger, formatter or callback that keeps a record beyond it must copy them (the fields with ForEachField(), since the
+// scope is the thread's).
 /////////////////////////////////////////////////////////////////////////////
 struct TASWLogRecord
 {
+    // The small fields are together, so a logging call, which builds a record even when its logger filters the entry
+    // out, fills them in with few stores
     std::chrono::system_clock::time_point Timestamp; // UTC (a system_clock time point counts from the UTC epoch)
     Level LogLevel = Level::Info;
+    // The category's own level, which the logger receiving the entry uses in place of its minimum level; empty if the
+    // category has none, or there is no category (see TASWCategoryLog::SetMinimumLevel()). A multi-log uses it for its
+    // own check and empties it before passing the entry on, since its loggers apply their own minimum levels.
+    std::optional<Level> CategoryLevel;
+    // Written as is, without the line layout or a line ending (LogRaw(), LogForceRaw()), unless the formatter formats
+    // it (see IASWLogFormatter::FormatsRawEntries())
+    bool Raw = false;
+    bool Forced = false; // Written whatever the minimum level (LogForce(), LogForceRaw())
     std::string_view Message;
+    std::string_view Category; // The category's name, e.g. "Net" or "Net.Http"; empty if none (see TASWCategoryLog)
     std::source_location Location; // Where the entry was logged
     std::uint32_t ProcessId = 0; // The OS process id (see GetCurrentOSProcessId())
     std::uint32_t ThreadId = 0; // The OS id of the thread that logged the entry (see GetCurrentOSThreadId())
-    bool Raw = false; // Written as is, without the line layout or a line ending (LogRaw(), LogForceRaw())
-    bool Forced = false; // Written whatever the minimum level (LogForce(), LogForceRaw())
+    // The entry's own fields, from the logging call (e.g. LogInfo("Order placed", {{"orderId", 17}})), or null. A
+    // pointer to the list rather than the list itself, because every logging call builds a record, even when the entry
+    // is filtered out, and a 16-byte member measurably slowed that down.
+    const std::span<const TASWLogField>* Fields = nullptr;
+    // The innermost scope of the thread that logged the entry (see TASWLogScope), filled in by TASWLogBase::Write()
+    // like the Timestamp, if still null; null if the thread has none
+    const TASWLogScope* Scope = nullptr;
+
+    // Calls visit(field) for each of the entry's fields, its scopes' and its own, each key once, the innermost value
+    // winning (see ForEachLogField()). Allocates nothing.
+    template<typename TVisit>
+    void ForEachField(TVisit&& visit) const
+    {
+        ForEachLogField(Scope, GetOwnFields(), visit);
+    }
+
+    // The entry's own fields (see Fields), which may be empty
+    [[nodiscard]] std::span<const TASWLogField> GetOwnFields() const noexcept
+    {
+        return Fields != nullptr ? *Fields : std::span<const TASWLogField>();
+    }
+
+    // True if the entry may have fields (its own, or a scope; a scope may have none)
+    [[nodiscard]] bool HasFields() const noexcept
+    {
+        return (Fields != nullptr && !Fields->empty()) || Scope != nullptr;
+    }
+};
+
+//---------------------------------------------------------------------------
+
+/////////////////////////////////////////////////////////////////////////////
+// TASWPendingEntry
+//
+// An entry about to be written, as TASWLogConfig::OnBeforeWrite gets it: the hook reads the record and may change its
+// message and fields before the logger writes it. The entry owns what the hook sets, so the hook's own strings may be
+// temporaries. Its level, time, ids, category, location and flags can't be changed (the logger has already checked
+// the level). Only valid during the hook's call.
+/////////////////////////////////////////////////////////////////////////////
+class TASWPendingEntry
+{
+private:
+    TASWLogRecord m_Record; // Its Message and Fields refer to the copies below once the hook has set them
+    std::string m_Message;
+    Detail::TOwnedFields m_Fields; // After a field change: all the entry's fields, each key once
+    std::span<const TASWLogField> m_FieldsView; // What m_Record.Fields points to after a field change
+    std::vector<Detail::TOwnedFields> m_ReplacedFields; // Kept, so a ForEachField() under way can finish
+
+private:
+    void ReplaceFields(std::span<const TASWLogField> fields);
+
+public:
+    explicit TASWPendingEntry(const TASWLogRecord& record) noexcept;
+
+    TASWPendingEntry(const TASWPendingEntry&) = delete;
+    TASWPendingEntry& operator=(const TASWPendingEntry&) = delete;
+
+    // The value of the entry's field 'key' (its own, or its scopes'; see TASWLogRecord::ForEachField()), or null if it
+    // has none. Valid until the hook changes the fields or returns.
+    [[nodiscard]] const TASWLogValue* FindField(std::string_view key) const noexcept;
+
+    // Calls visit(field) for each of the entry's fields, each key once (see TASWLogRecord::ForEachField()). The hook
+    // may change the fields from inside visit; the visit then goes on over the fields as they were when it started.
+    template<typename TVisit>
+    void ForEachField(TVisit&& visit) const
+    {
+        m_Record.ForEachField(visit);
+    }
+
+    // The entry as it will be written, with the hook's changes so far
+    [[nodiscard]] const TASWLogRecord& GetRecord() const noexcept;
+
+    // Removes the field 'key' (its own, or a scope's, for this entry only), if it has one. Throws std::bad_alloc if
+    // the fields can't be copied; they are then unchanged.
+    void RemoveField(std::string_view key);
+
+    // Sets the field 'key' to 'value' (copied, text included): replaces its value where it is, or adds it after the
+    // others. Throws like RemoveField().
+    void SetField(std::string_view key, const TASWLogValue& value);
+
+    // Replaces the entry's message, e.g. with a redacted copy
+    void SetMessage(std::string message) noexcept;
 };
 
 //---------------------------------------------------------------------------

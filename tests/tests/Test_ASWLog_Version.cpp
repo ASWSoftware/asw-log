@@ -24,7 +24,6 @@ limitations under the License.
 // Module header
 #include "Test_ASWLog_Version.h"
 //---------------------------------------------------------------------------
-#include <cstddef>
 #include <format>
 #include <string>
 #include <string_view>
@@ -47,31 +46,6 @@ static_assert(std::string_view(ASWLog::Version) == ASWLOG_VERSION_STRING);
 
 namespace ASWUnitTests
 {
-
-namespace
-{
-
-// A SemVer pre-release identifier: not empty, only [0-9A-Za-z-], and no leading zero if it is all digits
-bool IsValidPreReleaseIdentifier(std::string_view identifier)
-{
-    if (identifier.empty())
-        return false;
-
-    bool isNumeric = true;
-    for (const char character : identifier)
-    {
-        const bool isDigit = character >= '0' && character <= '9';
-        const bool isLetter = (character >= 'A' && character <= 'Z') || (character >= 'a' && character <= 'z');
-        if (!isDigit && !isLetter && character != '-')
-            return false;
-
-        isNumeric = isNumeric && isDigit;
-    }
-
-    return !isNumeric || identifier.size() == 1 || identifier.front() != '0';
-}
-
-} // namespace
 
 //---------------------------------------------------------------------------
 TTest_ASWLog_Version::TTest_ASWLog_Version()
@@ -122,22 +96,16 @@ void TTest_ASWLog_Version::Test_GetVersionStr_ReturnsVersion()
 //---------------------------------------------------------------------------
 void TTest_ASWLog_Version::Test_PreRelease_IsValidSemVer()
 {
-    // Arrange: a pre-release is empty (a release) or dot-separated identifiers, e.g. "dev.1"
-    const std::string_view preRelease = ASWLog::VersionPreRelease;
+    // Arrange: a pre-release is empty (a release) or dot-separated identifiers, e.g. "dev.1". An identifier is
+    // [0-9A-Za-z-], not empty, and has no leading zero if it is all digits (SemVer 2.0.0).
+    const std::string identifier = "(?:0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*)";
 
     // Act
-    bool isValid = true;
-    for (std::size_t start = 0; !preRelease.empty() && start <= preRelease.size();)
-    {
-        const auto dot = preRelease.find('.', start);
-        const auto end = dot == std::string_view::npos ? preRelease.size() : dot;
-        isValid = isValid && IsValidPreReleaseIdentifier(preRelease.substr(start, end - start));
-        start = end + 1;
-    }
+    const std::string preRelease = ASWLog::VersionPreRelease;
 
     // Assert
-    CheckTrue(isValid,
-        "ASWLOG_VERSION_PRERELEASE should be empty or SemVer pre-release identifiers: " + std::string(preRelease));
+    CheckMatches(preRelease, "(?:" + identifier + "(?:\\." + identifier + ")*)?",
+        "ASWLOG_VERSION_PRERELEASE should be empty or SemVer pre-release identifiers");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_Version::Test_VersionString_MatchesParts()

@@ -1,5 +1,5 @@
 /* **************************************************************************
-Test_ASWLog_Types.h
+Test_ASWLog_CategoryLog.h
 Author: Anthony S. West - ASW Software
 
 Copyright 2026 ASW Software
@@ -18,8 +18,10 @@ limitations under the License.
 
 ************************************************************************** */
 
-#ifndef Test_ASWLog_TypesH
-#define Test_ASWLog_TypesH
+#pragma once
+
+#ifndef Test_ASWLog_CategoryLogH
+#define Test_ASWLog_CategoryLogH
 //---------------------------------------------------------------------------
 #include "ASWUnitTests_TestBase.h"
 //---------------------------------------------------------------------------
@@ -28,41 +30,32 @@ namespace ASWUnitTests
 {
 
 ///////////////////////////////////////////////////////////////////////////
-// TTest_ASWLog_Types
+// TTest_ASWLog_CategoryLog
 ///////////////////////////////////////////////////////////////////////////
-class TTest_ASWLog_Types : public TTestGroupBase
+class TTest_ASWLog_CategoryLog : public TTestGroupBase
 {
 private:
     typedef TTestGroupBase inherited;
 
 private: // Test methods
-    void Test_AsyncOverflowPolicy_FromString();
-    void Test_AsyncOverflowPolicy_ToString();
-    void Test_ColorMode_FromString();
-    void Test_ColorMode_ToString();
-    void Test_ErrorKind_ToString();
-    void Test_FlushMode_FromString();
-    void Test_FlushMode_ToString();
-    void Test_Level_FromString();
-    void Test_Level_ToString();
-    void Test_LineEnding_FromString();
-    void Test_LineEnding_ToString();
-    void Test_MultilineMode_FromString();
-    void Test_MultilineMode_ToString();
-    void Test_PendingEntry_ChangingFieldsWhileVisitingIsSafe();
-    void Test_PendingEntry_FindsFieldsOfTheEntryAndItsScopes();
-    void Test_PendingEntry_RemoveFieldRemovesItForThisEntry();
-    void Test_PendingEntry_SetFieldReplacesOrAddsACopy();
-    void Test_PendingEntry_SetMessageOwnsTheText();
-    void Test_LogError_ToString();
-    void Test_TimePrecision_FromString();
-    void Test_TimePrecision_ToString();
-    void Test_TimeZone_FromString();
-    void Test_TimeZone_ToString();
+    void Test_Async_KeepsItsOwnCopyOfTheName();
+    void Test_Backtrace_KeepsEntriesBelowTheCategoryLevel();
+    void Test_Backtrace_KeepsItsOwnCopyOfTheName();
+    void Test_FileLog_WritesTheCategoryAfterTheLevel();
+    void Test_GetMinimumLevel_FollowsTheWrappedLoggerUntilSet();
+    void Test_Lifecycle_LeavesTheWrappedLoggerAlone();
+    void Test_MultiLog_CategoryLevelReplacesOnlyTheCompositeLevel();
+    void Test_Nesting_JoinsNamesAndInheritsLevels();
+    void Test_SetEnabled_SilencesOnlyTheCategory();
+    void Test_SetMinimumLevel_OffSilencesAllButForcedEntries();
+    void Test_SetMinimumLevel_ReplacesTheWrappedLoggersLevel();
+    void Test_ShouldLog_MatchesWhatIsWritten();
+    void Test_Write_KeepsACategoryAlreadySet();
+    void Test_Write_StampsTheNameAndOwnLevel();
 
 public:
-    TTest_ASWLog_Types();
-    ~TTest_ASWLog_Types() override;
+    TTest_ASWLog_CategoryLog();
+    ~TTest_ASWLog_CategoryLog() override;
 
     void SetUp_Group() override;
     void SetUp_Test(ITestCase& testCase) override;
@@ -73,4 +66,4 @@ public:
 } // ASWUnitTests
 
 //---------------------------------------------------------------------------
-#endif // #ifndef Test_ASWLog_TypesH
+#endif // #ifndef Test_ASWLog_CategoryLogH

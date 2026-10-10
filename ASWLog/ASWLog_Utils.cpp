@@ -29,10 +29,12 @@ limitations under the License.
 #include <cerrno>
 #include <charconv>
 #include <chrono>
+#include <cstring>
 #include <ctime>
 #include <filesystem>
 #include <format>
 #include <fstream>
+#include <utility>
 #include <vector>
 
 #if defined(_WIN32)
@@ -616,104 +618,568 @@ std::error_code RenameWithoutReplacing(const std::filesystem::path& from, const 
 
 //---------------------------------------------------------------------------
 
+namespace Detail
+{
+
+namespace
+{
+
+// The line breaks MultilineMode::Escape writes
+constexpr std::string_view EscapedCR = "\\r";
+constexpr std::string_view EscapedLF = "\\n";
+
+// The line breaks MultilineMode::Indent writes: the line ending and the next line's marker, whose space is left out
+// when that line is empty
+constexpr std::string_view IndentedCRLF = "\r\n    | ";
+constexpr std::string_view IndentedLF = "\n    | ";
+
+// U+FFFD, the replacement character, in UTF-8
+constexpr std::string_view ReplacementCharacter = "\xEF\xBF\xBD";
+
+//---------------------------------------------------------------------------
+
+bool HasCROrLF(const char* data) noexcept;
+bool IsPlainJSONCharacter(unsigned char character) noexcept;
+bool IsPlainJSONWord(const char* data) noexcept;
+std::size_t MeasureUTF8Sequence(std::string_view text, std::size_t index, std::size_t& invalidLength) noexcept;
+
+//---------------------------------------------------------------------------
+
+/*
+  HasCROrLF
+
+  True if any of the 8 characters at 'data' is a CR or a LF, tested together in a 64-bit word (see IsPlainJSONWord())
+*/
+bool HasCROrLF(const char* data) noexcept
+{
+    constexpr std::uint64_t Ones = 0x0101010101010101;
+    constexpr std::uint64_t HighBits = 0x8080808080808080;
+
+    std::uint64_t word;
+    std::memcpy(&word, data, sizeof(word));
+
+    // The usual test for a zero byte, on the word XORed with each of them
+    const std::uint64_t returns = word ^ (Ones * '\r');
+    const std::uint64_t lineFeeds = word ^ (Ones * '\n');
+    const std::uint64_t found = ((returns - Ones) & ~returns) | ((lineFeeds - Ones) & ~lineFeeds);
+
+    return (found & HighBits) != 0;
+}
+
+/*
+  IsPlainJSONCharacter
+
+  True for an ASCII character a JSON string holds as it is: not a control character, '"' or '\'
+*/
+bool IsPlainJSONCharacter(unsigned char character) noexcept
+{
+    return character >= 0x20 && character < 0x80 && character != '"' && character != '\\';
+}
+
+/*
+  IsPlainJSONWord
+
+  True if all 8 characters at 'data' are plain (see IsPlainJSONCharacter()), tested together in a 64-bit word, which
+  is several times faster than one at a time for the usual messages
+*/
+bool IsPlainJSONWord(const char* data) noexcept
+{
+    constexpr std::uint64_t Ones = 0x0101010101010101;
+    constexpr std::uint64_t HighBits = 0x8080808080808080;
+
+    std::uint64_t word;
+    std::memcpy(&word, data, sizeof(word));
+
+    // A byte's high bit ends up set if it is 0x80 or above, or (for the bytes below 0x80) below 0x20, or equal to '"'
+    // or '\' (the usual test for a zero byte, on the word XORed with them); the order of the bytes doesn't matter
+    const std::uint64_t quotes = word ^ (Ones * '"');
+    const std::uint64_t backslashes = word ^ (Ones * '\\');
+    const std::uint64_t special = word | ((word - Ones * 0x20) & ~word) | ((quotes - Ones) & ~quotes) |
+        ((backslashes - Ones) & ~backslashes);
+
+    return (special & HighBits) == 0;
+}
+
+/*
+  MeasureUTF8Sequence
+
+  The length of the UTF-8 sequence of a character above U+007F that starts at 'index', if it is valid (see the Unicode
+  standard's table of well-formed byte sequences); otherwise 0, and 'invalidLength' gets the length of its longest start
+  that could begin a valid sequence, at least 1, which U+FFFD replaces
+*/
+std::size_t MeasureUTF8Sequence(std::string_view text, std::size_t index, std::size_t& invalidLength) noexcept
+{
+    const auto lead = static_cast<unsigned char>(text[index]);
+    std::size_t length = 0;
+    unsigned char low = 0x80; // The range of the second byte, which some lead bytes narrow
+    unsigned char high = 0xBF;
+
+    if (lead >= 0xC2 && lead <= 0xDF)
+    {
+        length = 2;
+    }
+    else if (lead >= 0xE0 && lead <= 0xEF)
+    {
+        length = 3;
+        low = lead == 0xE0 ? 0xA0 : 0x80; // No overlong forms
+        high = lead == 0xED ? 0x9F : 0xBF; // No surrogates
+    }
+    else if (lead >= 0xF0 && lead <= 0xF4)
+    {
+        length = 4;
+        low = lead == 0xF0 ? 0x90 : 0x80; // No overlong forms
+        high = lead == 0xF4 ? 0x8F : 0xBF; // Nothing above U+10FFFF
+    }
+    else
+    {
+        invalidLength = 1;
+        return 0;
+    }
+
+    std::size_t count = 1;
+
+    while (count < length && index + count < text.size())
+    {
+        const auto byte = static_cast<unsigned char>(text[index + count]);
+        if (byte < low || byte > high)
+            break;
+
+        low = 0x80;
+        high = 0xBF;
+        ++count;
+    }
+
+    if (count == length)
+        return length;
+
+    invalidLength = count;
+
+    return 0;
+}
+
+} // namespace
+
+//---------------------------------------------------------------------------
+void ApplyMultilineMode(std::string& line, MultilineMode mode, LineEnding ending)
+{
+    std::size_t index = 0;
+    const auto first = NextMultilinePiece(line, index, mode, ending);
+
+    if (!first.IsLineBreak && index >= line.size())
+        return;
+
+    std::string rewritten;
+    rewritten.reserve(line.size() + 32);
+    rewritten.append(first.Text);
+
+    while (index < line.size())
+        rewritten.append(NextMultilinePiece(line, index, mode, ending).Text);
+
+    line = std::move(rewritten);
+}
+
+//---------------------------------------------------------------------------
+TJSONPiece NextJSONPiece(std::string_view text, std::size_t& index, char (& escape)[6]) noexcept
+{
+    const std::size_t start = index;
+    std::size_t invalidLength = 0;
+
+    while (index < text.size())
+    {
+        if (text.size() - index >= 8 && IsPlainJSONWord(text.data() + index))
+        {
+            index += 8;
+            continue;
+        }
+
+        const auto character = static_cast<unsigned char>(text[index]);
+        if (IsPlainJSONCharacter(character))
+        {
+            ++index;
+            continue;
+        }
+
+        if (character < 0x80)
+            break;
+
+        const auto length = MeasureUTF8Sequence(text, index, invalidLength);
+        if (length == 0)
+            break;
+
+        index += length;
+    }
+
+    if (index > start)
+        return TJSONPiece{ text.substr(start, index - start), false };
+
+    if (index >= text.size())
+        return TJSONPiece{};
+
+    if (invalidLength > 0)
+    {
+        index += invalidLength;
+        return TJSONPiece{ ReplacementCharacter, true };
+    }
+
+    const char character = text[index++];
+    escape[0] = '\\';
+
+    switch (character)
+    {
+        case '"':
+        case '\\':
+            escape[1] = character;
+            break;
+
+        case '\b':
+            escape[1] = 'b';
+            break;
+
+        case '\f':
+            escape[1] = 'f';
+            break;
+
+        case '\n':
+            escape[1] = 'n';
+            break;
+
+        case '\r':
+            escape[1] = 'r';
+            break;
+
+        case '\t':
+            escape[1] = 't';
+            break;
+
+        default:
+        {
+            constexpr std::string_view HexDigits = "0123456789abcdef";
+            const auto code = static_cast<unsigned char>(character);
+            escape[1] = 'u';
+            escape[2] = '0';
+            escape[3] = '0';
+            escape[4] = HexDigits[code >> 4];
+            escape[5] = HexDigits[code & 0xF];
+            return TJSONPiece{ std::string_view(escape, 6), true };
+        }
+    }
+
+    return TJSONPiece{ std::string_view(escape, 2), true };
+}
+
+//---------------------------------------------------------------------------
+TMultilinePiece NextMultilinePiece(std::string_view text, std::size_t& index, MultilineMode mode,
+    LineEnding ending) noexcept
+{
+    const std::size_t start = index;
+
+    if (mode == MultilineMode::Preserve)
+    {
+        index = text.size();
+        return TMultilinePiece{ text.substr(start), false };
+    }
+
+    // Indent leaves a lone CR as it is
+    const auto isLineBreakAt = [text, mode](std::size_t position) {
+            return text[position] == '\n' || (text[position] == '\r' && (mode == MultilineMode::Escape ||
+                (position + 1 < text.size() && text[position + 1] == '\n')));
+        };
+
+    while (index < text.size())
+    {
+        if (text.size() - index >= 8 && !HasCROrLF(text.data() + index))
+            index += 8;
+        else if (isLineBreakAt(index))
+            break;
+        else
+            ++index;
+    }
+
+    if (index > start)
+        return TMultilinePiece{ text.substr(start, index - start), false };
+
+    if (index >= text.size())
+        return TMultilinePiece{};
+
+    if (mode == MultilineMode::Escape)
+        return TMultilinePiece{ text[index++] == '\r' ? EscapedCR : EscapedLF, true };
+
+    index += text[index] == '\r' ? 2 : 1;
+    const std::string_view indented = ending == LineEnding::CRLF ? IndentedCRLF : IndentedLF;
+    const bool isNextLineEmpty = index >= text.size() || isLineBreakAt(index);
+
+    return TMultilinePiece{ isNextLineEmpty ? indented.substr(0, indented.size() - 1) : indented, true };
+}
+
+} // namespace Detail
+
+//---------------------------------------------------------------------------
+
+namespace JSON
+{
+
+//---------------------------------------------------------------------------
+void AppendString(std::string& output, std::string_view text)
+{
+    char escape[6];
+    std::size_t index = 0;
+
+    output += '"';
+
+    while (index < text.size())
+        output.append(Detail::NextJSONPiece(text, index, escape).Text);
+
+    output += '"';
+}
+
+} // namespace JSON
+
+//---------------------------------------------------------------------------
+
 namespace Time
 {
+
+namespace
+{
+
+// The calendar fields WriteISO8601() writes
+struct TDateAndTime
+{
+    int Year = 0;
+    std::uint32_t Month = 0;
+    std::uint32_t Day = 0;
+    std::uint32_t Hour = 0;
+    std::uint32_t Minute = 0;
+    std::uint32_t Second = 0;
+    std::uint32_t Nanosecond = 0;
+};
+
+//---------------------------------------------------------------------------
+
+int GetOffsetMinutes(const std::tm& localTime, std::chrono::sys_seconds time) noexcept;
+bool ToLocalCalendarTime(std::time_t timeValue, std::tm& localTime) noexcept;
+bool ToLocalDateAndTime(std::chrono::system_clock::time_point timePoint, TDateAndTime& dateAndTime, int& offsetMinutes) noexcept;
+TDateAndTime ToUTCDateAndTime(std::chrono::system_clock::time_point timePoint) noexcept;
+char* WriteDateAndTime(char* out, char* end, const TDateAndTime& dateAndTime) noexcept;
+char* WriteDigits(char* out, std::uint32_t value, int digitCount) noexcept;
+char* WriteFraction(char* out, std::uint32_t nanoseconds, TimePrecision precision) noexcept;
+
+//---------------------------------------------------------------------------
+
+/*
+  GetOffsetMinutes
+
+  How many minutes 'localTime', the local calendar fields of 'time', is ahead of UTC: the local date and time read as
+  if they were UTC, minus the actual time. Not mktime(), which would read UTC fields as local time and apply this
+  zone's daylight saving rules to them.
+*/
+int GetOffsetMinutes(const std::tm& localTime, std::chrono::sys_seconds time) noexcept
+{
+    const std::chrono::sys_days localDate = std::chrono::year(localTime.tm_year + 1900) / (localTime.tm_mon + 1) / localTime.tm_mday;
+    const auto localAsUTC = localDate + std::chrono::hours(localTime.tm_hour) + std::chrono::minutes(localTime.tm_min) +
+        std::chrono::seconds(localTime.tm_sec);
+
+    return static_cast<int>(std::chrono::duration_cast<std::chrono::minutes>(localAsUTC - time).count());
+}
+
+/*
+  ToLocalCalendarTime
+
+  Converts 'timeValue' to the local time zone's calendar fields. Returns false if it can't (e.g. a time before 1970 on
+  Windows).
+*/
+bool ToLocalCalendarTime(std::time_t timeValue, std::tm& localTime) noexcept
+{
+#if defined(_WIN32)
+    return localtime_s(&localTime, &timeValue) == 0;
+#else
+    return localtime_r(&timeValue, &localTime) != nullptr;
+#endif
+}
+
+/*
+  ToLocalDateAndTime
+
+  The calendar fields of 'timePoint' in the local time zone, and the zone's offset from UTC then. Returns false if the
+  local time can't be determined (see ToLocalCalendarTime()).
+*/
+bool ToLocalDateAndTime(std::chrono::system_clock::time_point timePoint, TDateAndTime& dateAndTime, int& offsetMinutes) noexcept
+{
+    // Floored, so a time before 1970 falls on the second it is in
+    const auto seconds = std::chrono::floor<std::chrono::seconds>(timePoint);
+    std::tm localTime{};
+
+    if (!ToLocalCalendarTime(std::chrono::system_clock::to_time_t(seconds), localTime))
+        return false;
+
+    dateAndTime.Year = localTime.tm_year + 1900;
+    dateAndTime.Month = static_cast<std::uint32_t>(localTime.tm_mon + 1);
+    dateAndTime.Day = static_cast<std::uint32_t>(localTime.tm_mday);
+    dateAndTime.Hour = static_cast<std::uint32_t>(localTime.tm_hour);
+    dateAndTime.Minute = static_cast<std::uint32_t>(localTime.tm_min);
+    dateAndTime.Second = static_cast<std::uint32_t>(localTime.tm_sec);
+    dateAndTime.Nanosecond = static_cast<std::uint32_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(timePoint - seconds).count());
+    offsetMinutes = GetOffsetMinutes(localTime, seconds);
+
+    return true;
+}
+
+/*
+  ToUTCDateAndTime
+
+  The calendar fields of 'timePoint' in UTC. Calendar arithmetic only.
+*/
+TDateAndTime ToUTCDateAndTime(std::chrono::system_clock::time_point timePoint) noexcept
+{
+    // Floored, so a time before 1970 falls on the day it is in; the time of day is then never negative
+    const auto day = std::chrono::floor<std::chrono::days>(timePoint);
+    const std::chrono::year_month_day date{ day };
+    const auto timeOfDay = timePoint - day;
+    const auto seconds = std::chrono::duration_cast<std::chrono::seconds>(timeOfDay);
+    const auto secondOfDay = static_cast<std::uint32_t>(seconds.count());
+
+    TDateAndTime dateAndTime;
+    dateAndTime.Year = static_cast<int>(date.year());
+    dateAndTime.Month = static_cast<unsigned>(date.month());
+    dateAndTime.Day = static_cast<unsigned>(date.day());
+    dateAndTime.Hour = secondOfDay / 3600;
+    dateAndTime.Minute = secondOfDay / 60 % 60;
+    dateAndTime.Second = secondOfDay % 60;
+    dateAndTime.Nanosecond = static_cast<std::uint32_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(timeOfDay - seconds).count());
+
+    return dateAndTime;
+}
+
+/*
+  WriteDateAndTime
+
+  Writes "YYYY-MM-DDTHH:mm:ss" (a 4-digit year for the years 0 to 9999, the year in full outside them) and returns the
+  end of what it wrote
+*/
+char* WriteDateAndTime(char* out, char* end, const TDateAndTime& dateAndTime) noexcept
+{
+    if (dateAndTime.Year >= 0 && dateAndTime.Year <= 9999)
+        out = WriteDigits(out, static_cast<std::uint32_t>(dateAndTime.Year), 4);
+    else
+        out = std::to_chars(out, end, dateAndTime.Year).ptr;
+
+    *out++ = '-';
+    out = WriteDigits(out, dateAndTime.Month, 2);
+    *out++ = '-';
+    out = WriteDigits(out, dateAndTime.Day, 2);
+    *out++ = 'T';
+    out = WriteDigits(out, dateAndTime.Hour, 2);
+    *out++ = ':';
+    out = WriteDigits(out, dateAndTime.Minute, 2);
+    *out++ = ':';
+    return WriteDigits(out, dateAndTime.Second, 2);
+}
+
+/*
+  WriteDigits
+
+  Writes the lowest 'digitCount' decimal digits of 'value', with leading zeros, and returns the end of what it wrote
+*/
+char* WriteDigits(char* out, std::uint32_t value, int digitCount) noexcept
+{
+    for (int index = digitCount - 1; index >= 0; --index)
+    {
+        out[index] = static_cast<char>('0' + value % 10);
+        value /= 10;
+    }
+
+    return out + digitCount;
+}
+
+/*
+  WriteFraction
+
+  Writes '.' and the fraction of the second, 'nanoseconds' (0 to 999999999), with the digits of 'precision', cut off
+  rather than rounded, and returns the end of what it wrote
+*/
+char* WriteFraction(char* out, std::uint32_t nanoseconds, TimePrecision precision) noexcept
+{
+    *out++ = '.';
+
+    switch (precision)
+    {
+        case TimePrecision::Microseconds:
+            return WriteDigits(out, nanoseconds / 1000, 6);
+
+        case TimePrecision::Nanoseconds:
+            return WriteDigits(out, nanoseconds, 9);
+
+        case TimePrecision::Milliseconds:
+            break;
+    }
+
+    return WriteDigits(out, nanoseconds / 1000000, 3);
+}
+
+} // namespace
 
 //---------------------------------------------------------------------------
 int GetUTCOffsetMinutes(std::chrono::system_clock::time_point timePoint)
 {
-    const auto timeValue = std::chrono::system_clock::to_time_t(timePoint);
+    const auto seconds = std::chrono::floor<std::chrono::seconds>(timePoint);
     std::tm localTime{};
-#if defined(_WIN32)
-    if (localtime_s(&localTime, &timeValue) != 0)
-        return 0;
-#else
-    if (localtime_r(&timeValue, &localTime) == nullptr)
-        return 0;
-#endif
 
-    // The local date and time read as if they were UTC, minus the actual time. Not mktime(), which would read UTC
-    // fields as local time and apply this zone's daylight saving rules to them.
-    const std::chrono::sys_days localDate = std::chrono::year(localTime.tm_year + 1900) / (localTime.tm_mon + 1) / localTime.tm_mday;
-    const auto localAsUTC = localDate + std::chrono::hours(localTime.tm_hour) + std::chrono::minutes(localTime.tm_min) +
-        std::chrono::seconds(localTime.tm_sec);
-    const auto actualTime = std::chrono::time_point_cast<std::chrono::seconds>(std::chrono::system_clock::from_time_t(timeValue));
+    if (!ToLocalCalendarTime(std::chrono::system_clock::to_time_t(seconds), localTime))
+        return 0;
 
-    return static_cast<int>(std::chrono::duration_cast<std::chrono::minutes>(localAsUTC - actualTime).count());
+    return GetOffsetMinutes(localTime, seconds);
 }
 
 //---------------------------------------------------------------------------
-std::string ToISO8601String(std::chrono::system_clock::time_point timePoint)
+std::string ToISO8601String(std::chrono::system_clock::time_point timePoint, TimeZone zone, TimePrecision precision)
 {
-    auto timeTimeT = std::chrono::system_clock::to_time_t(timePoint);
-    auto durationSinceEpoch = timePoint.time_since_epoch();
-    auto secondsSinceEpoch = std::chrono::duration_cast<std::chrono::seconds>(durationSinceEpoch);
-    auto millisecondsFraction = std::chrono::duration_cast<std::chrono::milliseconds>(durationSinceEpoch - secondsSinceEpoch).count();
-
-    std::tm utcTime{};
-#if defined(_WIN32)
-    gmtime_s(&utcTime, &timeTimeT);
-#else
-    gmtime_r(&timeTimeT, &utcTime);
-#endif
-
-    // Use ISO 8601 format with T separator and Z suffix
-    return std::format("{:04}-{:02}-{:02}T{:02}:{:02}:{:02}.{:03}Z",
-        utcTime.tm_year + 1900,
-        utcTime.tm_mon + 1,
-        utcTime.tm_mday,
-        utcTime.tm_hour,
-        utcTime.tm_min,
-        utcTime.tm_sec,
-        millisecondsFraction);
+    char buffer[ISO8601BufferSize];
+    return std::string(buffer, WriteISO8601(buffer, timePoint, zone, precision));
 }
 
 //---------------------------------------------------------------------------
-std::string ToDateString(std::chrono::system_clock::time_point timePoint)
+std::string ToDateString(std::chrono::system_clock::time_point timePoint, TimeZone zone)
 {
-    auto timeTimeT = std::chrono::system_clock::to_time_t(timePoint);
-    std::tm utcTime{};
-#if defined(_WIN32)
-    gmtime_s(&utcTime, &timeTimeT);
-#else
-    gmtime_r(&timeTimeT, &utcTime);
-#endif
-
-    return std::format("{:04}-{:02}-{:02}",
-        utcTime.tm_year + 1900,
-        utcTime.tm_mon + 1,
-        utcTime.tm_mday);
+    char buffer[ISO8601BufferSize];
+    const std::string_view text(buffer, WriteISO8601(buffer, timePoint, zone));
+    return std::string(text.substr(0, text.find('T')));
 }
 
 //---------------------------------------------------------------------------
 std::string ToLocalISO8601String(std::chrono::system_clock::time_point timePoint)
 {
-    const auto timeValue = std::chrono::system_clock::to_time_t(timePoint);
-    std::tm localTime{};
-#if defined(_WIN32)
-    localtime_s(&localTime, &timeValue);
-#else
-    localtime_r(&timeValue, &localTime);
-#endif
+    return ToISO8601String(timePoint, TimeZone::Local);
+}
 
-    const auto durationSinceEpoch = timePoint.time_since_epoch();
-    const auto secondsSinceEpoch = std::chrono::duration_cast<std::chrono::seconds>(durationSinceEpoch);
-    const auto millisecondsFraction = std::chrono::duration_cast<std::chrono::milliseconds>(durationSinceEpoch - secondsSinceEpoch).count();
+//---------------------------------------------------------------------------
+std::size_t WriteISO8601(char (& buffer)[ISO8601BufferSize], std::chrono::system_clock::time_point timePoint, TimeZone zone,
+    TimePrecision precision) noexcept
+{
+    // Each helper is called once, so the compiler can inline the UTC path into one function
+    TDateAndTime dateAndTime;
+    int offsetMinutes = 0;
+    const bool isLocal = zone == TimeZone::Local && ToLocalDateAndTime(timePoint, dateAndTime, offsetMinutes);
 
-    const auto offsetMinutes = GetUTCOffsetMinutes(timePoint);
-    const auto absoluteOffsetMinutes = offsetMinutes < 0 ? -offsetMinutes : offsetMinutes;
+    if (!isLocal)
+        dateAndTime = ToUTCDateAndTime(timePoint);
 
-    return std::format("{:04}-{:02}-{:02}T{:02}:{:02}:{:02}.{:03}{}{:02}:{:02}",
-        localTime.tm_year + 1900,
-        localTime.tm_mon + 1,
-        localTime.tm_mday,
-        localTime.tm_hour,
-        localTime.tm_min,
-        localTime.tm_sec,
-        millisecondsFraction,
-        offsetMinutes < 0 ? '-' : '+',
-        absoluteOffsetMinutes / 60,
-        absoluteOffsetMinutes % 60);
+    char* out = WriteDateAndTime(buffer, buffer + ISO8601BufferSize, dateAndTime);
+    out = WriteFraction(out, dateAndTime.Nanosecond, precision);
+
+    if (isLocal)
+    {
+        const auto absoluteOffsetMinutes = static_cast<std::uint32_t>(offsetMinutes < 0 ? -offsetMinutes : offsetMinutes);
+        *out++ = offsetMinutes < 0 ? '-' : '+';
+        out = WriteDigits(out, absoluteOffsetMinutes / 60, 2);
+        *out++ = ':';
+        out = WriteDigits(out, absoluteOffsetMinutes % 60, 2);
+    }
+    else
+    {
+        *out++ = 'Z';
+    }
+
+    return static_cast<std::size_t>(out - buffer);
 }
 
 } // namespace Time

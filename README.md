@@ -7,6 +7,11 @@ ASWLog is a thread-safe light-weight C++ logging tool for Windows and Linux proj
 - Portable C++20 logger for Windows and Linux, with CMake and RAD Studio examples.
 - Thread-safe file logging with singleton or independent logger instances.
 - Configurable log levels, metadata, line endings, flushing, file paths, and rotation.
+- ISO 8601 timestamps in UTC (the default) or local time with its offset, to the millisecond, microsecond or
+  nanosecond (`Line.TimestampZone`, `Line.TimestampPrecision`); daily rolling and backup names follow the same clock.
+- Categories (`ASWLog::TASWCategoryLog`, in `ASWLog_CategoryLog.h`): a named logger for one part of an application,
+  e.g. `Net`, that wraps any logger and marks its entries `[Net]`. Give one a level of its own to see that part's
+  Debug entries while the rest of the log stays at Info.
 - Formatted, raw, forced, and force-raw logging APIs with source-location support. Format strings are checked
   against their arguments at compile time; wrap one built at run time in `ASWLog::RuntimeFormat()`.
 - Runtime `Open()`, `Close()`, `Flush()` and log rotation controls, and `Reconfigure()` to change settings safely
@@ -32,6 +37,17 @@ ASWLog is a thread-safe light-weight C++ logging tool for Windows and Linux proj
 - Backup cleanup after each rotation, by age, count and total size, plus wildcard-based cleanup of files older than a
   specified age (`TASWFileLog::DeleteOldLogs()`). An event for each new backup (`File.OnBackupCreated`) lets the
   application compress, upload or move it.
+- Your own line layout as a pattern, e.g. `"{time} {level:5} {[category] }{message}"` (`ASWLog::TASWPatternFormatter`,
+  assigned to `TASWLogConfig::Line.Formatter`).
+- JSON Lines output for log shippers and tools such as `jq`: one escaped JSON object per entry
+  (`ASWLog::TASWJSONFormatter`, assigned to `TASWLogConfig::Line.Formatter`).
+- Multi-line messages (e.g. an HTTP body) written as they are, or, with `TASWLogConfig::Line.Multiline`, each line after
+  the first marked with `    | ` (`MultilineMode::Indent`) or the line breaks escaped as `\r` and `\n`
+  (`MultilineMode::Escape`), so that every entry is recognizable as one.
+- A hook to drop or change entries before they are written (`TASWLogConfig::OnBeforeWrite`), e.g. to redact secrets
+  or drop noisy entries by content, category or field.
+- Structured fields per entry, e.g. `logger.LogInfo("Order placed", {{"orderId", 17}})`, and scoped context that every
+  entry on the thread carries, e.g. `ASWLog::TASWLogScope scope{{"requestId", id}};` (`ASWLog_Fields.h`).
 - Extensible: assign your own formatter (`IASWLogFormatter`) to `TASWLogConfig::Line.Formatter` for your own line layout,
   or derive a new text logger from `TASWTextLogBase` and implement only its output.
 

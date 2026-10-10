@@ -25,9 +25,13 @@ limitations under the License.
 #include "Test_ASWLog_Types.h"
 //---------------------------------------------------------------------------
 #include <cstddef>
+#include <format>
 #include <optional>
+#include <span>
 #include <string>
+#include <string_view>
 #include <system_error>
+#include <vector>
 //---------------------------------------------------------------------------
 #include "ASWUnitTests_Registry.h"
 //---------------------------------------------------------------------------
@@ -36,6 +40,25 @@ limitations under the License.
 
 namespace ASWUnitTests
 {
+
+namespace
+{
+
+// "key=value" for each of the entry's fields, in the order ForEachField() gives them (text values as they are)
+std::vector<std::string> DescribeFields(const ASWLog::TASWPendingEntry& entry)
+{
+    std::vector<std::string> fields;
+    entry.ForEachField([&fields](const ASWLog::TASWLogField& field) {
+                if (field.Value.GetKind() == ASWLog::ValueKind::Text)
+                    fields.push_back(std::format("{}={}", field.Key, field.Value.GetText()));
+                else
+                    fields.push_back(std::format("{}={}", field.Key, field.Value.GetInt()));
+            });
+
+    return fields;
+}
+
+} // namespace
 
 //---------------------------------------------------------------------------
 TTest_ASWLog_Types::TTest_ASWLog_Types()
@@ -53,6 +76,17 @@ TTest_ASWLog_Types::TTest_ASWLog_Types()
     RegisterTest(&TTest_ASWLog_Types::Test_LineEnding_FromString, "LineEnding_FromString");
     RegisterTest(&TTest_ASWLog_Types::Test_LineEnding_ToString, "LineEnding_ToString");
     RegisterTest(&TTest_ASWLog_Types::Test_LogError_ToString, "LogError_ToString");
+    RegisterTest(&TTest_ASWLog_Types::Test_MultilineMode_FromString, "MultilineMode_FromString");
+    RegisterTest(&TTest_ASWLog_Types::Test_MultilineMode_ToString, "MultilineMode_ToString");
+    RegisterTest(&TTest_ASWLog_Types::Test_PendingEntry_ChangingFieldsWhileVisitingIsSafe, "PendingEntry_ChangingFieldsWhileVisitingIsSafe");
+    RegisterTest(&TTest_ASWLog_Types::Test_PendingEntry_FindsFieldsOfTheEntryAndItsScopes, "PendingEntry_FindsFieldsOfTheEntryAndItsScopes");
+    RegisterTest(&TTest_ASWLog_Types::Test_PendingEntry_RemoveFieldRemovesItForThisEntry, "PendingEntry_RemoveFieldRemovesItForThisEntry");
+    RegisterTest(&TTest_ASWLog_Types::Test_PendingEntry_SetFieldReplacesOrAddsACopy, "PendingEntry_SetFieldReplacesOrAddsACopy");
+    RegisterTest(&TTest_ASWLog_Types::Test_PendingEntry_SetMessageOwnsTheText, "PendingEntry_SetMessageOwnsTheText");
+    RegisterTest(&TTest_ASWLog_Types::Test_TimePrecision_FromString, "TimePrecision_FromString");
+    RegisterTest(&TTest_ASWLog_Types::Test_TimePrecision_ToString, "TimePrecision_ToString");
+    RegisterTest(&TTest_ASWLog_Types::Test_TimeZone_FromString, "TimeZone_FromString");
+    RegisterTest(&TTest_ASWLog_Types::Test_TimeZone_ToString, "TimeZone_ToString");
 }
 //---------------------------------------------------------------------------
 TTest_ASWLog_Types::~TTest_ASWLog_Types()
@@ -92,9 +126,9 @@ void TTest_ASWLog_Types::Test_AsyncOverflowPolicy_FromString()
     CheckTrue(dropNewest.has_value(), "DROP_NEWEST should parse");
     CheckTrue(dropNewestAlias_mixedCase.has_value(), "DropNewest should parse");
     CheckFalse(unknown.has_value(), "An unknown string should not parse");
-    CheckEquals(static_cast<int32_t>(ASWLog::AsyncOverflowPolicy::Block), static_cast<int32_t>(*block), "BLOCK should map to Block");
-    CheckEquals(static_cast<int32_t>(ASWLog::AsyncOverflowPolicy::DropNewest), static_cast<int32_t>(*dropNewest), "DROP_NEWEST should map to DropNewest");
-    CheckEquals(static_cast<int32_t>(ASWLog::AsyncOverflowPolicy::DropNewest), static_cast<int32_t>(*dropNewestAlias_mixedCase), "DropNewest should map to DropNewest");
+    CheckEquals(ASWLog::AsyncOverflowPolicy::Block, *block, "BLOCK should map to Block");
+    CheckEquals(ASWLog::AsyncOverflowPolicy::DropNewest, *dropNewest, "DROP_NEWEST should map to DropNewest");
+    CheckEquals(ASWLog::AsyncOverflowPolicy::DropNewest, *dropNewestAlias_mixedCase, "DropNewest should map to DropNewest");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_Types::Test_AsyncOverflowPolicy_ToString()
@@ -119,10 +153,10 @@ void TTest_ASWLog_Types::Test_ColorMode_FromString()
     CheckTrue(never.has_value(), "NEVER should parse");
     CheckTrue(never_mixedCase.has_value(), "Never mixed case should parse");
     CheckFalse(unknown.has_value(), "An unknown string should not parse");
-    CheckEquals(static_cast<int32_t>(ASWLog::ColorMode::Auto), static_cast<int32_t>(*autoMode), "AUTO should map to Auto");
-    CheckEquals(static_cast<int32_t>(ASWLog::ColorMode::Always), static_cast<int32_t>(*always), "ALWAYS should map to Always");
-    CheckEquals(static_cast<int32_t>(ASWLog::ColorMode::Never), static_cast<int32_t>(*never), "NEVER should map to Never");
-    CheckEquals(static_cast<int32_t>(ASWLog::ColorMode::Never), static_cast<int32_t>(*never_mixedCase), "Never should map to Never");
+    CheckEquals(ASWLog::ColorMode::Auto, *autoMode, "AUTO should map to Auto");
+    CheckEquals(ASWLog::ColorMode::Always, *always, "ALWAYS should map to Always");
+    CheckEquals(ASWLog::ColorMode::Never, *never, "NEVER should map to Never");
+    CheckEquals(ASWLog::ColorMode::Never, *never_mixedCase, "Never should map to Never");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_Types::Test_ColorMode_ToString()
@@ -170,12 +204,12 @@ void TTest_ASWLog_Types::Test_FlushMode_FromString()
     CheckTrue(onNewLineAlias_mixed.has_value(), "OnNewLine should parse");
     CheckTrue(manual.has_value(), "MANUAL should parse");
     CheckTrue(periodic.has_value(), "PERIODIC should parse");
-    CheckEquals(static_cast<int32_t>(ASWLog::FlushMode::EveryWrite), static_cast<int32_t>(*everyWrite), "EVERY_WRITE should map to EveryWrite");
-    CheckEquals(static_cast<int32_t>(ASWLog::FlushMode::EveryWrite), static_cast<int32_t>(*everyWriteAlias), "EVERYWRITE should map to EveryWrite");
-    CheckEquals(static_cast<int32_t>(ASWLog::FlushMode::OnNewLine), static_cast<int32_t>(*onNewLine), "ON_NEW_LINE should map to OnNewLine");
-    CheckEquals(static_cast<int32_t>(ASWLog::FlushMode::OnNewLine), static_cast<int32_t>(*onNewLineAlias_mixed), "OnNewLine should map to OnNewLine");
-    CheckEquals(static_cast<int32_t>(ASWLog::FlushMode::Manual), static_cast<int32_t>(*manual), "MANUAL should map to Manual");
-    CheckEquals(static_cast<int32_t>(ASWLog::FlushMode::Periodic), static_cast<int32_t>(*periodic), "PERIODIC should map to Periodic");
+    CheckEquals(ASWLog::FlushMode::EveryWrite, *everyWrite, "EVERY_WRITE should map to EveryWrite");
+    CheckEquals(ASWLog::FlushMode::EveryWrite, *everyWriteAlias, "EVERYWRITE should map to EveryWrite");
+    CheckEquals(ASWLog::FlushMode::OnNewLine, *onNewLine, "ON_NEW_LINE should map to OnNewLine");
+    CheckEquals(ASWLog::FlushMode::OnNewLine, *onNewLineAlias_mixed, "OnNewLine should map to OnNewLine");
+    CheckEquals(ASWLog::FlushMode::Manual, *manual, "MANUAL should map to Manual");
+    CheckEquals(ASWLog::FlushMode::Periodic, *periodic, "PERIODIC should map to Periodic");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_Types::Test_FlushMode_ToString()
@@ -218,15 +252,15 @@ void TTest_ASWLog_Types::Test_Level_FromString()
     CheckTrue(error.has_value(), "ERROR should parse");
     CheckTrue(critical.has_value(), "CRITICAL should parse");
     CheckTrue(criticalAlias.has_value(), "FATAL should parse");
-    CheckEquals(static_cast<int32_t>(ASWLog::Level::Trace), static_cast<int32_t>(*trace), "TRACE should map to Trace");
-    CheckEquals(static_cast<int32_t>(ASWLog::Level::Debug), static_cast<int32_t>(*debug), "DEBUG should map to Debug");
-    CheckEquals(static_cast<int32_t>(ASWLog::Level::Info), static_cast<int32_t>(*info), "INFO should map to Info");
-    CheckEquals(static_cast<int32_t>(ASWLog::Level::Info), static_cast<int32_t>(*info_mixedCase), "Info should map to Info");
-    CheckEquals(static_cast<int32_t>(ASWLog::Level::Warn), static_cast<int32_t>(*warn), "WARN should map to Warn");
-    CheckEquals(static_cast<int32_t>(ASWLog::Level::Warn), static_cast<int32_t>(*warnAlias), "WARNING should map to Warn");
-    CheckEquals(static_cast<int32_t>(ASWLog::Level::Error), static_cast<int32_t>(*error), "ERROR should map to Error");
-    CheckEquals(static_cast<int32_t>(ASWLog::Level::Critical), static_cast<int32_t>(*critical), "CRITICAL should map to Critical");
-    CheckEquals(static_cast<int32_t>(ASWLog::Level::Critical), static_cast<int32_t>(*criticalAlias), "FATAL should map to Critical");
+    CheckEquals(ASWLog::Level::Trace, *trace, "TRACE should map to Trace");
+    CheckEquals(ASWLog::Level::Debug, *debug, "DEBUG should map to Debug");
+    CheckEquals(ASWLog::Level::Info, *info, "INFO should map to Info");
+    CheckEquals(ASWLog::Level::Info, *info_mixedCase, "Info should map to Info");
+    CheckEquals(ASWLog::Level::Warn, *warn, "WARN should map to Warn");
+    CheckEquals(ASWLog::Level::Warn, *warnAlias, "WARNING should map to Warn");
+    CheckEquals(ASWLog::Level::Error, *error, "ERROR should map to Error");
+    CheckEquals(ASWLog::Level::Critical, *critical, "CRITICAL should map to Critical");
+    CheckEquals(ASWLog::Level::Critical, *criticalAlias, "FATAL should map to Critical");
     CheckTrue(off.has_value() && *off == ASWLog::Level::Off, "OFF should map to Off");
     CheckTrue(offAlias.has_value() && *offAlias == ASWLog::Level::Off, "none (NONE alias, any case) should map to Off");
 }
@@ -269,11 +303,11 @@ void TTest_ASWLog_Types::Test_LineEnding_FromString()
     CheckTrue(lf_lower.has_value(), "lf should parse");
     CheckTrue(crlf.has_value(), "CRLF should parse");
     CheckTrue(crlfAlias.has_value(), "WINDOWS should parse");
-    CheckEquals(static_cast<int32_t>(ASWLog::LineEnding::LF), static_cast<int32_t>(*lf), "LF should map to LF");
-    CheckEquals(static_cast<int32_t>(ASWLog::LineEnding::LF), static_cast<int32_t>(*lfAlias), "LINUX should map to LF");
-    CheckEquals(static_cast<int32_t>(ASWLog::LineEnding::LF), static_cast<int32_t>(*lf_lower), "lf should map to LF");
-    CheckEquals(static_cast<int32_t>(ASWLog::LineEnding::CRLF), static_cast<int32_t>(*crlf), "CRLF should map to CRLF");
-    CheckEquals(static_cast<int32_t>(ASWLog::LineEnding::CRLF), static_cast<int32_t>(*crlfAlias), "WINDOWS should map to CRLF");
+    CheckEquals(ASWLog::LineEnding::LF, *lf, "LF should map to LF");
+    CheckEquals(ASWLog::LineEnding::LF, *lfAlias, "LINUX should map to LF");
+    CheckEquals(ASWLog::LineEnding::LF, *lf_lower, "lf should map to LF");
+    CheckEquals(ASWLog::LineEnding::CRLF, *crlf, "CRLF should map to CRLF");
+    CheckEquals(ASWLog::LineEnding::CRLF, *crlfAlias, "WINDOWS should map to CRLF");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_Types::Test_LineEnding_ToString()
@@ -309,6 +343,213 @@ void TTest_ASWLog_Types::Test_LogError_ToString()
     // Assert
     CheckEquals(std::string("EXCEPTION: Dropped an entry: out of memory"), messageOnlyText, "The empty parts should be left out");
     CheckEquals("OPEN_FAILED: Couldn't open the log file 'logs/app.log': " + code.message() + " (3 more not reported)", everyPartText, "Every part should be in the line");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_Types::Test_MultilineMode_FromString()
+{
+    // Arrange
+    const auto preserve = ASWLog::MultilineMode_FromString("PRESERVE");
+    const auto indent = ASWLog::MultilineMode_FromString("indent");
+    const auto escape = ASWLog::MultilineMode_FromString("Escape");
+    const auto unknown = ASWLog::MultilineMode_FromString("verbatim");
+
+    // Act & Assert
+    CheckTrue(preserve == ASWLog::MultilineMode::Preserve, "PRESERVE should map to Preserve");
+    CheckTrue(indent == ASWLog::MultilineMode::Indent, "indent should map to Indent, ignoring case");
+    CheckTrue(escape == ASWLog::MultilineMode::Escape, "Escape should map to Escape, ignoring case");
+    CheckFalse(unknown.has_value(), "An unknown mode should not parse");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_Types::Test_MultilineMode_ToString()
+{
+    // Act & Assert
+    CheckEquals(std::string("PRESERVE"), std::string(ASWLog::MultilineMode_ToString(ASWLog::MultilineMode::Preserve)), "Preserve should stringify as PRESERVE");
+    CheckEquals(std::string("INDENT"), std::string(ASWLog::MultilineMode_ToString(ASWLog::MultilineMode::Indent)), "Indent should stringify as INDENT");
+    CheckEquals(std::string("ESCAPE"), std::string(ASWLog::MultilineMode_ToString(ASWLog::MultilineMode::Escape)), "Escape should stringify as ESCAPE");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_Types::Test_PendingEntry_ChangingFieldsWhileVisitingIsSafe()
+{
+    // Arrange: text fields from a scope, then (after the first change) the entry's own copies
+    ASWLog::TASWLogScope scope{ { "a", "1" }, { "b", "2" }, { "c", "3" } };
+    ASWLog::TASWLogRecord record;
+    record.Scope = ASWLog::TASWLogScope::GetCurrent();
+    ASWLog::TASWPendingEntry entry(record);
+    std::vector<std::string> firstVisit;
+    std::vector<std::string> secondVisit;
+
+    // Act: each change replaces the copies the visit is going over (a visit over freed copies is undefined behavior,
+    // which AddressSanitizer reports; without it the freed memory usually still holds the old fields)
+    entry.ForEachField([&](const ASWLog::TASWLogField& field) {
+            firstVisit.push_back(std::format("{}={}", field.Key, field.Value.GetText()));
+            entry.SetField(field.Key, "x");
+        });
+    entry.ForEachField([&](const ASWLog::TASWLogField& field) {
+            secondVisit.push_back(std::format("{}={}", field.Key, field.Value.GetText()));
+            entry.SetField(field.Key, std::string(field.Value.GetText()) + "y");
+        });
+
+    // Assert
+    CheckTrue(firstVisit == std::vector<std::string>{ "a=1", "b=2", "c=3" }, "The first visit should go over the fields as they were");
+    CheckTrue(secondVisit == std::vector<std::string>{ "a=x", "b=x", "c=x" }, "The second visit should go over the first visit's changes");
+    CheckTrue(DescribeFields(entry) == std::vector<std::string>{ "a=xy", "b=xy", "c=xy" }, "Every change should be kept");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_Types::Test_PendingEntry_FindsFieldsOfTheEntryAndItsScopes()
+{
+    // Arrange: a scope and the entry's own fields, one of which replaces the scope's
+    ASWLog::TASWLogScope scope{ { "requestId", "8f3a" }, { "user", "amy" } };
+    const ASWLog::TASWLogField own[] = { { "user", "bob" }, { "orderId", 17 } };
+    const std::span<const ASWLog::TASWLogField> ownFields(own);
+    ASWLog::TASWLogRecord record;
+    record.Fields = &ownFields;
+    record.Scope = ASWLog::TASWLogScope::GetCurrent();
+    const ASWLog::TASWPendingEntry entry(record);
+
+    // Act
+    const auto* requestId = entry.FindField("requestId");
+    const auto* user = entry.FindField("user");
+    const auto* orderId = entry.FindField("orderId");
+    const auto* missing = entry.FindField("missing");
+
+    // Assert
+    AssertNotNull(requestId, "A scope's field should be found");
+    AssertNotNull(user, "A field the entry and its scope both have should be found");
+    AssertNotNull(orderId, "The entry's own field should be found");
+    CheckEquals(std::string("8f3a"), std::string(requestId->GetText()), "The scope's value should be returned");
+    CheckEquals(std::string("bob"), std::string(user->GetText()), "The entry's own value should beat the scope's");
+    CheckEquals(17, orderId->GetInt(), "The entry's own value should be returned");
+    CheckNull(missing, "A field the entry doesn't have should give null");
+    CheckTrue(DescribeFields(entry) == std::vector<std::string>{ "requestId=8f3a", "user=bob", "orderId=17" },
+        "ForEachField() should give each key once, as written");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_Types::Test_PendingEntry_RemoveFieldRemovesItForThisEntry()
+{
+    // Arrange
+    ASWLog::TASWLogScope scope{ { "user", "amy" }, { "requestId", "8f3a" } };
+    const ASWLog::TASWLogField own[] = { { "user", "bob" }, { "orderId", 17 } };
+    const std::span<const ASWLog::TASWLogField> ownFields(own);
+    ASWLog::TASWLogRecord record;
+    record.Fields = &ownFields;
+    record.Scope = ASWLog::TASWLogScope::GetCurrent();
+    ASWLog::TASWPendingEntry entry(record);
+
+    // Act
+    entry.RemoveField("missing");
+    const auto* fieldsAfterMissing = entry.GetRecord().Fields;
+    entry.RemoveField("user");
+
+    // Assert
+    CheckSame(record.Fields, fieldsAfterMissing, "Removing a field the entry doesn't have should change nothing");
+    CheckTrue(DescribeFields(entry) == std::vector<std::string>{ "requestId=8f3a", "orderId=17" },
+        "The field should be gone, its own value and the scope's");
+    CheckNull(entry.GetRecord().Scope, "The entry's fields should no longer depend on the scope");
+    CheckEquals(std::string("amy"), std::string(ASWLog::TASWLogScope::GetCurrent()->GetFields()[0].Value.GetText()),
+        "The scope itself should keep the field");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_Types::Test_PendingEntry_SetFieldReplacesOrAddsACopy()
+{
+    // Arrange
+    ASWLog::TASWLogScope scope{ { "requestId", "8f3a" }, { "user", "amy" } };
+    const ASWLog::TASWLogField own[] = { { "orderId", 17 } };
+    const std::span<const ASWLog::TASWLogField> ownFields(own);
+    ASWLog::TASWLogRecord record;
+    record.Fields = &ownFields;
+    record.Scope = ASWLog::TASWLogScope::GetCurrent();
+    ASWLog::TASWPendingEntry entry(record);
+
+    // Act: the key and value of the added field are temporaries
+    entry.SetField("user", "***");
+    {
+        std::string key = "token";
+        std::string value = "secret_value";
+        entry.SetField(key, value);
+        key.assign(key.size(), '?');
+        value.assign(value.size(), '?');
+    }
+    entry.SetField("orderId", 18);
+
+    // Assert
+    CheckTrue(DescribeFields(entry) == std::vector<std::string>{ "requestId=8f3a", "user=***", "orderId=18", "token=secret_value" },
+        "A field should be replaced where it is, and a new one added after the others, as a copy");
+    CheckSame(record.Fields, &ownFields, "The record the entry was made from should be unchanged");
+    CheckEquals(17, ownFields[0].Value.GetInt(), "The caller's fields should be unchanged");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_Types::Test_PendingEntry_SetMessageOwnsTheText()
+{
+    // Arrange
+    ASWLog::TASWLogRecord record;
+    record.LogLevel = ASWLog::Level::Warn;
+    record.Raw = true;
+    record.Message = "password=secret";
+    record.Category = "Net";
+    ASWLog::TASWPendingEntry entry(record);
+
+    // Act: the new message is a temporary
+    {
+        std::string redacted = "password=***";
+        entry.SetMessage(redacted);
+        redacted.assign(redacted.size(), '?');
+    }
+
+    // Assert
+    CheckEquals(std::string("password=***"), std::string(entry.GetRecord().Message), "The entry should own its new message");
+    CheckEquals(std::string("password=secret"), std::string(record.Message), "The original record should be unchanged");
+    CheckEquals(ASWLog::Level::Warn, entry.GetRecord().LogLevel, "The level should be kept");
+    CheckTrue(entry.GetRecord().Raw, "The flags should be kept");
+    CheckEquals(std::string("Net"), std::string(entry.GetRecord().Category), "The category should be kept");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_Types::Test_TimePrecision_FromString()
+{
+    // Arrange
+    const auto milliseconds = ASWLog::TimePrecision_FromString("MILLISECONDS");
+    const auto microseconds = ASWLog::TimePrecision_FromString("microseconds");
+    const auto nanoseconds = ASWLog::TimePrecision_FromString("NANOSECONDS");
+    const auto msAlias = ASWLog::TimePrecision_FromString("ms");
+    const auto usAlias = ASWLog::TimePrecision_FromString("US");
+    const auto nsAlias = ASWLog::TimePrecision_FromString("NS");
+    const auto unknown = ASWLog::TimePrecision_FromString("seconds");
+
+    // Act & Assert
+    CheckTrue(milliseconds == ASWLog::TimePrecision::Milliseconds, "MILLISECONDS should map to Milliseconds");
+    CheckTrue(microseconds == ASWLog::TimePrecision::Microseconds, "microseconds should map to Microseconds, ignoring case");
+    CheckTrue(nanoseconds == ASWLog::TimePrecision::Nanoseconds, "NANOSECONDS should map to Nanoseconds");
+    CheckTrue(msAlias == ASWLog::TimePrecision::Milliseconds, "ms should map to Milliseconds");
+    CheckTrue(usAlias == ASWLog::TimePrecision::Microseconds, "US should map to Microseconds");
+    CheckTrue(nsAlias == ASWLog::TimePrecision::Nanoseconds, "NS should map to Nanoseconds");
+    CheckFalse(unknown.has_value(), "An unknown precision should not parse");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_Types::Test_TimePrecision_ToString()
+{
+    // Act & Assert
+    CheckEquals(std::string("MILLISECONDS"), std::string(ASWLog::TimePrecision_ToString(ASWLog::TimePrecision::Milliseconds)), "Milliseconds should stringify as MILLISECONDS");
+    CheckEquals(std::string("MICROSECONDS"), std::string(ASWLog::TimePrecision_ToString(ASWLog::TimePrecision::Microseconds)), "Microseconds should stringify as MICROSECONDS");
+    CheckEquals(std::string("NANOSECONDS"), std::string(ASWLog::TimePrecision_ToString(ASWLog::TimePrecision::Nanoseconds)), "Nanoseconds should stringify as NANOSECONDS");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_Types::Test_TimeZone_FromString()
+{
+    // Arrange
+    const auto utc = ASWLog::TimeZone_FromString("UTC");
+    const auto local = ASWLog::TimeZone_FromString("local");
+    const auto unknown = ASWLog::TimeZone_FromString("EST");
+
+    // Act & Assert
+    CheckTrue(utc == ASWLog::TimeZone::UTC, "UTC should map to UTC");
+    CheckTrue(local == ASWLog::TimeZone::Local, "local should map to Local, ignoring case");
+    CheckFalse(unknown.has_value(), "A named time zone should not parse");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_Types::Test_TimeZone_ToString()
+{
+    // Act & Assert
+    CheckEquals(std::string("UTC"), std::string(ASWLog::TimeZone_ToString(ASWLog::TimeZone::UTC)), "UTC should stringify as UTC");
+    CheckEquals(std::string("LOCAL"), std::string(ASWLog::TimeZone_ToString(ASWLog::TimeZone::Local)), "Local should stringify as LOCAL");
 }
 //---------------------------------------------------------------------------
 

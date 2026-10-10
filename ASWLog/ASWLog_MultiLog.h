@@ -53,13 +53,19 @@ namespace ASWLog
 // acts as an optional composite-level pre-filter gate, checked before fanning
 // Log()/LogRaw() out (default Trace = no extra filtering); LogForce()/
 // LogForceRaw() bypass it, matching force semantics elsewhere. Each sink
-// still applies its own level independently. SetEnabled(false) on the
+// still applies its own level independently. A category logger wrapping
+// this composite (see TASWCategoryLog) with a level of its own replaces this
+// composite's level, not the sinks'. SetEnabled(false) on the
 // composite stops all fan-out, forced entries included. All other
 // settings in this class's config (Line, Startup, Shutdown, File,
 // OnLogEntry) are inert, since the composite performs no I/O of its own.
 // It keeps no backtrace either (each sink keeps its own, see
 // TASWBacktraceConfig), so its minimum level must be at or below the
 // sinks' Backtrace.LowestLevel for their backtraces to get those entries.
+// Its OnBeforeWrite hook runs once per entry, before the fan-out, and the
+// sinks get the entry as the hook changed it; the config it passes to them
+// has no hook (a sink initialized on its own keeps its own hook, which runs
+// after this one's).
 /////////////////////////////////////////////////////////////////////////////
 class TASWMultiLog : public TASWLogBase
 {
@@ -87,7 +93,8 @@ protected:
     // TASWBacktraceConfig)
     bool KeepsBacktrace() const noexcept override;
 
-    // Passes the record, stamped once by Write(), to every registered sink's Write(), so they all show the same time
+    // Passes the record, stamped once by Write(), to every registered sink's Write(), so they all show the same time.
+    // Its CategoryLevel is left out: a category's level replaces this composite's minimum level, not the sinks'.
     void WriteRecord(const TASWLogRecord& record) override;
 
 public:
@@ -109,11 +116,13 @@ public:
     // Fans out to every registered sink, tolerating sinks that are already initialized/open (their own Initialize()
     // may correctly return false in that case, e.g. a singleton initialized elsewhere before being added here) rather
     // than treating that as a failure. Returns true only if every sink ends up initialized or open. Returns false without
-    // doing anything if this composite is already initialized; after Close() it can be initialized again. Thread-safe.
+    // doing anything if this composite is already initialized; after Close() it can be initialized again. The sinks get
+    // the config without its OnBeforeWrite hook, which this composite calls itself. Thread-safe.
     bool Initialize(const TASWLogConfig& config) noexcept override;
-    // Stores the config and passes it to every registered sink's Reconfigure(), even if one fails. Returns true only if
-    // every sink's Reconfigure() succeeds; false without doing anything if this composite isn't initialized. A sink
-    // that needs settings of its own is reconfigured directly instead. Thread-safe.
+    // Stores the config and passes it (without OnBeforeWrite, as Initialize() does) to every registered sink's
+    // Reconfigure(), even if one fails. Returns true only if every sink's Reconfigure() succeeds; false without doing
+    // anything if this composite isn't initialized. A sink that needs settings of its own is reconfigured directly
+    // instead. Thread-safe.
     bool Reconfigure(const TASWLogConfig& config) noexcept override;
 
     bool Open() noexcept override;
@@ -127,6 +136,9 @@ public:
     // True if this composite's own gate passes (enabled, not Off, minimum level) and at least one registered sink's
     // ShouldLog() is true (false if none are registered).
     bool ShouldLog(Level level) const noexcept override;
+    // The same for a record: its CategoryLevel, if set, replaces this composite's minimum level, and the sinks are
+    // asked without it (see WriteRecord())
+    bool ShouldLog(const TASWLogRecord& record) const noexcept override;
 };
 
 } // namespace ASWLog

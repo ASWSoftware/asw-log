@@ -31,17 +31,23 @@ limitations under the License.
 #include <cstdlib>
 #include <ctime>
 #include <filesystem>
+#include <format>
 #include <fstream>
 #include <iterator>
+#include <ratio>
 #include <string>
+#include <string_view>
 #include <system_error>
 #include <thread>
+#include <vector>
 
 #if defined(_WIN32)
 #include <windows.h>
 #endif
 //---------------------------------------------------------------------------
 #include "ASWUnitTests_Registry.h"
+//---------------------------------------------------------------------------
+#include "UT_Helper_DateTime.h"
 //---------------------------------------------------------------------------
 
 namespace ASWUnitTests
@@ -50,80 +56,43 @@ namespace ASWUnitTests
 namespace
 {
 
-// While alive, sets the C runtime's local time zone through the TZ environment variable (POSIX format, e.g. "EST5EDT",
-// which the Windows C runtime also reads), then restores the previous value.
-class TScopedTimeZone
+// True if system_clock ticks in less than 1 us (100 ns with MSVC and MinGW on Windows, 1 ns with libstdc++ on Linux),
+// false for 1 us (libc++, e.g. RAD Studio)
+constexpr bool HasSubmicrosecondClock = std::ratio_less_v<std::chrono::system_clock::period, std::micro>;
+
+//---------------------------------------------------------------------------
+
+// 'text' as Detail::ApplyMultilineMode() rewrites it
+std::string ApplyMode(std::string text, ASWLog::MultilineMode mode, ASWLog::LineEnding ending = ASWLog::LineEnding::LF)
 {
-private:
-    bool m_HadValue = false;
-    std::string m_PreviousValue;
+    ASWLog::Detail::ApplyMultilineMode(text, mode, ending);
 
-    // Sets TZ to 'value', or removes it if 'value' is null, and makes the C runtime read it again
-    static void Apply(const char* value)
-    {
-#if defined(_WIN32)
-        _putenv_s("TZ", value != nullptr ? value : ""); // An empty value removes the variable
-        _tzset();
-
-        // Once the Windows C runtime has read a system time zone without daylight saving time (e.g. UTC on CI machines,
-        // or Arizona), it keeps that zone's daylight saving bias of 0 even when TZ then names a zone that has daylight
-        // saving time, so summer would be flagged as daylight saving time without moving the clock. TZ can't give the
-        // bias, so set the usual hour.
-        int hasDaylightSavingTime = 0;
-        if (value != nullptr && _get_daylight(&hasDaylightSavingTime) == 0 && hasDaylightSavingTime != 0)
-        {
-            // __dstbias() is deprecated in favor of _get_dstbias(), which can't set it.
-#if defined(_MSC_VER)
-#pragma warning(push)
-#pragma warning(disable : 4996)
-#endif
-            *__dstbias() = -3600;
-#if defined(_MSC_VER)
-#pragma warning(pop)
-#endif
-        }
-#else
-        if (value != nullptr)
-            setenv("TZ", value, 1);
-        else
-            unsetenv("TZ");
-        tzset();
-#endif
-    }
-
-public:
-    explicit TScopedTimeZone(const char* timeZone)
-    {
-#if defined(_WIN32)
-        // _putenv_s also updates the process environment, which GetEnvironmentVariableA reads (avoids getenv(), which
-        // MSVC warns about)
-        char buffer[256]{};
-        const DWORD length = GetEnvironmentVariableA("TZ", buffer, sizeof(buffer));
-        m_HadValue = length > 0 && length < sizeof(buffer);
-        if (m_HadValue)
-            m_PreviousValue.assign(buffer, length);
-#else
-        const char* previous = std::getenv("TZ");
-        m_HadValue = previous != nullptr;
-        if (m_HadValue)
-            m_PreviousValue = previous;
-#endif
-        Apply(timeZone);
-    }
-
-    ~TScopedTimeZone()
-    {
-        Apply(m_HadValue ? m_PreviousValue.c_str() : nullptr);
-    }
-
-    TScopedTimeZone(const TScopedTimeZone&) = delete;
-    TScopedTimeZone& operator=(const TScopedTimeZone&) = delete;
-};
+    return text;
+}
 
 std::string ReadText(const std::filesystem::path& path)
 {
     std::ifstream stream(path, std::ios::binary);
     return std::string((std::istreambuf_iterator<char>(stream)), std::istreambuf_iterator<char>());
+}
+
+// The bytes of 'text' in hex, e.g. "E2 82", for a check's message
+std::string ToHex(std::string_view text)
+{
+    std::string hex;
+    for (const char character : text)
+        hex += std::format("{}{:02X}", hex.empty() ? "" : " ", static_cast<unsigned char>(character));
+
+    return hex;
+}
+
+// 'text' as JSON::AppendString() writes it
+std::string ToJSONString(std::string_view text)
+{
+    std::string output;
+    ASWLog::JSON::AppendString(output, text);
+
+    return output;
 }
 
 } // namespace
@@ -134,6 +103,10 @@ std::string ReadText(const std::filesystem::path& path)
 TTest_ASWLog_Utils::TTest_ASWLog_Utils()
     : inherited("ASWLog_Utils_Tests")
 {
+    RegisterTest(&TTest_ASWLog_Utils::Test_ApplyMultilineMode_EscapeWritesCRAndLFAsText, "ApplyMultilineMode_EscapeWritesCRAndLFAsText");
+    RegisterTest(&TTest_ASWLog_Utils::Test_ApplyMultilineMode_FindsLineBreaksAnywhereInALongText, "ApplyMultilineMode_FindsLineBreaksAnywhereInALongText");
+    RegisterTest(&TTest_ASWLog_Utils::Test_ApplyMultilineMode_IndentMarksEachLineAfterTheFirst, "ApplyMultilineMode_IndentMarksEachLineAfterTheFirst");
+    RegisterTest(&TTest_ASWLog_Utils::Test_ApplyMultilineMode_LeavesOtherLinesAsTheyAre, "ApplyMultilineMode_LeavesOtherLinesAsTheyAre");
     RegisterTest(&TTest_ASWLog_Utils::Test_GenerateLogFileName_ContainsExpectedFields, "GenerateLogFileName_ContainsExpectedFields");
     RegisterTest(&TTest_ASWLog_Utils::Test_GenerateLogFileName_PrefixAndPostfixAreOptional, "GenerateLogFileName_PrefixAndPostfixAreOptional");
     RegisterTest(&TTest_ASWLog_Utils::Test_GetCurrentOSProcessId_MatchesOS, "GetCurrentOSProcessId_MatchesOS");
@@ -143,12 +116,20 @@ TTest_ASWLog_Utils::TTest_ASWLog_Utils()
     RegisterTest(&TTest_ASWLog_Utils::Test_GetWindowsEditionName_ProductTypes, "GetWindowsEditionName_ProductTypes");
     RegisterTest(&TTest_ASWLog_Utils::Test_IsRootFolder_DetectsRootFolders, "IsRootFolder_DetectsRootFolders");
     RegisterTest(&TTest_ASWLog_Utils::Test_IsRootFolder_ResolvesRelativePaths, "IsRootFolder_ResolvesRelativePaths");
+    RegisterTest(&TTest_ASWLog_Utils::Test_JSON_AppendString_EscapesQuotesBackslashAndControls, "JSON_AppendString_EscapesQuotesBackslashAndControls");
+    RegisterTest(&TTest_ASWLog_Utils::Test_JSON_AppendString_FindsSpecialCharactersAnywhereInALongText, "JSON_AppendString_FindsSpecialCharactersAnywhereInALongText");
+    RegisterTest(&TTest_ASWLog_Utils::Test_JSON_AppendString_KeepsValidUTF8, "JSON_AppendString_KeepsValidUTF8");
+    RegisterTest(&TTest_ASWLog_Utils::Test_JSON_AppendString_ReplacesInvalidUTF8, "JSON_AppendString_ReplacesInvalidUTF8");
     RegisterTest(&TTest_ASWLog_Utils::Test_MatchesWildcard_Patterns, "MatchesWildcard_Patterns");
     RegisterTest(&TTest_ASWLog_Utils::Test_RenameWithoutReplacing_KeepsExistingTarget, "RenameWithoutReplacing_KeepsExistingTarget");
     RegisterTest(&TTest_ASWLog_Utils::Test_Time_GetUTCOffsetMinutes_FollowsDaylightSavingTime, "Time_GetUTCOffsetMinutes_FollowsDaylightSavingTime");
     RegisterTest(&TTest_ASWLog_Utils::Test_Time_ToDateString, "Time_ToDateString");
+    RegisterTest(&TTest_ASWLog_Utils::Test_Time_ToDateString_FollowsZone, "Time_ToDateString_FollowsZone");
     RegisterTest(&TTest_ASWLog_Utils::Test_Time_ToISO8601String, "Time_ToISO8601String");
     RegisterTest(&TTest_ASWLog_Utils::Test_Time_ToLocalISO8601String_IncludesOffset, "Time_ToLocalISO8601String_IncludesOffset");
+    RegisterTest(&TTest_ASWLog_Utils::Test_Time_WriteISO8601_CalendarEdges, "Time_WriteISO8601_CalendarEdges");
+    RegisterTest(&TTest_ASWLog_Utils::Test_Time_WriteISO8601_LocalTimeWithEachPrecision, "Time_WriteISO8601_LocalTimeWithEachPrecision");
+    RegisterTest(&TTest_ASWLog_Utils::Test_Time_WriteISO8601_UTCWithEachPrecision, "Time_WriteISO8601_UTCWithEachPrecision");
 }
 //---------------------------------------------------------------------------
 TTest_ASWLog_Utils::~TTest_ASWLog_Utils()
@@ -175,13 +156,121 @@ void TTest_ASWLog_Utils::TearDown_Test(ITestCase& /*testCase*/)
 // /////// Begin tests after this line ///////////////////////
 
 //---------------------------------------------------------------------------
+void TTest_ASWLog_Utils::Test_ApplyMultilineMode_EscapeWritesCRAndLFAsText()
+{
+    // Arrange: each CR and LF, alone or together, and other text around them
+    struct TCase
+    {
+        std::string Text;
+        std::string Expected;
+    };
+
+    const std::vector<TCase> cases{
+        { "a\r\nb\nc\rd", "a\\r\\nb\\nc\\rd" }, { "a\n\n", "a\\n\\n" }, { "\r", "\\r" },
+        { "C:\\temp\\new\n", "C:\\temp\\new\\n" }, { "\t\"x\"\xCE\xBB\n", "\t\"x\"\xCE\xBB\\n" }
+    };
+
+    // Act & Assert: the line ending doesn't matter
+    for (const auto& item : cases)
+    {
+        CheckEquals(item.Expected, ApplyMode(item.Text, ASWLog::MultilineMode::Escape),
+            "Only CR and LF should be escaped, with LF endings: " + ToHex(item.Text));
+        CheckEquals(item.Expected, ApplyMode(item.Text, ASWLog::MultilineMode::Escape, ASWLog::LineEnding::CRLF),
+            "Only CR and LF should be escaped, with CRLF endings: " + ToHex(item.Text));
+    }
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_Utils::Test_ApplyMultilineMode_FindsLineBreaksAnywhereInALongText()
+{
+    // Arrange: text is scanned 8 bytes at a time, so each line break goes at every position of the first two 8-byte
+    // words of a longer text, with what it should become
+    struct TCase
+    {
+        ASWLog::MultilineMode Mode;
+        std::string Text;
+        std::string Expected;
+    };
+
+    const std::vector<TCase> breaks{
+        { ASWLog::MultilineMode::Indent, "\n", "\n    | " }, { ASWLog::MultilineMode::Indent, "\r\n", "\n    | " },
+        { ASWLog::MultilineMode::Indent, "\r", "\r" }, { ASWLog::MultilineMode::Escape, "\n", "\\n" },
+        { ASWLog::MultilineMode::Escape, "\r", "\\r" }
+    };
+
+    // Act & Assert
+    for (const auto& item : breaks)
+    {
+        for (std::size_t position = 0; position < 16; ++position)
+        {
+            const std::string before(position, 'a');
+            const std::string after(24 - position, 'z');
+            CheckEquals(before + item.Expected + after, ApplyMode(before + item.Text + after, item.Mode),
+                std::format("{} at index {} should be found ({})", ToHex(item.Text), position,
+                    ASWLog::MultilineMode_ToString(item.Mode)));
+        }
+    }
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_Utils::Test_ApplyMultilineMode_IndentMarksEachLineAfterTheFirst()
+{
+    // Arrange
+    struct TCase
+    {
+        std::string Text;
+        ASWLog::LineEnding Ending;
+        std::string Expected;
+    };
+
+    constexpr auto LF = ASWLog::LineEnding::LF;
+    constexpr auto CRLF = ASWLog::LineEnding::CRLF;
+    const std::vector<TCase> cases{
+        // Each "\n" or "\r\n" becomes the line ending and the marker
+        { "a\nb", LF, "a\n    | b" }, { "a\nb", CRLF, "a\r\n    | b" }, { "a\r\nb", LF, "a\n    | b" },
+        { "a\r\nb", CRLF, "a\r\n    | b" }, { "\nb", LF, "\n    | b" }, { "a\n  b", LF, "a\n    |   b" },
+        // An empty line gets the marker without its space, at the end too
+        { "a\n", LF, "a\n    |" }, { "\n", CRLF, "\r\n    |" }, { "a\n\nb", LF, "a\n    |\n    | b" },
+        { "a\r\n\r\nb", CRLF, "a\r\n    |\r\n    | b" }, { "a\n\r\n", LF, "a\n    |\n    |" },
+        // A lone CR stays as it is
+        { "a\rb", LF, "a\rb" }, { "a\r", CRLF, "a\r" }, { "a\r\r\nb", LF, "a\r\n    | b" }, { "a\n\rb", LF, "a\n    | \rb" }
+    };
+
+    // Act & Assert
+    for (const auto& item : cases)
+    {
+        CheckEquals(item.Expected, ApplyMode(item.Text, ASWLog::MultilineMode::Indent, item.Ending),
+            std::format("{} with {} endings", ToHex(item.Text), ASWLog::LineEnding_ToString(item.Ending)));
+    }
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_Utils::Test_ApplyMultilineMode_LeavesOtherLinesAsTheyAre()
+{
+    // Arrange
+    const std::string multiline = "a\r\nb\n\rc\r";
+    std::string plain = "[2026-09-28T21:02:44.342Z][INFO]: no line break here, but more than 8 characters";
+    const char* plainData = plain.data();
+
+    // Act
+    const auto preservedLF = ApplyMode(multiline, ASWLog::MultilineMode::Preserve);
+    const auto preservedCRLF = ApplyMode(multiline, ASWLog::MultilineMode::Preserve, ASWLog::LineEnding::CRLF);
+    ASWLog::Detail::ApplyMultilineMode(plain, ASWLog::MultilineMode::Indent, ASWLog::LineEnding::LF);
+    ASWLog::Detail::ApplyMultilineMode(plain, ASWLog::MultilineMode::Escape, ASWLog::LineEnding::LF);
+
+    // Assert
+    CheckEquals(multiline, preservedLF, "Preserve should leave every line break as it is (LF endings)");
+    CheckEquals(multiline, preservedCRLF, "Preserve should leave every line break as it is (CRLF endings)");
+    CheckEquals(std::string("[2026-09-28T21:02:44.342Z][INFO]: no line break here, but more than 8 characters"), plain,
+        "A line without line breaks should stay as it is");
+    CheckSame(plainData, plain.data(), "A line without line breaks should be left in place, not copied");
+    CheckEquals(std::string(), ApplyMode("", ASWLog::MultilineMode::Indent), "An empty line should stay empty");
+}
+//---------------------------------------------------------------------------
 void TTest_ASWLog_Utils::Test_GenerateLogFileName_ContainsExpectedFields()
 {
     // Arrange
     const std::string logName = ASWLog::GenerateLogFileName("", "ExampleLog.txt");
 
     // Act & Assert
-    AssertTrue(!logName.empty(), "Generated log file name should not be empty");
+    AssertNotEmpty(logName, "Generated log file name should not be empty");
 
     CheckContains(logName, "_PID", "Generated file name should include process id");
     CheckContains(logName, "_TID", "Generated file name should include thread id");
@@ -210,7 +299,7 @@ void TTest_ASWLog_Utils::Test_GenerateLogFileName_PrefixAndPostfixAreOptional()
     CheckNotStartsWith(postfixOnly, "_", "An empty prefix should not leave a leading separator");
     CheckContains(postfixOnly, "ExampleLog.txt", "The postfix should still be included when the prefix is empty");
 
-    CheckFalse(neither.empty(), "The name should still contain the timestamp/PID/TID segments when both are empty");
+    CheckNotEmpty(neither, "The name should still contain the timestamp/PID/TID segments when both are empty");
     CheckNotStartsWith(neither, "_", "An empty prefix should not leave a leading separator when the postfix is also empty");
     CheckNotEndsWith(neither, "_", "An empty postfix should not leave a trailing separator when the prefix is also empty");
 }
@@ -250,7 +339,7 @@ void TTest_ASWLog_Utils::Test_GetCurrentOSThreadId_IdentifiesCallingThread()
 #if defined(_WIN32)
     // The id should name a live thread of this process
     const HANDLE thread = OpenThread(THREAD_QUERY_LIMITED_INFORMATION, FALSE, mainThreadId);
-    CheckTrue(thread != nullptr, "The id should open a thread");
+    CheckNotNull(thread, "The id should open a thread");
     if (thread != nullptr)
     {
         CheckEquals(static_cast<std::uint32_t>(GetCurrentProcessId()), static_cast<std::uint32_t>(GetProcessIdOfThread(thread)), "The thread should belong to this process");
@@ -278,10 +367,10 @@ void TTest_ASWLog_Utils::Test_GetOSInfoString_ContainsEdition()
         osInfo.find("Server") != std::string::npos ||
         osInfo.find("Ultimate") != std::string::npos;
 
-    CheckTrue(!osInfo.empty(), "OS info string should not be empty");
+    CheckNotEmpty(osInfo, "OS info string should not be empty");
     CheckTrue(hasEdition, "Windows OS info should include the edition name (Home, Pro, Enterprise, etc.)");
 #else
-    CheckTrue(!osInfo.empty(), "OS info string should not be empty");
+    CheckNotEmpty(osInfo, "OS info string should not be empty");
 #endif
 }
 //---------------------------------------------------------------------------
@@ -376,10 +465,125 @@ void TTest_ASWLog_Utils::Test_IsRootFolder_ResolvesRelativePaths()
     const auto relativeRoot = std::filesystem::relative(currentPath.root_path(), currentPath);
 
     // Act & Assert
-    CheckFalse(relativeRoot.empty(), "The relative path to the root should be found");
+    CheckNotEmpty(relativeRoot, "The relative path to the root should be found");
     CheckTrue(ASWLog::IsRootFolder(relativeRoot), "A relative path that leads to a root should be a root folder");
     if (currentPath != currentPath.root_path())
         CheckFalse(ASWLog::IsRootFolder("."), "\".\" should not be a root folder when the current folder isn't one");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_Utils::Test_JSON_AppendString_EscapesQuotesBackslashAndControls()
+{
+    // Arrange: each control character's escape, the short form where JSON has one
+    std::string appended = "key:";
+
+    // Act
+    ASWLog::JSON::AppendString(appended, "value");
+
+    // Assert
+    CheckEquals(std::string("key:\"value\""), appended, "The string should be appended, in quotes");
+    CheckEquals(std::string("\"\""), ToJSONString(""), "An empty text should be an empty string");
+    CheckEquals(std::string(R"("say \"hi\" \\ there")"), ToJSONString(R"(say "hi" \ there)"), "Quotes and backslashes should be escaped");
+    CheckEquals(std::string(R"("a / b ~)" "\x7F" R"(")"), ToJSONString("a / b ~\x7F"), "'/' and DEL should be written as they are");
+    CheckEquals(std::string(R"("line1\nline2\r\n\tend")"), ToJSONString("line1\nline2\r\n\tend"), "Line breaks should be escaped");
+
+    for (int code = 0; code < 0x20; ++code)
+    {
+        std::string expected;
+        switch (code)
+        {
+            case 0x08: expected = "\\b"; break;
+            case 0x09: expected = "\\t"; break;
+            case 0x0A: expected = "\\n"; break;
+            case 0x0C: expected = "\\f"; break;
+            case 0x0D: expected = "\\r"; break;
+            default: expected = std::format("\\u{:04x}", code); break;
+        }
+
+        CheckEquals("\"" + expected + "\"", ToJSONString(std::string(1, static_cast<char>(code))),
+            std::format("Control character 0x{:02X} should be escaped", code));
+    }
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_Utils::Test_JSON_AppendString_FindsSpecialCharactersAnywhereInALongText()
+{
+    // Arrange: plain text is scanned 8 bytes at a time, so each special character goes at every position of the first
+    // two 8-byte words of a longer text, with what it should become
+    struct TCase
+    {
+        std::string Text;
+        std::string Expected;
+    };
+
+    const std::vector<TCase> specials{
+        { "\"", "\\\"" }, { "\\", "\\\\" }, { std::string(1, '\0'), "\\u0000" }, { "\n", "\\n" }, { "\x1F", "\\u001f" },
+        { " ", " " }, { "\x7F", "\x7F" }, { "\xCE\xBB", "\xCE\xBB" }, { "\xF0\x9F\x98\x80", "\xF0\x9F\x98\x80" },
+        { "\x80", "\xEF\xBF\xBD" }, { "\xFF", "\xEF\xBF\xBD" }, { "\xE2\x82", "\xEF\xBF\xBD" }
+    };
+
+    // Act & Assert
+    for (const auto& special : specials)
+    {
+        for (std::size_t position = 0; position < 16; ++position)
+        {
+            const std::string before(position, 'a');
+            const std::string after(24 - position, 'z');
+            CheckEquals("\"" + before + special.Expected + after + "\"", ToJSONString(before + special.Text + after),
+                std::format("{} at index {} should be found", ToHex(special.Text), position));
+        }
+    }
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_Utils::Test_JSON_AppendString_KeepsValidUTF8()
+{
+    // Arrange: the first and last character of each UTF-8 length, the characters around the surrogates, and a few
+    // common ones
+    const std::vector<std::string> texts{
+        "\xC2\x80", "\xDF\xBF", "\xE0\xA0\x80", "\xED\x9F\xBF", "\xEE\x80\x80", "\xEF\xBF\xBF", "\xF0\x90\x80\x80",
+        "\xF4\x8F\xBF\xBF", "\xCE\xBB", "\xE2\x82\xAC", "\xF0\x9F\x98\x80", "a\xCE\xBB" "b\xE2\x82\xAC" "c"
+    };
+
+    // Act & Assert
+    for (const auto& text : texts)
+        CheckEquals("\"" + text + "\"", ToJSONString(text), "Valid UTF-8 should be written as it is: " + ToHex(text));
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_Utils::Test_JSON_AppendString_ReplacesInvalidUTF8()
+{
+    // Arrange: each invalid text and what it should become, U+FFFD (R) for each longest start of a valid sequence, or
+    // else each byte
+    const std::string R = "\xEF\xBF\xBD";
+    struct TCase
+    {
+        std::string Text;
+        std::string Expected;
+    };
+
+    const std::vector<TCase> cases{
+        { "\x80", R }, // A continuation byte without a lead byte
+        { "a\xBF" "b", "a" + R + "b" },
+        { "\xC0\xAF", R + R }, // Overlong forms: C0 and C1 never start a valid sequence
+        { "\xC1\xBF", R + R },
+        { "\xE0\x80\xAF", R + R + R }, // Overlong: E0 needs A0-BF next
+        { "\xF0\x80\x80\x80", R + R + R + R }, // Overlong: F0 needs 90-BF next
+        { "\xED\xA0\x80", R + R + R }, // A surrogate (U+D800)
+        { "\xF4\x90\x80\x80", R + R + R + R }, // Above U+10FFFF
+        { "\xF5\x80", R + R }, // F5-FF never start a valid sequence
+        { "\xFF", R },
+        { "\xC2", R }, // Cut off at the end
+        { "\xE2\x82", R }, // A cut off sequence is one U+FFFD
+        { "\xE2\x82" "X", R + "X" },
+        { "\xF0\x9F\x98", R },
+        { "\xF0\x9F\x98" "a", R + "a" },
+        { "\xC2\"", R + "\\\"" }, // The character after a cut off sequence is written as usual
+        { "\xCE\xBB\xCE", "\xCE\xBB" + R }
+    };
+
+    // Act & Assert
+    for (const auto& testCase : cases)
+    {
+        CheckEquals("\"" + testCase.Expected + "\"", ToJSONString(testCase.Text),
+            "Invalid UTF-8 should be replaced with U+FFFD: " + ToHex(testCase.Text));
+    }
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_Utils::Test_MatchesWildcard_Patterns()
@@ -465,6 +669,22 @@ void TTest_ASWLog_Utils::Test_Time_ToDateString()
     CheckContains(date, "-", "Date string should include date separators");
 }
 //---------------------------------------------------------------------------
+void TTest_ASWLog_Utils::Test_Time_ToDateString_FollowsZone()
+{
+    // Arrange: 02:00 UTC is still the evening before in US Eastern time
+    using namespace std::chrono_literals;
+    const auto time = std::chrono::sys_days{ 2026y / 7 / 1 } + 2h;
+    const TScopedTimeZone timeZone("EST5EDT");
+
+    // Act
+    const auto utcDate = ASWLog::Time::ToDateString(time);
+    const auto localDate = ASWLog::Time::ToDateString(time, ASWLog::TimeZone::Local);
+
+    // Assert
+    CheckEquals(std::string("2026-07-01"), utcDate, "The UTC date should be the default");
+    CheckEquals(std::string("2026-06-30"), localDate, "The local date should be the day before, 4 hours behind UTC");
+}
+//---------------------------------------------------------------------------
 void TTest_ASWLog_Utils::Test_Time_ToISO8601String()
 {
     // Arrange
@@ -500,6 +720,101 @@ void TTest_ASWLog_Utils::Test_Time_ToLocalISO8601String_IncludesOffset()
         const TScopedTimeZone timeZone("UTC0");
         CheckEquals(std::string("2026-07-01T12:00:00.123+00:00"), ASWLog::Time::ToLocalISO8601String(summer), "UTC should show a +00:00 offset");
         CheckEquals(std::string("2026-07-01T12:00:00.000+00:00"), ASWLog::Time::ToLocalISO8601String(std::chrono::sys_days{ 2026y / 7 / 1 } + 12h), "A whole second should show .000");
+    }
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_Utils::Test_Time_WriteISO8601_CalendarEdges()
+{
+    // Arrange
+    using namespace std::chrono_literals;
+    using std::chrono::sys_days;
+
+    struct TCase
+    {
+        std::chrono::system_clock::time_point Time;
+        std::string Expected;
+        std::string What;
+    };
+
+    const TCase cases[] = {
+        { sys_days{ 1970y / 1 / 1 }, "1970-01-01T00:00:00.000Z", "The epoch" },
+        { sys_days{ 2026y / 1 / 15 } + 7h + 7ms, "2026-01-15T07:00:00.007Z", "Short fields should be zero-padded" },
+        { sys_days{ 1999y / 12 / 31 } + 23h + 59min + 59s + 999ms, "1999-12-31T23:59:59.999Z", "The last millisecond of a year" },
+        { sys_days{ 2024y / 2 / 29 } + 12h + 34min + 56s + 500ms, "2024-02-29T12:34:56.500Z", "A leap day" },
+        { sys_days{ 2000y / 2 / 29 }, "2000-02-29T00:00:00.000Z", "A leap day in a century year divisible by 400" },
+        { sys_days{ 2100y / 2 / 28 } + 24h, "2100-03-01T00:00:00.000Z", "The day after February 28 in a century year that isn't a leap year" },
+        { sys_days{ 2026y / 7 / 1 } + 12h + 123999us, "2026-07-01T12:00:00.123Z", "Microseconds should be cut off, not rounded" },
+        { sys_days{ 1970y / 1 / 1 } - 1ms, "1969-12-31T23:59:59.999Z", "A time before 1970 should fall on the millisecond it is in" },
+    };
+
+    for (const auto& testCase : cases)
+    {
+        // Act
+        char buffer[ASWLog::Time::ISO8601BufferSize];
+        const auto size = ASWLog::Time::WriteISO8601(buffer, testCase.Time);
+
+        // Assert: the string forms are the same text
+        CheckEquals(testCase.Expected, std::string(buffer, size), testCase.What);
+        CheckEquals(testCase.Expected, ASWLog::Time::ToISO8601String(testCase.Time), testCase.What + " (ToISO8601String)");
+        CheckEquals(testCase.Expected.substr(0, 10), ASWLog::Time::ToDateString(testCase.Time), testCase.What + " (ToDateString)");
+    }
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_Utils::Test_Time_WriteISO8601_LocalTimeWithEachPrecision()
+{
+    // Arrange: a winter noon UTC, with a fraction whose 7th digit only a clock finer than 1 us keeps
+    using namespace std::chrono_literals;
+    const auto time = std::chrono::sys_days{ 2026y / 1 / 15 } + 12h + std::chrono::duration_cast<std::chrono::system_clock::duration>(7000400ns);
+    const std::string nanosecondDigits = HasSubmicrosecondClock ? "007000400" : "007000000";
+
+    const auto write = [&](ASWLog::TimePrecision precision) {
+            char buffer[ASWLog::Time::ISO8601BufferSize];
+            return std::string(buffer, ASWLog::Time::WriteISO8601(buffer, time, ASWLog::TimeZone::Local, precision));
+        };
+
+    // Act & Assert
+    {
+        const TScopedTimeZone timeZone("EST5EDT");
+        CheckEquals(std::string("2026-01-15T07:00:00.007-05:00"), write(ASWLog::TimePrecision::Milliseconds), "Milliseconds should come before the offset");
+        CheckEquals(std::string("2026-01-15T07:00:00.007000-05:00"), write(ASWLog::TimePrecision::Microseconds), "Microseconds should come before the offset");
+        CheckEquals("2026-01-15T07:00:00." + nanosecondDigits + "-05:00", write(ASWLog::TimePrecision::Nanoseconds), "Nanoseconds should come before the offset");
+        CheckEquals(std::string("2026-01-15T07:00:00.007000-05:00"), ASWLog::Time::ToISO8601String(time, ASWLog::TimeZone::Local, ASWLog::TimePrecision::Microseconds), "ToISO8601String should pass the zone and precision on");
+    }
+    {
+        const TScopedTimeZone timeZone("IST-5:30");
+        CheckEquals("2026-01-15T17:30:00." + nanosecondDigits + "+05:30", write(ASWLog::TimePrecision::Nanoseconds), "A zone ahead of UTC should show a '+' offset with its minutes");
+    }
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_Utils::Test_Time_WriteISO8601_UTCWithEachPrecision()
+{
+    // Arrange: a fraction with a digit in each place, the 7th only kept by a clock finer than 1 us
+    using namespace std::chrono_literals;
+    const auto time = std::chrono::sys_days{ 2026y / 7 / 1 } + 12h + std::chrono::duration_cast<std::chrono::system_clock::duration>(123456700ns);
+
+    struct TCase
+    {
+        ASWLog::TimePrecision Precision;
+        std::string Expected;
+        std::string What;
+    };
+
+    const TCase cases[] = {
+        { ASWLog::TimePrecision::Milliseconds, "2026-07-01T12:00:00.123Z", "Milliseconds should show 3 digits" },
+        { ASWLog::TimePrecision::Microseconds, "2026-07-01T12:00:00.123456Z", "Microseconds should show 6 digits, cut off rather than rounded" },
+        { ASWLog::TimePrecision::Nanoseconds, HasSubmicrosecondClock ? "2026-07-01T12:00:00.123456700Z" : "2026-07-01T12:00:00.123456000Z",
+          "Nanoseconds should show 9 digits, as far as the clock holds them" },
+    };
+
+    for (const auto& testCase : cases)
+    {
+        // Act
+        char buffer[ASWLog::Time::ISO8601BufferSize];
+        const auto size = ASWLog::Time::WriteISO8601(buffer, time, ASWLog::TimeZone::UTC, testCase.Precision);
+
+        // Assert
+        CheckEquals(testCase.Expected, std::string(buffer, size), testCase.What);
+        CheckEquals(testCase.Expected, ASWLog::Time::ToISO8601String(time, ASWLog::TimeZone::UTC, testCase.Precision), testCase.What + " (ToISO8601String)");
     }
 }
 //---------------------------------------------------------------------------

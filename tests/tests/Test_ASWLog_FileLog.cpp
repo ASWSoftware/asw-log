@@ -57,6 +57,8 @@ limitations under the License.
 #include "ASWLog_FileLog.h"
 #include "ASWLog_Utils.h"
 //---------------------------------------------------------------------------
+#include "UT_Helper_DateTime.h"
+//---------------------------------------------------------------------------
 
 namespace ASWUnitTests
 {
@@ -126,6 +128,12 @@ class TFixedClockFileLog : public ASWLog::TASWFileLog
 {
 public:
     std::chrono::system_clock::time_point CurrentTime{};
+
+    // Finalized here, so the shutdown line still gets the fixed clock
+    ~TFixedClockFileLog() override
+    {
+        Finalize();
+    }
 
 protected:
     std::chrono::system_clock::time_point NowUTC() const noexcept override
@@ -354,8 +362,11 @@ TTest_ASWLog_FileLog::TTest_ASWLog_FileLog()
     RegisterTest(&TTest_ASWLog_FileLog::Test_ChildProcess_DoesNotInheritLogFile, "ChildProcess_DoesNotInheritLogFile");
     RegisterTest(&TTest_ASWLog_FileLog::Test_DailyRolling_KeepsExistingBackupForSameDate, "DailyRolling_KeepsExistingBackupForSameDate");
     RegisterTest(&TTest_ASWLog_FileLog::Test_DailyRolling_KeepsLeftoverLogFromSameDay, "DailyRolling_KeepsLeftoverLogFromSameDay");
+    RegisterTest(&TTest_ASWLog_FileLog::Test_DailyRolling_LocalZoneRollsAtLocalMidnight, "DailyRolling_LocalZoneRollsAtLocalMidnight");
     RegisterTest(&TTest_ASWLog_FileLog::Test_DailyRolling_NamesBackupForContentDate, "DailyRolling_NamesBackupForContentDate");
+    RegisterTest(&TTest_ASWLog_FileLog::Test_DailyRolling_ReconfiguredZoneRollsAtItsMidnight, "DailyRolling_ReconfiguredZoneRollsAtItsMidnight");
     RegisterTest(&TTest_ASWLog_FileLog::Test_DailyRolling_RotatesLeftoverLogFromEarlierDay, "DailyRolling_RotatesLeftoverLogFromEarlierDay");
+    RegisterTest(&TTest_ASWLog_FileLog::Test_DailyRolling_RotatesLeftoverLogFromEarlierLocalDay, "DailyRolling_RotatesLeftoverLogFromEarlierLocalDay");
     RegisterTest(&TTest_ASWLog_FileLog::Test_DailyRolling_SharedLogRollsOverOnce, "DailyRolling_SharedLogRollsOverOnce");
     RegisterTest(&TTest_ASWLog_FileLog::Test_DeleteOldLogs_AcceptsShortRelativeFolder, "DeleteOldLogs_AcceptsShortRelativeFolder");
     RegisterTest(&TTest_ASWLog_FileLog::Test_DeleteOldLogs_EmptyPatternDeletesNothing, "DeleteOldLogs_EmptyPatternDeletesNothing");
@@ -407,7 +418,9 @@ TTest_ASWLog_FileLog::TTest_ASWLog_FileLog()
     RegisterTest(&TTest_ASWLog_FileLog::Test_RetentionMaxAge_DefaultDisabledPreservesOldBackups, "RetentionMaxAge_DefaultDisabledPreservesOldBackups");
     RegisterTest(&TTest_ASWLog_FileLog::Test_RetentionMaxAge_DeletesExpiredBackupsAfterRotation, "RetentionMaxAge_DeletesExpiredBackupsAfterRotation");
     RegisterTest(&TTest_ASWLog_FileLog::Test_RotateLogFiles_KeepsEveryBackup, "RotateLogFiles_KeepsEveryBackup");
+    RegisterTest(&TTest_ASWLog_FileLog::Test_RotateLogFiles_NamesBackupInLocalTime, "RotateLogFiles_NamesBackupInLocalTime");
     RegisterTest(&TTest_ASWLog_FileLog::Test_SetEnabled_FalseStopsAutoOpenCloseLogging, "SetEnabled_FalseStopsAutoOpenCloseLogging");
+    RegisterTest(&TTest_ASWLog_FileLog::Test_ShutdownLine_TimeFollowsTimestampZone, "ShutdownLine_TimeFollowsTimestampZone");
     RegisterTest(&TTest_ASWLog_FileLog::Test_SizeRotation_AutoOpenCloseCountsOtherWriters, "SizeRotation_AutoOpenCloseCountsOtherWriters");
     RegisterTest(&TTest_ASWLog_FileLog::Test_SizeRotation_CountsExistingFileSize, "SizeRotation_CountsExistingFileSize");
     RegisterTest(&TTest_ASWLog_FileLog::Test_SizeRotation_RotatesWhenLimitReached, "SizeRotation_RotatesWhenLimitReached");
@@ -866,6 +879,42 @@ void TTest_ASWLog_FileLog::Test_DailyRolling_KeepsLeftoverLogFromSameDay()
     CheckContains(contents, "new_entry", "New entries should be appended to the log");
 }
 //---------------------------------------------------------------------------
+void TTest_ASWLog_FileLog::Test_DailyRolling_LocalZoneRollsAtLocalMidnight()
+{
+    // Arrange: US Eastern time, 5 hours behind UTC in January
+    using namespace std::chrono_literals;
+    const TScopedTimeZone timeZone("EST5EDT");
+    const auto logFile = TestTempDir / "local_rolling.log";
+    auto config = MakeRotationTestConfig(logFile);
+    config.File.EnableDailyRolling = true;
+    config.Line.TimestampZone = ASWLog::TimeZone::Local;
+
+    // Started after UTC midnight, when it is still the 15th in local time
+    const auto utcDay = std::chrono::sys_days{ 2026y / 1 / 16 };
+    TFixedClockFileLog logger;
+    logger.CurrentTime = utcDay + 1min;
+
+    // Act: log in the local evening, just before local midnight, then after it
+    const bool initialized = logger.Initialize(config);
+    logger.LogInfo("evening_entry");
+    logger.CurrentTime = utcDay + 4h + 59min;
+    logger.LogInfo("before_local_midnight");
+    logger.CurrentTime = utcDay + 5h + 1min;
+    logger.LogInfo("after_local_midnight");
+    logger.Close();
+
+    // Assert
+    const auto backupContents = ReadFileText(TestTempDir / "local_rolling.daily.2026-01-15.bak");
+    const auto currentContents = ReadFileText(logFile);
+    CheckTrue(initialized, "Initialize should succeed");
+    CheckFalse(std::filesystem::exists(TestTempDir / "local_rolling.daily.2026-01-16.bak"), "No backup should be named for the UTC date");
+    CheckContains(backupContents, "evening_entry", "The backup should be named for the local day its entries are from");
+    CheckContains(backupContents, "before_local_midnight", "The log should not roll over before local midnight");
+    CheckNotContains(backupContents, "after_local_midnight", "The backup should not contain entries from the new local day");
+    CheckContains(currentContents, "after_local_midnight", "The log should roll over at local midnight");
+    CheckNotContains(currentContents, "evening_entry", "The new local day's file should not contain the previous day's entries");
+}
+//---------------------------------------------------------------------------
 void TTest_ASWLog_FileLog::Test_DailyRolling_NamesBackupForContentDate()
 {
     // Arrange
@@ -894,6 +943,40 @@ void TTest_ASWLog_FileLog::Test_DailyRolling_NamesBackupForContentDate()
     CheckFalse(std::filesystem::exists(TestTempDir / "rolling.daily.2026-01-16.bak"), "The daily backup should not be named for the day that just started");
     CheckContains(currentContents, "day_two_entry", "The new day's entries should go to the reopened log file");
     CheckNotContains(currentContents, "day_one_entry", "The reopened log file should not contain the previous day's entries");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_FileLog::Test_DailyRolling_ReconfiguredZoneRollsAtItsMidnight()
+{
+    // Arrange: 01:00 UTC on the 16th is 20:00 on the 15th in US Eastern time
+    using namespace std::chrono_literals;
+    const TScopedTimeZone timeZone("EST5EDT");
+    const auto logFile = TestTempDir / "zone_change.log";
+    auto config = MakeRotationTestConfig(logFile);
+    config.File.EnableDailyRolling = true;
+
+    const auto utcDay = std::chrono::sys_days{ 2026y / 1 / 16 };
+    TFixedClockFileLog logger;
+    logger.CurrentTime = utcDay + 1h;
+
+    // Act: switch from UTC to local time, then log after local midnight
+    const bool initialized = logger.Initialize(config);
+    logger.LogInfo("before_switch");
+    config.Line.TimestampZone = ASWLog::TimeZone::Local;
+    const bool reconfigured = logger.Reconfigure(config);
+    logger.LogInfo("after_switch");
+    logger.CurrentTime = utcDay + 5h + 1min;
+    logger.LogInfo("after_local_midnight");
+    logger.Close();
+
+    // Assert
+    const auto backupContents = ReadFileText(TestTempDir / "zone_change.daily.2026-01-15.bak");
+    const auto currentContents = ReadFileText(logFile);
+    CheckTrue(initialized, "Initialize should succeed");
+    CheckTrue(reconfigured, "Reconfigure should succeed");
+    CheckContains(backupContents, "before_switch", "After the switch, the file's day should be the local date");
+    CheckContains(backupContents, "after_switch", "The switch itself should not roll the log over");
+    CheckContains(currentContents, "after_local_midnight", "The log should roll over at the new zone's midnight");
+    CheckNotContains(currentContents, "after_switch", "The new local day's file should not contain the previous day's entries");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_FileLog::Test_DailyRolling_RotatesLeftoverLogFromEarlierDay()
@@ -927,6 +1010,39 @@ void TTest_ASWLog_FileLog::Test_DailyRolling_RotatesLeftoverLogFromEarlierDay()
     CheckNotContains(backupContents, "today_entry", "The backup should not contain today's entries");
     CheckContains(currentContents, "today_entry", "Today's entries should go to a new log file");
     CheckNotContains(currentContents, "yesterday_entry", "The new log file should not contain the earlier day's entries");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_FileLog::Test_DailyRolling_RotatesLeftoverLogFromEarlierLocalDay()
+{
+    // Arrange: the logger starts at 00:10 on the 16th in US Eastern time (05:10 UTC); the log was last written 20 minutes
+    // earlier, on the 15th in local time but on the same UTC day
+    using namespace std::chrono_literals;
+    const TScopedTimeZone timeZone("EST5EDT");
+    const auto logFile = TestTempDir / "leftover_local.log";
+    {
+        std::ofstream leftoverStream(logFile);
+        leftoverStream << "local_yesterday_entry\n";
+    }
+
+    std::filesystem::last_write_time(logFile, std::chrono::file_clock::now() - 20min);
+
+    auto config = MakeRotationTestConfig(logFile);
+    config.File.EnableDailyRolling = true;
+    config.Line.TimestampZone = ASWLog::TimeZone::Local;
+
+    TFixedClockFileLog logger;
+    logger.CurrentTime = std::chrono::sys_days{ 2026y / 1 / 16 } + 5h + 10min;
+
+    // Act
+    const bool initialized = logger.Initialize(config);
+    logger.LogInfo("local_today_entry");
+    logger.Close();
+
+    // Assert
+    const auto backupContents = ReadFileText(TestTempDir / "leftover_local.daily.2026-01-15.bak");
+    CheckTrue(initialized, "Initialize should succeed");
+    CheckContains(backupContents, "local_yesterday_entry", "The leftover log should be rotated to a backup named for the local day it was written");
+    CheckNotContains(ReadFileText(logFile), "local_yesterday_entry", "The new log file should not contain the earlier local day's entries");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_FileLog::Test_DailyRolling_SharedLogRollsOverOnce()
@@ -1037,20 +1153,13 @@ void TTest_ASWLog_FileLog::Test_DeleteOldLogs_MatchesNonASCIIFileNames()
 
     const std::string utf8Pattern = "\xCE\xBB_*example.log"; // U+03BB in UTF-8, then "_*example.log"
     std::size_t deletedCount = 0;
-    bool threw = false;
 
     // Act
-    try
-    {
-        deletedCount = ASWLog::TASWFileLog::DeleteOldLogs(TestTempDir, utf8Pattern, std::chrono::hours(1));
-    }
-    catch (...)
-    {
-        threw = true;
-    }
+    CheckNoThrow([&] {
+            deletedCount = ASWLog::TASWFileLog::DeleteOldLogs(TestTempDir, utf8Pattern, std::chrono::hours(1));
+        }, "DeleteOldLogs should not throw for a file name the ANSI code page can't represent");
 
     // Assert
-    CheckFalse(threw, "DeleteOldLogs should not throw for a file name the ANSI code page can't represent");
     CheckEquals(1, deletedCount, "DeleteOldLogs should match UTF-8 patterns against UTF-8 file names");
     CheckFalse(std::filesystem::exists(oldFile), "The matching old file should be removed");
 }
@@ -1332,7 +1441,7 @@ void TTest_ASWLog_FileLog::Test_GetInstance_ReturnsSameInstance()
     auto& second = ASWLog::TASWFileLog::GetInstance();
 
     // Assert
-    CheckTrue(&first == &second, "GetInstance should return the same logger on every call");
+    CheckSame(&first, &second, "GetInstance should return the same logger on every call");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_FileLog::Test_InitializeAndLogInfo_WritesText()
@@ -1672,7 +1781,7 @@ void TTest_ASWLog_FileLog::Test_MultiThreadedStress_WritesAllMessagesToDisk()
 
     // Assert
     CheckTrue(initialized, "Initialize should succeed");
-    CheckTrue(!contents.empty(), "Stress log file should contain at least one entry");
+    CheckNotEmpty(contents, "Stress log file should contain at least one entry");
     for (const auto& message : expectedMessages)
     {
         CheckContains(contents, message,
@@ -1739,7 +1848,7 @@ void TTest_ASWLog_FileLog::Test_MultiThreadedStress_WritesAllMessagesToDisk_Open
 
     // Assert
     CheckTrue(initialized, "Initialize should succeed");
-    CheckTrue(!contents.empty(), "Stress log file should contain at least one entry");
+    CheckNotEmpty(contents, "Stress log file should contain at least one entry");
     for (const auto& message : expectedMessages)
     {
         CheckContains(contents, message,
@@ -1804,7 +1913,7 @@ void TTest_ASWLog_FileLog::Test_OnBackupCreated_LeavesARenamedBackupToTheApp()
     // Assert
     CheckTrue(initialized, "Initialize should succeed");
     CheckTrue(rotated, "RotateLogFiles should succeed");
-    CheckFalse(compressedPath.empty(), "OnBackupCreated should be called");
+    CheckNotEmpty(compressedPath, "OnBackupCreated should be called");
     CheckTrue(std::filesystem::exists(compressedPath), "The cleanup should leave a file renamed out of the backup form to the application");
 }
 //---------------------------------------------------------------------------
@@ -1929,22 +2038,15 @@ void TTest_ASWLog_FileLog::Test_OnBackupCreated_ThrowingCallbackStillCleansUp()
     logger.LogInfo("entry");
 
     // Act
-    bool threw = false;
     bool rotated = false;
-    try
-    {
-        rotated = logger.RotateLogFiles("manual");
-    }
-    catch (...)
-    {
-        threw = true;
-    }
+    CheckNoThrow([&] {
+            rotated = logger.RotateLogFiles("manual");
+        }, "An exception from OnBackupCreated should not escape");
     logger.LogInfo("after");
     logger.Close();
 
     // Assert
     CheckTrue(initialized, "Initialize should succeed");
-    CheckFalse(threw, "An exception from OnBackupCreated should not escape");
     CheckTrue(rotated, "RotateLogFiles should succeed");
     CheckFalse(backupPath.empty() || std::filesystem::exists(backupPath), "The cleanup should still run after the callback threw");
     CheckEquals(std::string(": after\n"), ReadFileText(logFile), "Logging should go on");
@@ -1980,13 +2082,13 @@ void TTest_ASWLog_FileLog::Test_OnError_ReportsFailedDelete()
 
     // Assert
     CheckTrue(initialized, "Initialize should succeed");
-    CheckTrue(otherHandle != nullptr, "The test should be able to hold the backup open");
+    CheckNotNull(otherHandle, "The test should be able to hold the backup open");
     CheckTrue(rotated, "The rotation itself should succeed");
     CheckEquals(1, reports.size(), "The backup that couldn't be deleted should be reported once");
     if (reports.empty())
         return;
 
-    CheckTrue(reports[0].Kind == ASWLog::ErrorKind::DeleteFailed, "The failure should be reported as DeleteFailed");
+    CheckEquals(ASWLog::ErrorKind::DeleteFailed, reports[0].Kind, "The failure should be reported as DeleteFailed");
     CheckTrue(reports[0].Path.filename() == heldBackup.filename(), "The report should name the backup");
     CheckTrue(static_cast<bool>(reports[0].Code), "The report should carry the operating system's error");
 #else
@@ -2016,7 +2118,7 @@ void TTest_ASWLog_FileLog::Test_OnError_ReportsFailedOpen()
     if (reports.empty())
         return;
 
-    CheckTrue(reports[0].Kind == ASWLog::ErrorKind::OpenFailed, "The failure should be reported as OpenFailed");
+    CheckEquals(ASWLog::ErrorKind::OpenFailed, reports[0].Kind, "The failure should be reported as OpenFailed");
     CheckTrue(reports[0].Path == config.File.ResolvePath().parent_path(), "The report should name the folder that couldn't be created");
     CheckTrue(static_cast<bool>(reports[0].Code), "The report should carry the operating system's error");
 }
@@ -2059,14 +2161,14 @@ void TTest_ASWLog_FileLog::Test_OnError_ReportsFailedRotationAndReopen()
     if (reports.size() != 3)
         return;
 
-    CheckTrue(reports[0].Kind == ASWLog::ErrorKind::RotationFailed, "The failed rename should be reported as RotationFailed");
+    CheckEquals(ASWLog::ErrorKind::RotationFailed, reports[0].Kind, "The failed rename should be reported as RotationFailed");
     CheckTrue(reports[0].Path == config.File.ResolvePath(), "The rotation report should name the log file");
     CheckTrue(static_cast<bool>(reports[0].Code), "The rotation report should carry the operating system's error");
-    CheckTrue(reports[1].Kind == ASWLog::ErrorKind::OpenFailed, "The failed reopen should be reported as OpenFailed");
+    CheckEquals(ASWLog::ErrorKind::OpenFailed, reports[1].Kind, "The failed reopen should be reported as OpenFailed");
     CheckTrue(reports[1].Path == config.File.ResolvePath(), "The open report should name the log file");
     CheckTrue(static_cast<bool>(reports[1].Code), "The open report should carry the operating system's error");
     CheckEquals(0, reports[1].SuppressedCount, "Nothing was left out before the first open report");
-    CheckTrue(reports[2].Kind == ASWLog::ErrorKind::OpenFailed, "The failed open after the interval should be reported");
+    CheckEquals(ASWLog::ErrorKind::OpenFailed, reports[2].Kind, "The failed open after the interval should be reported");
     CheckEquals(2, reports[2].SuppressedCount, "The report should count the failed opens left out");
 }
 //---------------------------------------------------------------------------
@@ -2103,7 +2205,7 @@ void TTest_ASWLog_FileLog::Test_OnError_ReportsFailedSync()
     CheckEquals(1, reports.size(), "The failed sync should be reported once");
     if (reports.size() == 1)
     {
-        CheckTrue(reports[0].Kind == ASWLog::ErrorKind::SyncFailed, "The report should be SyncFailed");
+        CheckEquals(ASWLog::ErrorKind::SyncFailed, reports[0].Kind, "The report should be SyncFailed");
         CheckTrue(reports[0].Path == config.File.ResolvePath(), "The report should name the log file");
         CheckTrue(static_cast<bool>(reports[0].Code), "The report should carry the operating system's error");
     }
@@ -2197,9 +2299,9 @@ void TTest_ASWLog_FileLog::Test_OnLogEntry_FiresForQualifyingLevelsOnly()
     CheckEquals(2, callbackMessages.size(), "OnLogEntry should only fire for entries at or above OnLogEntryMinimumLevel");
     if (callbackMessages.size() == 2)
     {
-        CheckEquals(static_cast<int32_t>(ASWLog::Level::Error), static_cast<int32_t>(callbackLevels[0]), "First callback should report the Error entry's level");
+        CheckEquals(ASWLog::Level::Error, callbackLevels[0], "First callback should report the Error entry's level");
         CheckContains(callbackMessages[0], "at_threshold", "Callback should receive the same formatted line written to disk");
-        CheckEquals(static_cast<int32_t>(ASWLog::Level::Critical), static_cast<int32_t>(callbackLevels[1]), "Second callback should report the Critical entry's level");
+        CheckEquals(ASWLog::Level::Critical, callbackLevels[1], "Second callback should report the Critical entry's level");
         CheckContains(callbackMessages[1], "above_threshold", "Callback should receive the same formatted line written to disk");
         CheckEquals(std::string("at_threshold"), callbackRecordMessages[0], "Callback should receive the entry's record, with the unformatted message");
         CheckTrue(callbackRecords[0].Timestamp != std::chrono::system_clock::time_point{}, "The callback's record should be stamped with its time");
@@ -2429,7 +2531,7 @@ void TTest_ASWLog_FileLog::Test_Periodic_ErrorHandlerCanCloseAndReopenOnTheThrea
     CheckTrue(wasReported, "The failed flush should be reported");
     if (wasReported)
     {
-        CheckEquals(static_cast<int>(ASWLog::ErrorKind::FlushFailed), static_cast<int>(reportedKind), "The report should be a FlushFailed");
+        CheckEquals(ASWLog::ErrorKind::FlushFailed, reportedKind, "The report should be a FlushFailed");
         CheckTrue(reportThreadId != std::this_thread::get_id(), "The flush thread should report its own failure");
         CheckTrue(closedInHandler, "Close should succeed from OnError on the flush thread");
         CheckTrue(reopenedInHandler, "Open should succeed from OnError on the flush thread");
@@ -2745,6 +2847,30 @@ void TTest_ASWLog_FileLog::Test_RotateLogFiles_KeepsEveryBackup()
     CheckContains(ReadFileText(logFile), "third_segment", "Entries after the last rotation should go to the reopened log file");
 }
 //---------------------------------------------------------------------------
+void TTest_ASWLog_FileLog::Test_RotateLogFiles_NamesBackupInLocalTime()
+{
+    // Arrange: 04:59:30.250 UTC on the 16th is 23:59:30.250 on the 15th in US Eastern time
+    using namespace std::chrono_literals;
+    const TScopedTimeZone timeZone("EST5EDT");
+    const auto logFile = TestTempDir / "rotate_local.log";
+    auto config = MakeRotationTestConfig(logFile);
+    config.Line.TimestampZone = ASWLog::TimeZone::Local;
+
+    TFixedClockFileLog logger;
+    logger.CurrentTime = std::chrono::sys_days{ 2026y / 1 / 16 } + 4h + 59min + 30s + 250ms;
+
+    // Act
+    const bool initialized = logger.Initialize(config);
+    logger.LogInfo("rotated_entry");
+    const bool rotated = logger.RotateLogFiles("manual");
+    logger.Close();
+
+    // Assert
+    CheckTrue(initialized, "Initialize should succeed");
+    CheckTrue(rotated, "RotateLogFiles should succeed");
+    CheckContains(ReadFileText(TestTempDir / "rotate_local.manual.2026-01-15_235930_250.bak"), "rotated_entry", "The backup should be named for the local time");
+}
+//---------------------------------------------------------------------------
 void TTest_ASWLog_FileLog::Test_SetEnabled_FalseStopsAutoOpenCloseLogging()
 {
     // Arrange: with File.AutoOpenClosePerWrite the file is only open while an entry is written
@@ -2773,6 +2899,30 @@ void TTest_ASWLog_FileLog::Test_SetEnabled_FalseStopsAutoOpenCloseLogging()
         "With File.AutoOpenClosePerWrite, an entry after Close() reopens the file (documented on IASWLog::Close())");
     CheckFalse(fileExistsWhileDisabled, "A disabled logger should not reopen (or recreate) its file, even for a forced entry");
     CheckEquals(std::string(": enabled_again\n"), ReadFileText(logFile), "Logging should resume once enabled again");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_FileLog::Test_ShutdownLine_TimeFollowsTimestampZone()
+{
+    // Arrange: 04:59:30.250 UTC on the 16th is 23:59:30.250 on the 15th in US Eastern time
+    using namespace std::chrono_literals;
+    const TScopedTimeZone timeZone("EST5EDT");
+    const auto logFile = TestTempDir / "shutdown_local.log";
+    auto config = MakeRotationTestConfig(logFile);
+    config.Line.TimestampZone = ASWLog::TimeZone::Local;
+    config.Line.TimestampPrecision = ASWLog::TimePrecision::Microseconds;
+    config.Shutdown.WriteLine = true;
+
+    // Act
+    bool initialized = false;
+    {
+        TFixedClockFileLog logger;
+        logger.CurrentTime = std::chrono::sys_days{ 2026y / 1 / 16 } + 4h + 59min + 30s + 250ms;
+        initialized = logger.Initialize(config);
+    }
+
+    // Assert
+    CheckTrue(initialized, "Initialize should succeed");
+    CheckContains(ReadFileText(logFile), ": Logger shutdown: 2026-01-15T23:59:30.250000-05:00\n", "The shutdown line's time should use the line's zone and precision");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_FileLog::Test_SizeRotation_AutoOpenCloseCountsOtherWriters()

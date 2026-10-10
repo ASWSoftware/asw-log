@@ -38,10 +38,31 @@ private:
 private: // Test methods
     void Test_Format_MatchesFormatLine();
     void Test_FormatLine_AllFieldsInOrder();
+    void Test_FormatLine_CategoryOnlyWhenSetAndShown();
+    void Test_FormatLine_EntryFieldsBeforeTheMessage();
+    void Test_FormatLine_LargestIdsAndEachLevel();
     void Test_FormatLine_MemoryFields();
     void Test_FormatLine_NoFields();
+    void Test_FormatLine_TimestampFollowsZoneAndPrecision();
+    void Test_Formatter_RawEntryLeavesOutTheFields();
     void Test_Formatter_ReceivesRecordFromLoggingThread();
     void Test_Formatter_SharedByTwoLoggers();
+    void Test_JSONFormatter_DefaultFields();
+    void Test_JSONFormatter_EachShowOption();
+    void Test_JSONFormatter_EntryFields();
+    void Test_JSONFormatter_EscapesTheTexts();
+    void Test_JSONFormatter_FileLoggerWritesJSONLines();
+    void Test_JSONFormatter_RawEntries();
+    void Test_JSONFormatter_TimeFollowsZoneAndPrecision();
+    void Test_PatternFormatter_AffixesOnlyAroundAValue();
+    void Test_PatternFormatter_BracesAndPlainText();
+    void Test_PatternFormatter_DefaultLayoutMatchesTextFormatter();
+    void Test_PatternFormatter_EachPlaceholder();
+    void Test_PatternFormatter_FieldsPlaceholder();
+    void Test_PatternFormatter_FileLoggerWritesItsLines();
+    void Test_PatternFormatter_InvalidPatternThrows();
+    void Test_PatternFormatter_MemoryFields();
+    void Test_PatternFormatter_WidthPadsShortValues();
 
 public:
     TTest_ASWLog_Formatter();

@@ -33,9 +33,11 @@ endif()
 add_executable(ASWLogTests
     ${ASWUNITTESTS_SOURCES}
     "${ASWLOG_TESTS_DIR}/Test_ASWLog_Base.cpp"
+    "${ASWLOG_TESTS_DIR}/Test_ASWLog_CategoryLog.cpp"
     "${ASWLOG_TESTS_DIR}/Test_ASWLog_Config.cpp"
     "${ASWLOG_TESTS_DIR}/Test_ASWLog_ConsoleLog.cpp"
     "${ASWLOG_TESTS_DIR}/Test_ASWLog_CrashHandler.cpp"
+    "${ASWLOG_TESTS_DIR}/Test_ASWLog_Fields.cpp"
     "${ASWLOG_TESTS_DIR}/Test_ASWLog_FileLog.cpp"
     "${ASWLOG_TESTS_DIR}/Test_ASWLog_Formatter.cpp"
     "${ASWLOG_TESTS_DIR}/Test_ASWLog_MultiLog.cpp"
@@ -43,6 +45,8 @@ add_executable(ASWLogTests
     "${ASWLOG_TESTS_DIR}/Test_ASWLog_Types.cpp"
     "${ASWLOG_TESTS_DIR}/Test_ASWLog_Utils.cpp"
     "${ASWLOG_TESTS_DIR}/Test_ASWLog_Version.cpp"
+    "${ASWLOG_TESTS_DIR}/UT_Helper_DateTime.cpp"
+    "${ASWLOG_TESTS_DIR}/UT_Helper_JSON.cpp"
 )
 
 target_include_directories(ASWLogTests PRIVATE

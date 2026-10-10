@@ -192,6 +192,10 @@
             <DependentOn>..\..\..\..\ASWLog\ASWLog_Base.h</DependentOn>
             <BuildOrder>2</BuildOrder>
         </CppCompile>
+        <CppCompile Include="..\..\..\..\ASWLog\ASWLog_CategoryLog.cpp">
+            <DependentOn>..\..\..\..\ASWLog\ASWLog_CategoryLog.h</DependentOn>
+            <BuildOrder>47</BuildOrder>
+        </CppCompile>
         <CppCompile Include="..\..\..\..\ASWLog\ASWLog_Config.cpp">
             <DependentOn>..\..\..\..\ASWLog\ASWLog_Config.h</DependentOn>
             <BuildOrder>3</BuildOrder>
@@ -203,6 +207,10 @@
         <CppCompile Include="..\..\..\..\ASWLog\ASWLog_CrashHandler.cpp">
             <DependentOn>..\..\..\..\ASWLog\ASWLog_CrashHandler.h</DependentOn>
             <BuildOrder>42</BuildOrder>
+        </CppCompile>
+        <CppCompile Include="..\..\..\..\ASWLog\ASWLog_Fields.cpp">
+            <DependentOn>..\..\..\..\ASWLog\ASWLog_Fields.h</DependentOn>
+            <BuildOrder>50</BuildOrder>
         </CppCompile>
         <CppCompile Include="..\..\..\..\ASWLog\ASWLog_FileLog.cpp">
             <DependentOn>..\..\..\..\ASWLog\ASWLog_FileLog.h</DependentOn>
@@ -240,6 +248,10 @@
             <DependentOn>..\..\..\tests\Test_ASWLog_Base.h</DependentOn>
             <BuildOrder>27</BuildOrder>
         </CppCompile>
+        <CppCompile Include="..\..\..\tests\Test_ASWLog_CategoryLog.cpp">
+            <DependentOn>..\..\..\tests\Test_ASWLog_CategoryLog.h</DependentOn>
+            <BuildOrder>48</BuildOrder>
+        </CppCompile>
         <CppCompile Include="..\..\..\tests\Test_ASWLog_Config.cpp">
             <DependentOn>..\..\..\tests\Test_ASWLog_Config.h</DependentOn>
             <BuildOrder>28</BuildOrder>
@@ -251,6 +263,10 @@
         <CppCompile Include="..\..\..\tests\Test_ASWLog_CrashHandler.cpp">
             <DependentOn>..\..\..\tests\Test_ASWLog_CrashHandler.h</DependentOn>
             <BuildOrder>43</BuildOrder>
+        </CppCompile>
+        <CppCompile Include="..\..\..\tests\Test_ASWLog_Fields.cpp">
+            <DependentOn>..\..\..\tests\Test_ASWLog_Fields.h</DependentOn>
+            <BuildOrder>51</BuildOrder>
         </CppCompile>
         <CppCompile Include="..\..\..\tests\Test_ASWLog_FileLog.cpp">
             <DependentOn>..\..\..\tests\Test_ASWLog_FileLog.h</DependentOn>
@@ -279,6 +295,14 @@
         <CppCompile Include="..\..\..\tests\Test_ASWLog_Version.cpp">
             <DependentOn>..\..\..\tests\Test_ASWLog_Version.h</DependentOn>
             <BuildOrder>39</BuildOrder>
+        </CppCompile>
+        <CppCompile Include="..\..\..\tests\UT_Helper_DateTime.cpp">
+            <DependentOn>..\..\..\tests\UT_Helper_DateTime.h</DependentOn>
+            <BuildOrder>44</BuildOrder>
+        </CppCompile>
+        <CppCompile Include="..\..\..\tests\UT_Helper_JSON.cpp">
+            <DependentOn>..\..\..\tests\UT_Helper_JSON.h</DependentOn>
+            <BuildOrder>49</BuildOrder>
         </CppCompile>
         <CppCompile Include="ASWLogTests_VCL_GUI.cpp">
             <BuildOrder>0</BuildOrder>
@@ -352,6 +376,14 @@
         <CppCompile Include="..\..\..\..\third_party\asw-unit-tests\vcl\gui\src\ASWUnitTests_GUI_Selection.cpp">
             <DependentOn>..\..\..\..\third_party\asw-unit-tests\vcl\gui\src\ASWUnitTests_GUI_Selection.h</DependentOn>
             <BuildOrder>41</BuildOrder>
+        </CppCompile>
+        <CppCompile Include="..\..\..\..\third_party\asw-unit-tests\vcl\gui\src\ASWUnitTests_GUI_Shuffle.cpp">
+            <DependentOn>..\..\..\..\third_party\asw-unit-tests\vcl\gui\src\ASWUnitTests_GUI_Shuffle.h</DependentOn>
+            <BuildOrder>45</BuildOrder>
+        </CppCompile>
+        <CppCompile Include="..\..\..\..\third_party\asw-unit-tests\vcl\gui\src\ASWUnitTests_GUI_ShuffleSeedDialog.cpp">
+            <DependentOn>..\..\..\..\third_party\asw-unit-tests\vcl\gui\src\ASWUnitTests_GUI_ShuffleSeedDialog.h</DependentOn>
+            <BuildOrder>46</BuildOrder>
         </CppCompile>
         <CppCompile Include="..\..\..\..\third_party\asw-unit-tests\vcl\gui\src\ASWUnitTests_GUI_Strings.cpp">
             <DependentOn>..\..\..\..\third_party\asw-unit-tests\vcl\gui\src\ASWUnitTests_GUI_Strings.h</DependentOn>

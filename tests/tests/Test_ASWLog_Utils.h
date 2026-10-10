@@ -36,6 +36,10 @@ private:
     typedef TTestGroupBase inherited;
 
 private: // Test methods
+    void Test_ApplyMultilineMode_EscapeWritesCRAndLFAsText();
+    void Test_ApplyMultilineMode_FindsLineBreaksAnywhereInALongText();
+    void Test_ApplyMultilineMode_IndentMarksEachLineAfterTheFirst();
+    void Test_ApplyMultilineMode_LeavesOtherLinesAsTheyAre();
     void Test_GenerateLogFileName_ContainsExpectedFields();
     void Test_GenerateLogFileName_PrefixAndPostfixAreOptional();
     void Test_GetCurrentOSProcessId_MatchesOS();
@@ -45,12 +49,20 @@ private: // Test methods
     void Test_GetWindowsEditionName_ProductTypes();
     void Test_IsRootFolder_DetectsRootFolders();
     void Test_IsRootFolder_ResolvesRelativePaths();
+    void Test_JSON_AppendString_EscapesQuotesBackslashAndControls();
+    void Test_JSON_AppendString_FindsSpecialCharactersAnywhereInALongText();
+    void Test_JSON_AppendString_KeepsValidUTF8();
+    void Test_JSON_AppendString_ReplacesInvalidUTF8();
     void Test_MatchesWildcard_Patterns();
     void Test_RenameWithoutReplacing_KeepsExistingTarget();
     void Test_Time_GetUTCOffsetMinutes_FollowsDaylightSavingTime();
     void Test_Time_ToDateString();
+    void Test_Time_ToDateString_FollowsZone();
     void Test_Time_ToISO8601String();
     void Test_Time_ToLocalISO8601String_IncludesOffset();
+    void Test_Time_WriteISO8601_CalendarEdges();
+    void Test_Time_WriteISO8601_LocalTimeWithEachPrecision();
+    void Test_Time_WriteISO8601_UTCWithEachPrecision();
 
 public:
     TTest_ASWLog_Utils();

@@ -1,5 +1,5 @@
 /* **************************************************************************
-Test_ASWLog_Types.h
+Test_ASWLog_Fields.h
 Author: Anthony S. West - ASW Software
 
 Copyright 2026 ASW Software
@@ -18,8 +18,8 @@ limitations under the License.
 
 ************************************************************************** */
 
-#ifndef Test_ASWLog_TypesH
-#define Test_ASWLog_TypesH
+#ifndef Test_ASWLog_FieldsH
+#define Test_ASWLog_FieldsH
 //---------------------------------------------------------------------------
 #include "ASWUnitTests_TestBase.h"
 //---------------------------------------------------------------------------
@@ -28,41 +28,31 @@ namespace ASWUnitTests
 {
 
 ///////////////////////////////////////////////////////////////////////////
-// TTest_ASWLog_Types
+// TTest_ASWLog_Fields
 ///////////////////////////////////////////////////////////////////////////
-class TTest_ASWLog_Types : public TTestGroupBase
+class TTest_ASWLog_Fields : public TTestGroupBase
 {
 private:
     typedef TTestGroupBase inherited;
 
 private: // Test methods
-    void Test_AsyncOverflowPolicy_FromString();
-    void Test_AsyncOverflowPolicy_ToString();
-    void Test_ColorMode_FromString();
-    void Test_ColorMode_ToString();
-    void Test_ErrorKind_ToString();
-    void Test_FlushMode_FromString();
-    void Test_FlushMode_ToString();
-    void Test_Level_FromString();
-    void Test_Level_ToString();
-    void Test_LineEnding_FromString();
-    void Test_LineEnding_ToString();
-    void Test_MultilineMode_FromString();
-    void Test_MultilineMode_ToString();
-    void Test_PendingEntry_ChangingFieldsWhileVisitingIsSafe();
-    void Test_PendingEntry_FindsFieldsOfTheEntryAndItsScopes();
-    void Test_PendingEntry_RemoveFieldRemovesItForThisEntry();
-    void Test_PendingEntry_SetFieldReplacesOrAddsACopy();
-    void Test_PendingEntry_SetMessageOwnsTheText();
-    void Test_LogError_ToString();
-    void Test_TimePrecision_FromString();
-    void Test_TimePrecision_ToString();
-    void Test_TimeZone_FromString();
-    void Test_TimeZone_ToString();
+    void Test_Async_OnLogEntryGetsTheFieldsAfterTheScopeEnds();
+    void Test_Backtrace_KeepsTheFieldsAfterTheScopeEnds();
+    void Test_Capture_TakesTheScopesToAnotherThread();
+    void Test_ForEachLogField_EachKeyOnceInnermostWins();
+    void Test_ForEachLogField_RepeatedKeysInTheEntrysOwnFields();
+    void Test_Log_CategoryAndMultiLogPassTheFieldsOn();
+    void Test_Log_EachOverloadPassesItsFields();
+    void Test_Log_ScopeFieldsComeBeforeTheEntrysOwn();
+    void Test_Scope_CopiesTemporaryTexts();
+    void Test_Scope_IsPerThread();
+    void Test_Scope_NestsAndRestoresTheCurrentScope();
+    void Test_Value_KindsFromEachType();
+    void Test_Value_RejectsCharactersEnumsAndPointers();
 
 public:
-    TTest_ASWLog_Types();
-    ~TTest_ASWLog_Types() override;
+    TTest_ASWLog_Fields();
+    ~TTest_ASWLog_Fields() override;
 
     void SetUp_Group() override;
     void SetUp_Test(ITestCase& testCase) override;
@@ -73,4 +63,4 @@ public:
 } // ASWUnitTests
 
 //---------------------------------------------------------------------------
-#endif // #ifndef Test_ASWLog_TypesH
+#endif // #ifndef Test_ASWLog_FieldsH

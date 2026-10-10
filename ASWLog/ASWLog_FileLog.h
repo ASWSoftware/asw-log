@@ -181,9 +181,10 @@ public:
     TASWFileLog() = default;
     ~TASWFileLog();
 
-    // Renames the log file to "<stem>.<reasonTag>.<YYYY-MM-DD_HHMMSS_mmm>.bak" (UTC), adding "_1", "_2", ... to the
-    // time if that name is taken, so an existing backup is never replaced. Then reopens the log if it was open. A
-    // 'reasonTag' that contains '.' makes a backup that TASWFileConfig's backup cleanup doesn't recognize, so it is kept.
+    // Renames the log file to "<stem>.<reasonTag>.<YYYY-MM-DD_HHMMSS_mmm>.bak" (the time in Line.TimestampZone, UTC by
+    // default), adding "_1", "_2", ... to the time if that name is taken, so an existing backup is never replaced. Then
+    // reopens the log if it was open. A 'reasonTag' that contains '.' makes a backup that TASWFileConfig's backup
+    // cleanup doesn't recognize, so it is kept.
     bool RotateLogFiles(std::string_view reasonTag = "manual");
 };
 

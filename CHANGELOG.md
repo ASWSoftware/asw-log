@@ -10,6 +10,147 @@ see [0.26.1](#0261---2026-09-17) for the initial versioned baseline.
 
 ## [Unreleased]
 
+### Added
+
+- Local-time and finer timestamps: `Line.TimestampZone` (`TimeZone::UTC`,
+  the default, or `TimeZone::Local`) and `Line.TimestampPrecision`
+  (`TimePrecision::Milliseconds`, the default, `Microseconds` or
+  `Nanoseconds`), e.g. `2026-09-28T16:02:44.342519-05:00` for local time
+  with microseconds. The digits past the system clock's resolution are 0
+  (100 ns with MSVC and MinGW, 1 us with RAD Studio's libc++). The zone also
+  decides when daily rolling starts a new file (local midnight with
+  `Local`), the time in backup names, and the time in the "Logger shutdown"
+  line; a `Reconfigure()` that changes it rolls over next at the new zone's
+  midnight. The fixed-layout crash line (in a POSIX signal handler, or when
+  the logger's lock stays busy) stays UTC with milliseconds. Local time
+  costs a `localtime_s`/`localtime_r` call per line. `Time::WriteISO8601()`
+  and `Time::ToISO8601String()` take the zone and precision too, and
+  `Time::ToDateString()` the zone.
+- Categories with their own levels: `TASWCategoryLog` (new
+  `ASWLog_CategoryLog.h`) wraps any logger, e.g.
+  `static ASWLog::TASWCategoryLog NetLog("Net", ASWLog::TASWFileLog::GetInstance());`,
+  and passes its entries on with the category's name, which the built-in
+  layout shows after the level (`[2026-10-08T14:31:00.217Z][DEBUG][Net]...`;
+  hide it with the new `Line.ShowCategory`). Entries without a category
+  are written as before. A category follows the wrapped logger's minimum
+  level until `SetMinimumLevel()` gives it one of its own, which then
+  replaces the wrapped logger's for that category's entries, both ways: with
+  the file logger at Info, a `Net` category at Debug writes its Debug
+  entries and a `Db` category at Warn skips its Info entries (the backtrace
+  still keeps them; behind a multi-log, each logger still applies its own
+  level). `ResetMinimumLevel()` makes it follow again, and
+  `SetEnabled(false)` silences only that category. A category wrapping
+  another one is named after both, e.g. `Net.Http`, and inherits its level.
+  `GetConfig()`, `Flush()`, `IsOpen()` and `DumpBacktrace()` pass on to the
+  wrapped logger; `Initialize()`, `Reconfigure()`, `Open()` and `Close()` do
+  nothing and return false. `TASWLogRecord` gains `Category` and
+  `CategoryLevel`, which `OnLogEntry` and custom formatters see, and the
+  fixed-layout crash and backtrace lines show the category too. Breaking
+  for a class that implements `IASWLog` directly: it must now implement
+  `ShouldLog(const TASWLogRecord&)` (classes derived from `TASWLogBase` get
+  it), which tells a category whether an entry with its level would be
+  written. `TASWLogRecord`'s `Raw` and `Forced` now come right after
+  `LogLevel`, so designated initializers must follow the new order.
+- Line patterns: `TASWPatternFormatter` writes each line from a pattern,
+  e.g. `config.Line.Formatter = std::make_shared<const ASWLog::TASWPatternFormatter>("{time} {level:5} {[category] }{message}");`
+  for `2026-10-08T14:31:00.217Z DEBUG [Net] connected`. The placeholders are
+  `{time}` (in `Line.TimestampZone` and `Line.TimestampPrecision`),
+  `{level}`, `{category}`, `{pid}`, `{tid}`, `{ws}`, `{pws}`, `{function}`,
+  `{file}` (the name without folders), `{line}` and `{message}`; `{{` and
+  `}}` write a brace. `{level:5}` pads a field to a minimum width. Text
+  inside the braces around the name is written only when the field isn't
+  empty: punctuation and spaces as they are (`{[category] }`), anything else
+  in single quotes, with `''` for a quote (`{'cat=' category ' '}`). The
+  pattern is parsed once, when the formatter is made, and an invalid one
+  throws `std::invalid_argument` naming the problem and where it is. The
+  `Line.Show*` options don't apply to a pattern, and the logger still adds
+  `Line.Ending` after each line.
+- JSON Lines output: `TASWJSONFormatter` writes each entry as a JSON object
+  on one line, e.g.
+  `config.Line.Formatter = std::make_shared<const ASWLog::TASWJSONFormatter>();`
+  for
+  `{"time":"2026-10-08T14:31:00.217Z","epoch_ms":1791469860217,"level":"DEBUG","category":"Net","pid":4120,"tid":7788,"message":"connected"}`.
+  It writes the fields that the `Line.Show*` options turn on, in the
+  built-in layout's order: `time` (in `Line.TimestampZone` and
+  `Line.TimestampPrecision`) with `epoch_ms` (whole milliseconds since 1970
+  UTC), `level`, `category`, `pid`, `tid`, `ws`, `pws`, `function`, `file`
+  and `line`, then always `message`. Texts are escaped as RFC 8259 asks,
+  and invalid UTF-8 is replaced with U+FFFD, so a multi-line message stays
+  on its line. A `LogRaw()` entry gets an object of its own with
+  `"raw":true` instead of being written as is, and the startup, shutdown
+  and crash lines are objects too, including the fixed-layout crash line
+  (in a POSIX signal handler, or when the logger's lock stays busy). A
+  custom formatter can format raw entries too by overriding the new
+  `IASWLogFormatter::FormatsRawEntries()` (false by default), and
+  `JSON::AppendString()` writes a text as an escaped JSON string.
+- Structured fields and scoped context (new `ASWLog_Fields.h`; add
+  `ASWLog_Fields.cpp` to projects that list the ASWLog sources). Every
+  logging method has an overload that takes fields for that entry, e.g.
+  `logger.LogInfo("Order placed", {{"orderId", 17}, {"total", 9.99}})`,
+  and every `*Fmt` method one with the fields first, e.g.
+  `logger.LogInfoFmt({{"orderId", id}}, "Order {} placed", id)`. A value
+  is a signed or unsigned integer, a double, a bool or text, viewed rather
+  than copied, so the call doesn't allocate; characters, enums and
+  pointers other than to text are rejected at compile time. A
+  `TASWLogScope`, e.g. `ASWLog::TASWLogScope scope{{"requestId", id}};`,
+  adds its fields to every entry the thread logs while it exists, also in
+  the functions it calls; scopes nest, and each key is written once, the
+  entry's own value winning over a scope's and an inner scope's over an
+  outer one's. Scopes stay on their thread: `TASWLogScope::Capture()`
+  copies the current ones into a `TASWLogContext`, and
+  `TASWLogScope scope(context);` applies it on another thread, e.g. in a
+  thread pool. The built-in layout writes the fields before the message,
+  `[requestId="8f3a" orderId=17 total=9.99]: Order placed`, text always
+  in quotes and escaped (hide them with the new `Line.ShowFields`); the
+  pattern formatter has `{fields}`, and the JSON formatter writes a
+  `"fields"` object (a NaN or infinite double as the string `"NaN"`,
+  `"Infinity"` or `"-Infinity"`). A `LogRaw()` entry is still written as
+  is by the text layouts. The backtrace, an asynchronous logger's
+  `OnLogEntry` and the fixed-layout crash lines keep the fields, and the
+  crash line gets the crashing thread's scope fields. `TASWLogRecord`
+  gains `Fields` and `Scope` (both pointers, so a filtered call costs no
+  more), read with `ForEachField()`.
+- Multi-line message handling: `Line.Multiline` (`MultilineMode::Preserve`,
+  the default, writes line breaks as they are, as before). With
+  `MultilineMode::Indent`, each `\n` or `\r\n` in a formatted line is
+  written as the line ending followed by `    | ` (`    |` for an empty
+  line), so every line after an entry's first is marked as part of it and
+  can't pass for an entry of its own; a lone `\r` stays as it is. With
+  `MultilineMode::Escape`, each CR and LF is written as the two characters
+  `\r` and `\n` (other characters, backslashes included, as they are), so
+  every entry is one line. It applies to the line of any formatter,
+  including your own (a JSON line has no line breaks), and to the
+  fixed-layout crash and backtrace lines; `LogRaw()` entries written as is
+  stay as they are.
+- A hook to drop or change entries before they are written:
+  `OnBeforeWrite`, e.g. to redact secrets or personal data, or to drop
+  noisy entries by content, category or field. It gets a `TASWPendingEntry`
+  for each entry that passes the level checks (`LogRaw()` entries
+  included): return false to drop it, or change it with `SetMessage()`,
+  `SetField()` and `RemoveField()` (read with `GetRecord()`, `FindField()`
+  and `ForEachField()`); level, time and category stay as they are. It runs
+  on the logging thread before the logger's lock or queue, so it may log
+  elsewhere; an entry logged from inside it is written as is. Entries the
+  backtrace keeps are kept as changed, `OnLogEntry` sees the changed entry,
+  and a hook that throws drops the entry and reports it (`OnError`). The
+  logger's own lines (startup, shutdown, backtrace markers, crash lines)
+  don't pass through it. A multi-log runs its hook once per entry and
+  passes its config on without it.
+
+### Changed
+
+- Writing a formatted line is much faster: the built-in layout now writes
+  the timestamp, level, process and thread ids and memory fields itself
+  instead of through `std::format`, which took most of a line's time. A
+  `LogInfo` line to a file with `FlushMode::Manual` takes about 0.4 us
+  instead of 1.0 us (MinGW and RAD Studio, Windows); the output is
+  unchanged. `Time::ToISO8601String()` and `Time::ToDateString()` (which
+  daily rolling calls for each entry) use the same code, and the new
+  `Time::WriteISO8601()` writes the timestamp into a buffer of
+  `Time::ISO8601BufferSize` characters without allocating, e.g. for a
+  custom formatter. A time before 1970 is now written as the day and
+  millisecond it falls in, instead of a malformed time.
+
 ## [0.75.0] - 2026-10-06
 
 ### Added

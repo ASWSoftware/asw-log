@@ -32,6 +32,7 @@ limitations under the License.
 #include <initializer_list>
 #include <iterator>
 #include <memory>
+#include <optional>
 #include <source_location>
 #include <stdexcept>
 #include <string>
@@ -305,11 +306,17 @@ TTest_ASWLog_Base::TTest_ASWLog_Base()
     RegisterTest(&TTest_ASWLog_Base::Test_LogFormatMethods_SkipFormattingWhenNotWritten, "LogFormatMethods_SkipFormattingWhenNotWritten");
     RegisterTest(&TTest_ASWLog_Base::Test_LogLevelConvenienceMethods, "LogLevelConvenienceMethods");
     RegisterTest(&TTest_ASWLog_Base::Test_LogMethods_PassRecordsToWrite, "LogMethods_PassRecordsToWrite");
+    RegisterTest(&TTest_ASWLog_Base::Test_OnBeforeWrite_DropsOrChangesEntries, "OnBeforeWrite_DropsOrChangesEntries");
+    RegisterTest(&TTest_ASWLog_Base::Test_OnBeforeWrite_EntriesLoggedInsideTheHookAreWrittenAsIs, "OnBeforeWrite_EntriesLoggedInsideTheHookAreWrittenAsIs");
+    RegisterTest(&TTest_ASWLog_Base::Test_OnBeforeWrite_ReconfigureSetsAndClearsTheHook, "OnBeforeWrite_ReconfigureSetsAndClearsTheHook");
+    RegisterTest(&TTest_ASWLog_Base::Test_OnBeforeWrite_SeesEntriesThatPassTheLevelChecks, "OnBeforeWrite_SeesEntriesThatPassTheLevelChecks");
+    RegisterTest(&TTest_ASWLog_Base::Test_OnBeforeWrite_ThrowingHookDropsTheEntryAndReports, "OnBeforeWrite_ThrowingHookDropsTheEntryAndReports");
     RegisterTest(&TTest_ASWLog_Base::Test_ReportError_FailureInHandlerIsNotReportedAgain, "ReportError_FailureInHandlerIsNotReportedAgain");
     RegisterTest(&TTest_ASWLog_Base::Test_ReportError_ThrottlesEachKindSeparately, "ReportError_ThrottlesEachKindSeparately");
     RegisterTest(&TTest_ASWLog_Base::Test_ReportError_ThrowingHandlerDoesNotEscape, "ReportError_ThrowingHandlerDoesNotEscape");
     RegisterTest(&TTest_ASWLog_Base::Test_ReportError_WritesToStdErrWithoutHandler, "ReportError_WritesToStdErrWithoutHandler");
     RegisterTest(&TTest_ASWLog_Base::Test_SetGetMinimumLevel_RoundTrips, "SetGetMinimumLevel_RoundTrips");
+    RegisterTest(&TTest_ASWLog_Base::Test_ShouldLog_RecordFollowsWritesChecks, "ShouldLog_RecordFollowsWritesChecks");
     RegisterTest(&TTest_ASWLog_Base::Test_ShouldLog_ReflectsEnabledAndLevel, "ShouldLog_ReflectsEnabledAndLevel");
     RegisterTest(&TTest_ASWLog_Base::Test_Write_AppliesEnabledOffAndLevelChecks, "Write_AppliesEnabledOffAndLevelChecks");
     RegisterTest(&TTest_ASWLog_Base::Test_Write_KeepsFieldsAlreadyStamped, "Write_KeepsFieldsAlreadyStamped");
@@ -453,7 +460,7 @@ void TTest_ASWLog_Base::Test_Backtrace_MinimumLevelChangesKeepTheBacktrace()
     // Assert
     CheckTrue(shouldLogTraceAtWarn, "The backtrace should still keep Trace with a minimum level of Warn");
     CheckFalse(shouldLogTraceAtOff, "A minimum level of Off should keep nothing");
-    CheckEquals(static_cast<int>(ASWLog::Level::Info), static_cast<int>(logger.GetMinimumLevel()),
+    CheckEquals(ASWLog::Level::Info, logger.GetMinimumLevel(),
         "GetMinimumLevel() should return the level set");
     const std::vector<std::string> expected{ "INFO|Backtrace: the last 1 entry below the minimum level|forced", "INFO|info_kept|forced",
                                              "INFO|Backtrace end|forced" };
@@ -656,27 +663,20 @@ void TTest_ASWLog_Base::Test_LogFormatMethods_LogErrorInsteadOfThrowing()
     std::string wrongArgumentCountMessage;
     std::string stdExceptionMessage;
     std::string otherExceptionMessage;
-    bool threw = false;
 
     // Act
-    try
-    {
-        logger.LogInfoFmt(ASWLog::RuntimeFormat("bad {} {}"), 1); // A literal would fail to compile
-        wrongArgumentCountMessage = logger.LastMessage;
+    CheckNoThrow([&] {
+            logger.LogInfoFmt(ASWLog::RuntimeFormat("bad {} {}"), 1); // A literal would fail to compile
+            wrongArgumentCountMessage = logger.LastMessage;
 
-        logger.LogErrorFmt("value {}", TThrowingValue{ true });
-        stdExceptionMessage = logger.LastMessage;
+            logger.LogErrorFmt("value {}", TThrowingValue{ true });
+            stdExceptionMessage = logger.LastMessage;
 
-        logger.LogForceFmt(ASWLog::Level::Warn, "value {}", TThrowingValue{ false });
-        otherExceptionMessage = logger.LastMessage;
-    }
-    catch (...)
-    {
-        threw = true;
-    }
+            logger.LogForceFmt(ASWLog::Level::Warn, "value {}", TThrowingValue{ false });
+            otherExceptionMessage = logger.LastMessage;
+        }, "A *Fmt call should not throw when formatting fails");
 
     // Assert
-    CheckFalse(threw, "A *Fmt call should not throw when formatting fails");
     CheckStartsWith(wrongArgumentCountMessage, "[ASWLog format error: ", "A format string that doesn't match its arguments should log the error: " + wrongArgumentCountMessage);
     CheckEndsWith(wrongArgumentCountMessage, "] bad {} {}", "The logged error should end with the format string: " + wrongArgumentCountMessage);
     CheckEquals(std::string("[ASWLog format error: formatter failed] value {}"), stdExceptionMessage, "A std::exception from a formatter should be logged with its message");
@@ -777,7 +777,7 @@ void TTest_ASWLog_Base::Test_LogFormatMethods_SkipFormattingWhenNotWritten()
     logger.LogForceFmt(ASWLog::Level::Critical, "{}", TCountedValue{});
     logger.LogForceRawFmt(ASWLog::Level::Critical, "{}", TCountedValue{});
     CheckEquals(3, CountedValueFormatCount, "Nothing should be formatted while the logger is disabled, not even forced entries");
-    CheckTrue(logger.LastMessage.empty(), "Nothing should reach the logger while it is disabled");
+    CheckEmpty(logger.LastMessage, "Nothing should reach the logger while it is disabled");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_Base::Test_LogLevelConvenienceMethods()
@@ -790,42 +790,42 @@ void TTest_ASWLog_Base::Test_LogLevelConvenienceMethods()
     logger.LogTrace("trace");
 
     // Assert
-    CheckEquals(static_cast<int32_t>(ASWLog::Level::Trace), static_cast<int32_t>(logger.LastLevel), "LogTrace should set Trace level");
+    CheckEquals(ASWLog::Level::Trace, logger.LastLevel, "LogTrace should set Trace level");
     CheckEquals(std::string("trace"), logger.LastMessage, "LogTrace should store the message");
 
     // Act
     logger.LogDebug("debug");
 
     // Assert
-    CheckEquals(static_cast<int32_t>(ASWLog::Level::Debug), static_cast<int32_t>(logger.LastLevel), "LogDebug should set Debug level");
+    CheckEquals(ASWLog::Level::Debug, logger.LastLevel, "LogDebug should set Debug level");
     CheckEquals(std::string("debug"), logger.LastMessage, "LogDebug should store the message");
 
     // Act
     logger.LogInfo("info");
 
     // Assert
-    CheckEquals(static_cast<int32_t>(ASWLog::Level::Info), static_cast<int32_t>(logger.LastLevel), "LogInfo should set Info level");
+    CheckEquals(ASWLog::Level::Info, logger.LastLevel, "LogInfo should set Info level");
     CheckEquals(std::string("info"), logger.LastMessage, "LogInfo should store the message");
 
     // Act
     logger.LogWarn("warn");
 
     // Assert
-    CheckEquals(static_cast<int32_t>(ASWLog::Level::Warn), static_cast<int32_t>(logger.LastLevel), "LogWarn should set Warn level");
+    CheckEquals(ASWLog::Level::Warn, logger.LastLevel, "LogWarn should set Warn level");
     CheckEquals(std::string("warn"), logger.LastMessage, "LogWarn should store the message");
 
     // Act
     logger.LogError("error");
 
     // Assert
-    CheckEquals(static_cast<int32_t>(ASWLog::Level::Error), static_cast<int32_t>(logger.LastLevel), "LogError should set Error level");
+    CheckEquals(ASWLog::Level::Error, logger.LastLevel, "LogError should set Error level");
     CheckEquals(std::string("error"), logger.LastMessage, "LogError should store the message");
 
     // Act
     logger.LogCritical("critical");
 
     // Assert
-    CheckEquals(static_cast<int32_t>(ASWLog::Level::Critical), static_cast<int32_t>(logger.LastLevel), "LogCritical should set Critical level");
+    CheckEquals(ASWLog::Level::Critical, logger.LastLevel, "LogCritical should set Critical level");
     CheckEquals(std::string("critical"), logger.LastMessage, "LogCritical should store the message");
 }
 //---------------------------------------------------------------------------
@@ -840,7 +840,7 @@ void TTest_ASWLog_Base::Test_LogMethods_PassRecordsToWrite()
                                  std::source_location loc = std::source_location::current())
         {
             const auto& record = logger.LastRecord;
-            CheckEquals(static_cast<int32_t>(expectedLevel), static_cast<int32_t>(record.LogLevel), method + " should pass its level", loc);
+            CheckEquals(expectedLevel, record.LogLevel, method + " should pass its level", loc);
             CheckEquals(expectedMessage, std::string(record.Message), method + " should pass its message", loc);
             CheckEquals(expectedLine, record.Location.line(), method + " should pass the caller's line", loc);
             CheckEquals(expectedRaw, record.Raw, method + " should set Raw correctly", loc);
@@ -885,6 +885,174 @@ void TTest_ASWLog_Base::Test_LogMethods_PassRecordsToWrite()
     checkRecord(line, "LogForceRawFmt", ASWLog::Level::Info, "force raw 3", true, true);
 
     CheckEquals(9, logger.WriteRecordCount, "Each call should pass exactly one record to WriteRecord()");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_Base::Test_OnBeforeWrite_DropsOrChangesEntries()
+{
+    // Arrange: a hook that drops noisy entries and redacts secrets, raw ones included
+    TTestLogger logger;
+    std::vector<std::string> seen;
+    ASWLog::TASWLogConfig config;
+    config.OnBeforeWrite = [&seen](ASWLog::TASWPendingEntry& entry) {
+            const auto& record = entry.GetRecord();
+            seen.push_back(std::format("{}|{}{}", ASWLog::Level_ToString(record.LogLevel), record.Message, record.Raw ? "|raw" : ""));
+            if (record.Message.starts_with("noisy"))
+                return false;
+
+            const auto secretAt = record.Message.find("secret");
+            if (secretAt != std::string_view::npos)
+            {
+                std::string redacted(record.Message);
+                entry.SetMessage(redacted.replace(secretAt, 6, "***"));
+            }
+
+            return true;
+        };
+    logger.Initialize(config);
+
+    // Act
+    logger.LogInfo("first");
+    logger.LogWarn("noisy entry");
+    logger.LogError("password=secret");
+    logger.LogRaw(ASWLog::Level::Info, "raw secret body\n");
+    logger.LogForceRaw(ASWLog::Level::Debug, "noisy raw");
+
+    // Assert
+    const std::vector<std::string> expectedSeen{ "INFO|first", "WARN|noisy entry", "ERROR|password=secret",
+                                                 "INFO|raw secret body\n|raw", "DEBUG|noisy raw|raw" };
+    const std::vector<std::string> expectedWritten{ "INFO|first", "ERROR|password=***", "INFO|raw *** body\n" };
+    CheckTrue(seen == expectedSeen, "The hook should see every entry, raw ones flagged");
+    CheckTrue(logger.Written == expectedWritten, "Dropped entries should be left out and changed ones written as changed");
+    CheckTrue(logger.LastRecord.Raw, "A changed raw entry should stay raw");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_Base::Test_OnBeforeWrite_EntriesLoggedInsideTheHookAreWrittenAsIs()
+{
+    // Arrange: a hook that logs to its own logger and to another one that has a hook
+    TTestLogger logger;
+    TTestLogger other;
+    int hookCount = 0;
+    int otherHookCount = 0;
+    ASWLog::TASWLogConfig config;
+    config.OnBeforeWrite = [&](ASWLog::TASWPendingEntry& entry) {
+            ++hookCount;
+            if (entry.GetRecord().Message == "outer")
+            {
+                logger.LogInfo("inner");
+                other.LogInfo("to_other");
+            }
+
+            entry.SetMessage(std::format("changed_{}", entry.GetRecord().Message));
+            return true;
+        };
+    ASWLog::TASWLogConfig otherConfig;
+    otherConfig.OnBeforeWrite = [&otherHookCount](ASWLog::TASWPendingEntry& entry) {
+            ++otherHookCount;
+            entry.SetMessage(std::format("other_{}", entry.GetRecord().Message));
+            return true;
+        };
+    logger.Initialize(config);
+    other.Initialize(otherConfig);
+
+    // Act
+    logger.LogInfo("outer");
+    logger.LogInfo("next");
+    other.LogInfo("after");
+
+    // Assert
+    CheckTrue(logger.Written == std::vector<std::string>{ "INFO|inner", "INFO|changed_outer", "INFO|changed_next" },
+        "An entry logged inside the hook should be written as is, and the hook should run again afterwards");
+    CheckTrue(other.Written == std::vector<std::string>{ "INFO|to_other", "INFO|other_after" },
+        "Another logger's hook should be skipped inside a hook, and run again afterwards");
+    CheckEquals(2, hookCount, "The hook should run once for each of its logger's entries logged outside it");
+    CheckEquals(1, otherHookCount, "The other hook should run only for the entry logged outside a hook");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_Base::Test_OnBeforeWrite_ReconfigureSetsAndClearsTheHook()
+{
+    // Arrange
+    TTestLogger logger;
+    ASWLog::TASWLogConfig config;
+    logger.Initialize(config);
+    auto dropAllConfig = config;
+    dropAllConfig.OnBeforeWrite = [](ASWLog::TASWPendingEntry& /*entry*/) {
+            return false;
+        };
+
+    // Act
+    logger.LogInfo("before");
+    const bool setHook = logger.Reconfigure(dropAllConfig);
+    logger.LogInfo("dropped");
+    const bool clearedHook = logger.Reconfigure(config);
+    logger.LogInfo("after");
+
+    // Assert
+    CheckTrue(setHook && clearedHook, "Reconfigure should succeed");
+    CheckTrue(logger.Written == std::vector<std::string>{ "INFO|before", "INFO|after" },
+        "The hook should apply from the Reconfigure() that sets it until the one that clears it");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_Base::Test_OnBeforeWrite_SeesEntriesThatPassTheLevelChecks()
+{
+    // Arrange: a backtrace of Debug entries; the hook marks what it sees and drops one Debug entry
+    TTestLogger logger;
+    std::vector<std::string> seen;
+    auto config = MakeBacktraceConfig(5);
+    config.OnBeforeWrite = [&seen](ASWLog::TASWPendingEntry& entry) {
+            seen.emplace_back(entry.GetRecord().Message);
+            if (entry.GetRecord().Message == "dropped_debug")
+                return false;
+
+            entry.SetMessage(std::format("h:{}", entry.GetRecord().Message));
+            return true;
+        };
+    logger.Initialize(config);
+
+    // Act
+    logger.LogTrace("trace_1"); // Below the backtrace's level: filtered
+    logger.LogDebug("debug_1"); // Kept, as changed
+    logger.LogDebug("dropped_debug"); // Not kept
+    logger.LogInfo("info_1");
+    logger.LogError("error_1"); // Writes the backtrace, whose entries aren't hooked again
+    logger.SetEnabled(false);
+    logger.LogError("disabled");
+
+    // Assert
+    const std::vector<std::string> expectedWritten{ "INFO|h:info_1", "INFO|Backtrace: the last 1 entry below the minimum level|forced",
+                                                    "DEBUG|h:debug_1|forced", "INFO|Backtrace end|forced", "ERROR|h:error_1" };
+    CheckTrue(seen == std::vector<std::string>{ "debug_1", "dropped_debug", "info_1", "error_1" },
+        "The hook should see each entry that passes the level checks once, but not the backtrace's markers");
+    CheckTrue(logger.Written == expectedWritten, "The backtrace should keep the entries as the hook changed them");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_Base::Test_OnBeforeWrite_ThrowingHookDropsTheEntryAndReports()
+{
+    // Arrange
+    TTestLogger logger;
+    std::vector<ASWLog::TASWLogError> reports;
+    ASWLog::TASWLogConfig config;
+    config.ErrorReportInterval = std::chrono::milliseconds(0);
+    config.OnError = [&reports](const ASWLog::TASWLogError& error) {
+            reports.push_back(error);
+        };
+    config.OnBeforeWrite = [](ASWLog::TASWPendingEntry& entry) {
+            if (entry.GetRecord().Message == "bad")
+                throw std::runtime_error("boom");
+
+            return true;
+        };
+    logger.Initialize(config);
+
+    // Act
+    logger.LogError("bad");
+    logger.LogError("good");
+
+    // Assert
+    CheckTrue(logger.Written == std::vector<std::string>{ "ERROR|good" }, "Only the entry the hook didn't throw for should be written");
+    AssertEquals(std::size_t(1), reports.size(), "The dropped entry should be reported");
+    CheckEquals(ASWLog::ErrorKind::Exception, reports[0].Kind, "A throwing hook should be reported as an Exception");
+    CheckEquals(std::string("Dropped an entry, OnBeforeWrite threw: boom"), reports[0].Message,
+        "The report should name the hook and give the exception's what()");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_Base::Test_ReportError_FailureInHandlerIsNotReportedAgain()
@@ -970,21 +1138,14 @@ void TTest_ASWLog_Base::Test_ReportError_ThrowingHandlerDoesNotEscape()
         };
     logger.Initialize(config);
     logger.ThrowsOnWrite = true;
-    bool threw = false;
 
     // Act: ReportError() is noexcept, so an escaping exception would end the test run with std::terminate
-    try
-    {
-        logger.ReportTestError(ASWLog::ErrorKind::OpenFailed);
-        logger.LogError("dropped"); // Reported from TASWLogBase::Write()
-    }
-    catch (...)
-    {
-        threw = true;
-    }
+    CheckNoThrow([&] {
+            logger.ReportTestError(ASWLog::ErrorKind::OpenFailed);
+            logger.LogError("dropped"); // Reported from TASWLogBase::Write()
+        }, "An exception from OnError should not escape");
 
     // Assert
-    CheckFalse(threw, "An exception from OnError should not escape");
     CheckEquals(2, handlerCalls, "A handler that threw should still be called for the next failure");
 }
 //---------------------------------------------------------------------------
@@ -1038,13 +1199,57 @@ void TTest_ASWLog_Base::Test_SetGetMinimumLevel_RoundTrips()
     logger.Initialize(config);
 
     // Assert
-    CheckEquals(static_cast<int32_t>(ASWLog::Level::Warn), static_cast<int32_t>(logger.GetMinimumLevel()), "GetMinimumLevel should be seeded from the config's InitialMinimumLevel at Initialize() time");
+    CheckEquals(ASWLog::Level::Warn, logger.GetMinimumLevel(), "GetMinimumLevel should be seeded from the config's InitialMinimumLevel at Initialize() time");
 
     // Act
     logger.SetMinimumLevel(ASWLog::Level::Trace);
 
     // Assert
-    CheckEquals(static_cast<int32_t>(ASWLog::Level::Trace), static_cast<int32_t>(logger.GetMinimumLevel()), "SetMinimumLevel should update the value returned by GetMinimumLevel immediately");
+    CheckEquals(ASWLog::Level::Trace, logger.GetMinimumLevel(), "SetMinimumLevel should update the value returned by GetMinimumLevel immediately");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_Base::Test_ShouldLog_RecordFollowsWritesChecks()
+{
+    // Arrange: a logger at Warn keeping a backtrace from Debug, asked through the interface
+    TTestLogger testLogger;
+    ASWLog::TASWLogConfig config;
+    config.InitialMinimumLevel = ASWLog::Level::Warn;
+    config.Backtrace.Capacity = 5;
+    config.Backtrace.LowestLevel = ASWLog::Level::Debug;
+    testLogger.Initialize(config);
+    ASWLog::IASWLog& logger = testLogger;
+
+    const auto makeRecord = [](ASWLog::Level level, std::optional<ASWLog::Level> categoryLevel, bool forced) {
+            ASWLog::TASWLogRecord record;
+            record.LogLevel = level;
+            record.CategoryLevel = categoryLevel;
+            record.Forced = forced;
+            return record;
+        };
+
+    // Act
+    const bool info = logger.ShouldLog(makeRecord(ASWLog::Level::Info, std::nullopt, false));
+    const bool trace = logger.ShouldLog(makeRecord(ASWLog::Level::Trace, std::nullopt, false));
+    const bool forcedTrace = logger.ShouldLog(makeRecord(ASWLog::Level::Trace, std::nullopt, true));
+    const bool forcedOff = logger.ShouldLog(makeRecord(ASWLog::Level::Off, std::nullopt, true));
+    const bool traceAtTraceCategory = logger.ShouldLog(makeRecord(ASWLog::Level::Trace, ASWLog::Level::Trace, false));
+    const bool traceAtErrorCategory = logger.ShouldLog(makeRecord(ASWLog::Level::Trace, ASWLog::Level::Error, false));
+    const bool warnAtOffCategory = logger.ShouldLog(makeRecord(ASWLog::Level::Warn, ASWLog::Level::Off, false));
+
+    logger.SetEnabled(false);
+    const bool forcedWhileDisabled = logger.ShouldLog(makeRecord(ASWLog::Level::Error, std::nullopt, true));
+    const bool categoryWhileDisabled = logger.ShouldLog(makeRecord(ASWLog::Level::Error, ASWLog::Level::Trace, false));
+
+    // Assert
+    CheckTrue(info, "An entry the backtrace keeps should be used");
+    CheckFalse(trace, "An entry below the minimum and backtrace levels should not be used");
+    CheckTrue(forcedTrace, "A forced entry should be used whatever its level");
+    CheckFalse(forcedOff, "A forced entry at Off should not be used");
+    CheckTrue(traceAtTraceCategory, "A category's level should replace the minimum level");
+    CheckFalse(traceAtErrorCategory, "Below a category's level and the backtrace's, an entry should not be used");
+    CheckFalse(warnAtOffCategory, "A category at Off should let nothing in, not even for the backtrace");
+    CheckFalse(forcedWhileDisabled, "A disabled logger should use no entry, not even a forced one");
+    CheckFalse(categoryWhileDisabled, "A disabled logger should use no entry of a category");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_Base::Test_ShouldLog_ReflectsEnabledAndLevel()
@@ -1070,7 +1275,7 @@ void TTest_ASWLog_Base::Test_ShouldLog_ReflectsEnabledAndLevel()
 
     // Assert
     CheckTrue(enabledByDefault, "A logger should be enabled by default");
-    CheckTrue(logger.GetMinimumLevel() == ASWLog::Level::Off, "The minimum level should be readable through IASWLog");
+    CheckEquals(ASWLog::Level::Off, logger.GetMinimumLevel(), "The minimum level should be readable through IASWLog");
     CheckFalse(shouldLogInfo, "An entry below the minimum level should not be logged");
     CheckTrue(shouldLogWarn, "An entry at the minimum level should be logged");
     CheckFalse(shouldLogOff, "An entry at Off should never be logged");
@@ -1175,7 +1380,7 @@ void TTest_ASWLog_Base::Test_Write_ThrowingWriteRecordDropsEntry()
     if (reports.empty())
         return;
 
-    CheckTrue(reports[0].Kind == ASWLog::ErrorKind::Exception, "A dropped entry should be reported as an Exception");
+    CheckEquals(ASWLog::ErrorKind::Exception, reports[0].Kind, "A dropped entry should be reported as an Exception");
     CheckEquals(std::string("Dropped an entry: write failed"), reports[0].Message, "The report should give the exception's what()");
 }
 //---------------------------------------------------------------------------
