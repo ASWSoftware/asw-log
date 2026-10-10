@@ -130,6 +130,7 @@ TTest_ASWLog_Utils::TTest_ASWLog_Utils()
     RegisterTest(&TTest_ASWLog_Utils::Test_Time_WriteISO8601_CalendarEdges, "Time_WriteISO8601_CalendarEdges");
     RegisterTest(&TTest_ASWLog_Utils::Test_Time_WriteISO8601_LocalTimeWithEachPrecision, "Time_WriteISO8601_LocalTimeWithEachPrecision");
     RegisterTest(&TTest_ASWLog_Utils::Test_Time_WriteISO8601_UTCWithEachPrecision, "Time_WriteISO8601_UTCWithEachPrecision");
+    RegisterTest(&TTest_ASWLog_Utils::Test_UTF8ToWideString_ConvertsToUTF16, "UTF8ToWideString_ConvertsToUTF16");
 }
 //---------------------------------------------------------------------------
 TTest_ASWLog_Utils::~TTest_ASWLog_Utils()
@@ -816,6 +817,29 @@ void TTest_ASWLog_Utils::Test_Time_WriteISO8601_UTCWithEachPrecision()
         CheckEquals(testCase.Expected, std::string(buffer, size), testCase.What);
         CheckEquals(testCase.Expected, ASWLog::Time::ToISO8601String(time, ASWLog::TimeZone::UTC, testCase.Precision), testCase.What + " (ToISO8601String)");
     }
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_Utils::Test_UTF8ToWideString_ConvertsToUTF16()
+{
+#if defined(_WIN32)
+    // Arrange: ASCII, a 2-byte and a 4-byte character (a surrogate pair in UTF-16), and an invalid byte
+    struct TCase
+    {
+        std::string Text;
+        std::wstring Expected;
+    };
+
+    const std::vector<TCase> cases{
+        { "", L"" }, { "plain text\n", L"plain text\n" }, { "a\xCE\xBB" "b", L"a\x03BB" L"b" },
+        { "\xF0\x9F\x98\x80", L"\xD83D\xDE00" }, { "x\xFFy", L"x\xFFFDy" }
+    };
+
+    // Act & Assert
+    for (const auto& item : cases)
+        CheckTrue(ASWLog::Detail::UTF8ToWideString(item.Text) == item.Expected, "UTF-8 should become UTF-16: " + ToHex(item.Text));
+#else
+    Skip("UTF8ToWideString() exists only on Windows");
+#endif
 }
 //---------------------------------------------------------------------------
 

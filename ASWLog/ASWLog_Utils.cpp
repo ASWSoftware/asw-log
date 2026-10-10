@@ -29,6 +29,7 @@ limitations under the License.
 #include <cerrno>
 #include <charconv>
 #include <chrono>
+#include <climits>
 #include <cstring>
 #include <ctime>
 #include <filesystem>
@@ -910,6 +911,25 @@ TMultilinePiece NextMultilinePiece(std::string_view text, std::size_t& index, Mu
 
     return TMultilinePiece{ isNextLineEmpty ? indented.substr(0, indented.size() - 1) : indented, true };
 }
+
+#if defined(_WIN32)
+//---------------------------------------------------------------------------
+std::wstring UTF8ToWideString(std::string_view text)
+{
+    // MultiByteToWideChar takes an int length; a longer text is cut (no log line is that long)
+    const int size = text.size() > static_cast<std::size_t>(INT_MAX) ? INT_MAX : static_cast<int>(text.size());
+
+    // Without MB_ERR_INVALID_CHARS, invalid sequences become U+FFFD
+    const int wideSize = size > 0 ? MultiByteToWideChar(CP_UTF8, 0, text.data(), size, nullptr, 0) : 0;
+    if (wideSize <= 0)
+        return {};
+
+    std::wstring wide(static_cast<std::size_t>(wideSize), L'\0');
+    MultiByteToWideChar(CP_UTF8, 0, text.data(), size, wide.data(), wideSize);
+
+    return wide;
+}
+#endif
 
 } // namespace Detail
 

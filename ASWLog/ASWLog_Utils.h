@@ -184,6 +184,16 @@ void ApplyMultilineMode(std::string& line, MultilineMode mode, LineEnding ending
 [[nodiscard]] TMultilinePiece NextMultilinePiece(std::string_view text, std::size_t& index, MultilineMode mode,
     LineEnding ending) noexcept;
 
+#if defined(_WIN32)
+/*
+    UTF8ToWideString
+
+    'text' (UTF-8) as UTF-16, for the Windows API's wide functions. Each invalid UTF-8 sequence becomes U+FFFD. Throws
+    std::bad_alloc if the result can't be made.
+*/
+[[nodiscard]] std::wstring UTF8ToWideString(std::string_view text);
+#endif
+
 } // namespace Detail
 
 namespace JSON

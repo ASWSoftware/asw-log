@@ -208,6 +208,10 @@
             <DependentOn>..\..\..\..\ASWLog\ASWLog_CrashHandler.h</DependentOn>
             <BuildOrder>42</BuildOrder>
         </CppCompile>
+        <CppCompile Include="..\..\..\..\ASWLog\ASWLog_DebuggerLog.cpp">
+            <DependentOn>..\..\..\..\ASWLog\ASWLog_DebuggerLog.h</DependentOn>
+            <BuildOrder>56</BuildOrder>
+        </CppCompile>
         <CppCompile Include="..\..\..\..\ASWLog\ASWLog_Fields.cpp">
             <DependentOn>..\..\..\..\ASWLog\ASWLog_Fields.h</DependentOn>
             <BuildOrder>50</BuildOrder>
@@ -271,6 +275,10 @@
         <CppCompile Include="..\..\..\tests\Test_ASWLog_CrashHandler.cpp">
             <DependentOn>..\..\..\tests\Test_ASWLog_CrashHandler.h</DependentOn>
             <BuildOrder>43</BuildOrder>
+        </CppCompile>
+        <CppCompile Include="..\..\..\tests\Test_ASWLog_DebuggerLog.cpp">
+            <DependentOn>..\..\..\tests\Test_ASWLog_DebuggerLog.h</DependentOn>
+            <BuildOrder>57</BuildOrder>
         </CppCompile>
         <CppCompile Include="..\..\..\tests\Test_ASWLog_Fields.cpp">
             <DependentOn>..\..\..\tests\Test_ASWLog_Fields.h</DependentOn>

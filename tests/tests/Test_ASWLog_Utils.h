@@ -63,6 +63,7 @@ private: // Test methods
     void Test_Time_WriteISO8601_CalendarEdges();
     void Test_Time_WriteISO8601_LocalTimeWithEachPrecision();
     void Test_Time_WriteISO8601_UTCWithEachPrecision();
+    void Test_UTF8ToWideString_ConvertsToUTF16();
 
 public:
     TTest_ASWLog_Utils();

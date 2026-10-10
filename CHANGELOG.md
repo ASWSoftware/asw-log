@@ -154,6 +154,14 @@ see [0.26.1](#0261---2026-09-17) for the initial versioned baseline.
   (every kept line gets the next sequence number), with the number to ask
   for next and how many lines were missed, so a viewer can poll for new
   lines.
+- `TASWDebuggerLog` (new `ASWLog_DebuggerLog.h`): writes each line to the
+  debugger's output with `OutputDebugStringW` on Windows, shown in the RAD
+  Studio Event Log, Visual Studio's Output window and DebugView (even
+  without a debugger; each line then still costs some microseconds, so add
+  it where wanted, e.g. in debug builds). `TASWDebuggerLog::GetInstance()`
+  gives the shared one. Other platforms have no debugger output: there the
+  class builds but writes nothing (`ShouldLog()` is false and no line is
+  formatted), so the same code can add it everywhere.
 
 ### Changed
 

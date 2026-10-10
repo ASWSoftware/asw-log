@@ -48,6 +48,8 @@ ASWLog is a thread-safe light-weight C++ logging tool for Windows and Linux proj
   or drop noisy entries by content, category or field.
 - Structured fields per entry, e.g. `logger.LogInfo("Order placed", {{"orderId", 17}})`, and scoped context that every
   entry on the thread carries, e.g. `ASWLog::TASWLogScope scope{{"requestId", id}};` (`ASWLog_Fields.h`).
+- A debugger output logger (`ASWLog::TASWDebuggerLog`) for the RAD Studio Event Log, Visual Studio's Output window and
+  DebugView (Windows; it writes nothing elsewhere).
 - A memory logger (`ASWLog::TASWMemoryLog`) that keeps the newest lines, limited by count and size
   (`TASWLogConfig::Memory`), for an in-app log viewer (`GetLinesSince()` returns only the new ones), a crash report or
   tests.

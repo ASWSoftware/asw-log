@@ -155,6 +155,10 @@
             <DependentOn>..\..\ASWLog\ASWLog_CrashHandler.h</DependentOn>
             <BuildOrder>13</BuildOrder>
         </CppCompile>
+        <CppCompile Include="..\..\ASWLog\ASWLog_DebuggerLog.cpp">
+            <DependentOn>..\..\ASWLog\ASWLog_DebuggerLog.h</DependentOn>
+            <BuildOrder>18</BuildOrder>
+        </CppCompile>
         <CppCompile Include="..\..\ASWLog\ASWLog_Fields.cpp">
             <DependentOn>..\..\ASWLog\ASWLog_Fields.h</DependentOn>
             <BuildOrder>15</BuildOrder>
