@@ -33,6 +33,7 @@ limitations under the License.
 #include <windows.h>
 #endif
 //---------------------------------------------------------------------------
+#include "ASWLog_Unicode.h"
 #include "ASWLog_Utils.h"
 //---------------------------------------------------------------------------
 
@@ -106,7 +107,7 @@ bool ToSourceKey(std::string_view source, std::wstring& key)
     if (name.empty() || name.find('\\') != std::string::npos)
         return false;
 
-    key = std::wstring(ApplicationLogKey) + Detail::UTF8ToWideString(name);
+    key = std::wstring(ApplicationLogKey) + UTF8ToWide(name);
 
     return true;
 }
@@ -183,7 +184,7 @@ bool TASWWindowsEventLog::OpenEventSourceFromConfigUnlocked()
 bool TASWWindowsEventLog::OpenEventSourceUnlocked(const std::string& source)
 {
 #if defined(_WIN32)
-    const HANDLE eventSource = RegisterEventSourceW(nullptr, Detail::UTF8ToWideString(source).c_str());
+    const HANDLE eventSource = RegisterEventSourceW(nullptr, UTF8ToWide(source).c_str());
 
     if (eventSource == nullptr)
     {
@@ -269,7 +270,7 @@ void TASWWindowsEventLog::ReportEventUnlocked(EventType type, std::uint16_t even
     if (m_EventSource == nullptr)
         return;
 
-    const std::wstring text = Detail::UTF8ToWideString(message);
+    const std::wstring text = UTF8ToWide(message);
     const wchar_t* strings[] = { text.c_str() };
 
     if (!ReportEventW(static_cast<HANDLE>(m_EventSource), static_cast<WORD>(type), 0, eventId, nullptr, 1, 0, strings, nullptr))

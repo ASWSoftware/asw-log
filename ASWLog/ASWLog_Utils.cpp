@@ -49,6 +49,8 @@ limitations under the License.
 #include <unistd.h>
 #endif
 //---------------------------------------------------------------------------
+#include "ASWLog_Unicode.h"
+//---------------------------------------------------------------------------
 
 namespace ASWLog
 {
@@ -955,7 +957,7 @@ std::optional<std::string> ReadEnvironmentVariable(std::string_view name) noexce
     try
     {
 #if defined(_WIN32)
-        const auto wideName = UTF8ToWideString(name);
+        const auto wideName = UTF8ToWide(name);
 
         // The size the value needs, including its terminating null (1 for an empty value), or 0 if it isn't set
         DWORD size = GetEnvironmentVariableW(wideName.c_str(), nullptr, 0);
@@ -972,7 +974,7 @@ std::optional<std::string> ReadEnvironmentVariable(std::string_view name) noexce
             if (length < size)
             {
                 value.resize(length);
-                return WideStringToUTF8(value);
+                return WideToUTF8(value);
             }
 
             size = length; // Another thread made it longer meanwhile: the size it needs now
@@ -1004,42 +1006,6 @@ std::string_view TrimSpaces(std::string_view text) noexcept
 
     return text.substr(start, end - start + 1);
 }
-
-#if defined(_WIN32)
-//---------------------------------------------------------------------------
-std::wstring UTF8ToWideString(std::string_view text)
-{
-    // MultiByteToWideChar takes an int length; a longer text is cut (no log line is that long)
-    const int size = text.size() > static_cast<std::size_t>(INT_MAX) ? INT_MAX : static_cast<int>(text.size());
-
-    // Without MB_ERR_INVALID_CHARS, invalid sequences become U+FFFD
-    const int wideSize = size > 0 ? MultiByteToWideChar(CP_UTF8, 0, text.data(), size, nullptr, 0) : 0;
-    if (wideSize <= 0)
-        return {};
-
-    std::wstring wide(static_cast<std::size_t>(wideSize), L'\0');
-    MultiByteToWideChar(CP_UTF8, 0, text.data(), size, wide.data(), wideSize);
-
-    return wide;
-}
-
-//---------------------------------------------------------------------------
-std::string WideStringToUTF8(std::wstring_view text)
-{
-    // WideCharToMultiByte takes an int length; a longer text is cut
-    const int size = text.size() > static_cast<std::size_t>(INT_MAX) ? INT_MAX : static_cast<int>(text.size());
-
-    // Without WC_ERR_INVALID_CHARS, unpaired surrogates become U+FFFD
-    const int utf8Size = size > 0 ? WideCharToMultiByte(CP_UTF8, 0, text.data(), size, nullptr, 0, nullptr, nullptr) : 0;
-    if (utf8Size <= 0)
-        return {};
-
-    std::string utf8(static_cast<std::size_t>(utf8Size), '\0');
-    WideCharToMultiByte(CP_UTF8, 0, text.data(), size, utf8.data(), utf8Size, nullptr, nullptr);
-
-    return utf8;
-}
-#endif
 
 } // namespace Detail
 

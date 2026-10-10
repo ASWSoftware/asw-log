@@ -52,6 +52,8 @@ add_library(ASWLog STATIC
     ASWLog/ASWLog_TextLogBase.h
     ASWLog/ASWLog_Types.cpp
     ASWLog/ASWLog_Types.h
+    ASWLog/ASWLog_Unicode.cpp
+    ASWLog/ASWLog_Unicode.h
     ASWLog/ASWLog_Utils.cpp
     ASWLog/ASWLog_Utils.h
     ASWLog/ASWLog_Version.cpp

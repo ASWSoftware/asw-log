@@ -256,6 +256,10 @@
             <DependentOn>..\..\..\..\ASWLog\ASWLog_Types.h</DependentOn>
             <BuildOrder>8</BuildOrder>
         </CppCompile>
+        <CppCompile Include="..\..\..\..\ASWLog\ASWLog_Unicode.cpp">
+            <DependentOn>..\..\..\..\ASWLog\ASWLog_Unicode.h</DependentOn>
+            <BuildOrder>66</BuildOrder>
+        </CppCompile>
         <CppCompile Include="..\..\..\..\ASWLog\ASWLog_Utils.cpp">
             <DependentOn>..\..\..\..\ASWLog\ASWLog_Utils.h</DependentOn>
             <BuildOrder>9</BuildOrder>
@@ -331,6 +335,10 @@
         <CppCompile Include="..\..\..\tests\Test_ASWLog_Types.cpp">
             <DependentOn>..\..\..\tests\Test_ASWLog_Types.h</DependentOn>
             <BuildOrder>32</BuildOrder>
+        </CppCompile>
+        <CppCompile Include="..\..\..\tests\Test_ASWLog_Unicode.cpp">
+            <DependentOn>..\..\..\tests\Test_ASWLog_Unicode.h</DependentOn>
+            <BuildOrder>67</BuildOrder>
         </CppCompile>
         <CppCompile Include="..\..\..\tests\Test_ASWLog_Utils.cpp">
             <DependentOn>..\..\..\tests\Test_ASWLog_Utils.h</DependentOn>

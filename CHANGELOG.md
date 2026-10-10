@@ -226,6 +226,24 @@ see [0.26.1](#0261---2026-09-17) for the initial versioned baseline.
   the values are read as UTF-8 (paths included). Breaking only for code that
   lists every `ErrorKind` (e.g. a `switch`) or relies on `ErrorKindCount`
   being 9.
+- Wide-string logging (new `ASWLog_Unicode.h`; add `ASWLog_Unicode.cpp` to
+  projects that list the ASWLog sources). Every logging method also takes a
+  message of wide text, `wchar_t` (e.g. `L"Opened"`, a `std::wstring`, or
+  C++Builder's `UnicodeString::c_str()`) or `char16_t` (e.g. `u"Opened"`),
+  converted to UTF-8 only if the entry is used, so a filtered call converts
+  nothing; field keys and texts stay UTF-8. Every `*Fmt` method also takes a
+  `wchar_t` format string, checked at compile time like a narrow one, e.g.
+  `log.LogInfoFmt(L"Opened {} ({} bytes)", fileName, size);` (wrap a
+  run-time one in `RuntimeFormat()`); its arguments are formatted as wide
+  text, so pass UTF-8 text as `ASWLog::UTF8(text)` (a narrow `std::string`
+  doesn't compile there). In a narrow `*Fmt` call, `ASWLog::Wide(text)`
+  formats wide text, converted only if the entry is formatted, e.g.
+  `log.LogInfoFmt("Opened {}", ASWLog::Wide(fileName));`. `WideToUTF8()`
+  (from `std::wstring_view` or `std::u16string_view`), `UTF8ToWide()` and
+  `UTF8ToUTF16()` convert on any platform (`wchar_t` text is UTF-16 on
+  Windows and UTF-32 on Linux); invalid input becomes U+FFFD. `std::format`
+  has no `char16_t` format strings, so `char16_t` text goes in as a message
+  or through `Wide()`.
 
 ### Changed
 

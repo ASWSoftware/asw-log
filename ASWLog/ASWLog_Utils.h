@@ -216,24 +216,6 @@ void CutToFit(std::string& text, std::size_t maxBytes);
 */
 [[nodiscard]] std::string_view TrimSpaces(std::string_view text) noexcept;
 
-#if defined(_WIN32)
-/*
-    UTF8ToWideString
-
-    'text' (UTF-8) as UTF-16, for the Windows API's wide functions. Each invalid UTF-8 sequence becomes U+FFFD. Throws
-    std::bad_alloc if the result can't be made.
-*/
-[[nodiscard]] std::wstring UTF8ToWideString(std::string_view text);
-
-/*
-    WideStringToUTF8
-
-    'text' (UTF-16, from the Windows API's wide functions) as UTF-8. Each unpaired surrogate becomes U+FFFD. Throws
-    std::bad_alloc if the result can't be made.
-*/
-[[nodiscard]] std::string WideStringToUTF8(std::wstring_view text);
-#endif
-
 } // namespace Detail
 
 namespace JSON

@@ -132,6 +132,10 @@ call :CopyFile "ASWLog\ASWLog_Types.cpp" "%TARGET_DIR%\ASWLog\ASWLog_Types.cpp"
 if errorlevel 1 exit /b 1
 call :CopyFile "ASWLog\ASWLog_Types.h" "%TARGET_DIR%\ASWLog\ASWLog_Types.h"
 if errorlevel 1 exit /b 1
+call :CopyFile "ASWLog\ASWLog_Unicode.cpp" "%TARGET_DIR%\ASWLog\ASWLog_Unicode.cpp"
+if errorlevel 1 exit /b 1
+call :CopyFile "ASWLog\ASWLog_Unicode.h" "%TARGET_DIR%\ASWLog\ASWLog_Unicode.h"
+if errorlevel 1 exit /b 1
 call :CopyFile "ASWLog\ASWLog_Utils.cpp" "%TARGET_DIR%\ASWLog\ASWLog_Utils.cpp"
 if errorlevel 1 exit /b 1
 call :CopyFile "ASWLog\ASWLog_Utils.h" "%TARGET_DIR%\ASWLog\ASWLog_Utils.h"

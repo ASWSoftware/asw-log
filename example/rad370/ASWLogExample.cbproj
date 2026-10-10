@@ -203,6 +203,10 @@
             <DependentOn>..\..\ASWLog\ASWLog_Types.h</DependentOn>
             <BuildOrder>8</BuildOrder>
         </CppCompile>
+        <CppCompile Include="..\..\ASWLog\ASWLog_Unicode.cpp">
+            <DependentOn>..\..\ASWLog\ASWLog_Unicode.h</DependentOn>
+            <BuildOrder>22</BuildOrder>
+        </CppCompile>
         <CppCompile Include="..\..\ASWLog\ASWLog_Utils.cpp">
             <DependentOn>..\..\ASWLog\ASWLog_Utils.h</DependentOn>
             <BuildOrder>9</BuildOrder>

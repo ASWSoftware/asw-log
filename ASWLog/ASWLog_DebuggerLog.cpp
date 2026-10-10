@@ -33,6 +33,7 @@ limitations under the License.
 #endif
 //---------------------------------------------------------------------------
 #include "ASWLog_CrashHandler.h"
+#include "ASWLog_Unicode.h"
 #include "ASWLog_Utils.h"
 //---------------------------------------------------------------------------
 
@@ -143,7 +144,7 @@ void TASWDebuggerLog::WriteCrashLineDirect(std::string_view line) noexcept
 void TASWDebuggerLog::WriteLineUnlocked(Level /*level*/, std::string_view line, bool /*endsLine*/)
 {
 #if defined(_WIN32)
-    OutputDebugStringW(Detail::UTF8ToWideString(line).c_str());
+    OutputDebugStringW(UTF8ToWide(line).c_str());
 #else
     static_cast<void>(line);
 #endif
