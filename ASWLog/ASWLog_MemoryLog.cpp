@@ -29,46 +29,11 @@ limitations under the License.
 #include <mutex>
 #include <utility>
 //---------------------------------------------------------------------------
+#include "ASWLog_Utils.h"
+//---------------------------------------------------------------------------
 
 namespace ASWLog
 {
-
-namespace
-{
-
-// Ends a line cut to fit TASWMemoryConfig::MaxBytes
-constexpr std::string_view CutMarker = " [cut]";
-
-//---------------------------------------------------------------------------
-
-void CutToFit(std::string& text, std::size_t maxBytes);
-
-//---------------------------------------------------------------------------
-
-/*
-  CutToFit
-
-  Cuts 'text' to at most 'maxBytes' bytes, between UTF-8 characters, ending with CutMarker if that fits too
-*/
-void CutToFit(std::string& text, std::size_t maxBytes)
-{
-    if (text.size() <= maxBytes)
-        return;
-
-    const bool hasMarker = maxBytes >= CutMarker.size();
-    std::size_t keptSize = hasMarker ? maxBytes - CutMarker.size() : maxBytes;
-
-    // Back to the start of a UTF-8 character (a continuation byte is 10xxxxxx)
-    while (keptSize > 0 && (static_cast<unsigned char>(text[keptSize]) & 0xC0) == 0x80)
-        --keptSize;
-
-    text.resize(keptSize);
-
-    if (hasMarker)
-        text.append(CutMarker);
-}
-
-} // namespace
 
 //---------------------------------------------------------------------------
 
@@ -209,7 +174,7 @@ void TASWMemoryLog::WriteLineUnlocked(Level /*level*/, std::string_view line, bo
     std::lock_guard<std::mutex> lock(m_LinesMutex);
 
     if (m_MaxBytes > 0)
-        CutToFit(text, m_MaxBytes);
+        Detail::CutToFit(text, m_MaxBytes);
 
     const std::size_t size = text.size();
     m_Lines.push_back(std::move(text));

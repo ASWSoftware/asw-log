@@ -260,6 +260,10 @@
             <DependentOn>..\..\..\..\ASWLog\ASWLog_Version.h</DependentOn>
             <BuildOrder>38</BuildOrder>
         </CppCompile>
+        <CppCompile Include="..\..\..\..\ASWLog\ASWLog_WindowsEventLog.cpp">
+            <DependentOn>..\..\..\..\ASWLog\ASWLog_WindowsEventLog.h</DependentOn>
+            <BuildOrder>60</BuildOrder>
+        </CppCompile>
         <CppCompile Include="..\..\..\tests\Test_ASWLog_Base.cpp">
             <DependentOn>..\..\..\tests\Test_ASWLog_Base.h</DependentOn>
             <BuildOrder>27</BuildOrder>
@@ -327,6 +331,10 @@
         <CppCompile Include="..\..\..\tests\Test_ASWLog_Version.cpp">
             <DependentOn>..\..\..\tests\Test_ASWLog_Version.h</DependentOn>
             <BuildOrder>39</BuildOrder>
+        </CppCompile>
+        <CppCompile Include="..\..\..\tests\Test_ASWLog_WindowsEventLog.cpp">
+            <DependentOn>..\..\..\tests\Test_ASWLog_WindowsEventLog.h</DependentOn>
+            <BuildOrder>61</BuildOrder>
         </CppCompile>
         <CppCompile Include="..\..\..\tests\UT_Helper_DateTime.cpp">
             <DependentOn>..\..\..\tests\UT_Helper_DateTime.h</DependentOn>

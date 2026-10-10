@@ -164,6 +164,14 @@ struct TMultilinePiece
 void ApplyMultilineMode(std::string& line, MultilineMode mode, LineEnding ending);
 
 /*
+    CutToFit
+
+    Cuts 'text' to at most 'maxBytes' bytes, between UTF-8 characters, ending with " [cut]" if that fits too. Leaves a
+    text that fits as it is.
+*/
+void CutToFit(std::string& text, std::size_t maxBytes);
+
+/*
     NextJSONPiece
 
     The next piece of 'text', from 'index' on, as JSON::AppendString() writes it between the quotes, and moves 'index'

@@ -129,7 +129,8 @@ enum class ColorMode
 */
 enum class ErrorKind
 {
-    // The log file couldn't be opened (or its folder created), so entries are dropped until it can be.
+    // The log file couldn't be opened (or its folder created), or another output (e.g. a Windows Event Log source), so
+    // entries are dropped until it can be.
     OpenFailed,
 
     // An entry couldn't be written to the output (e.g. the disk is full).

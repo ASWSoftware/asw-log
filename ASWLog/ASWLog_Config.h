@@ -29,6 +29,7 @@ limitations under the License.
 #ifndef ASWLog_ConfigH
 #define ASWLog_ConfigH
 //---------------------------------------------------------------------------
+#include <array>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
@@ -108,6 +109,21 @@ struct TASWBackupInfo
     std::filesystem::path LogPath; // The log file that was rotated
     std::filesystem::path BackupPath; // What it was renamed to: "<stem>.<reason>.<time>.bak"
     std::string Reason; // "size", "daily", or the reason tag given to TASWFileLog::RotateLogFiles()
+};
+
+
+/////////////////////////////////////////////////////////////////////////////
+// TASWEventLogConfig
+//
+// How a TASWWindowsEventLog reports its entries to the Windows Event Log (TASWLogConfig::EventLog).
+/////////////////////////////////////////////////////////////////////////////
+struct TASWEventLogConfig
+{
+    // The event source Event Viewer shows, in the Application log. Empty: the executable's file name without its
+    // extension. Register it once to get plain messages (see TASWWindowsEventLog::RegisterSource()).
+    std::string Source;
+    // The event ID of each level's entries, indexed by Level (Trace first): by default 1000 to 1005, Critical 1005
+    std::array<std::uint16_t, LevelCount> EventIds{ 1000, 1001, 1002, 1003, 1004, 1005 };
 };
 
 
@@ -331,6 +347,7 @@ struct TASWLogConfig
     TASWBacktraceConfig Backtrace;
     TASWMemoryConfig Memory;
     TASWSyslogConfig Syslog;
+    TASWEventLogConfig EventLog;
 
     // --- Pre-write Hook ---
     // A last chance for the application to drop or change each of its entries before the logger writes it, e.g. to

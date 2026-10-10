@@ -54,6 +54,8 @@ add_library(ASWLog STATIC
     ASWLog/ASWLog_Utils.h
     ASWLog/ASWLog_Version.cpp
     ASWLog/ASWLog_Version.h
+    ASWLog/ASWLog_WindowsEventLog.cpp
+    ASWLog/ASWLog_WindowsEventLog.h
 )
 add_library(ASWLog::ASWLog ALIAS ASWLog)
 
@@ -63,8 +65,9 @@ set_target_properties(ASWLog PROPERTIES CXX_EXTENSIONS OFF)
 target_include_directories(ASWLog PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/ASWLog")
 
 if(WIN32)
-    # ASWLog_Utils.cpp uses the process memory APIs from psapi.
-    target_link_libraries(ASWLog PRIVATE psapi)
+    # ASWLog_Utils.cpp uses the process memory APIs from psapi, and ASWLog_WindowsEventLog.cpp the Event Log and
+    # registry APIs from advapi32.
+    target_link_libraries(ASWLog PRIVATE psapi advapi32)
 endif()
 
 # TASWTextLogBase runs a std::thread (e.g. for FlushMode::Periodic). Public, since the thread is part of the class

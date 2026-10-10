@@ -222,6 +222,10 @@
             <DependentOn>..\..\ASWLog\ASWLog_Version.h</DependentOn>
             <BuildOrder>30</BuildOrder>
         </CppCompile>
+        <CppCompile Include="..\..\ASWLog\ASWLog_WindowsEventLog.cpp">
+            <DependentOn>..\..\ASWLog\ASWLog_WindowsEventLog.h</DependentOn>
+            <BuildOrder>49</BuildOrder>
+        </CppCompile>
         <PCHCompile Include="ASWLogTestsPCH1.h">
             <BuildOrder>0</BuildOrder>
             <PCH>true</PCH>
@@ -293,6 +297,10 @@
         <CppCompile Include="..\tests\Test_ASWLog_Version.cpp">
             <DependentOn>..\tests\Test_ASWLog_Version.h</DependentOn>
             <BuildOrder>31</BuildOrder>
+        </CppCompile>
+        <CppCompile Include="..\tests\Test_ASWLog_WindowsEventLog.cpp">
+            <DependentOn>..\tests\Test_ASWLog_WindowsEventLog.h</DependentOn>
+            <BuildOrder>50</BuildOrder>
         </CppCompile>
         <CppCompile Include="..\tests\UT_Helper_DateTime.cpp">
             <DependentOn>..\tests\UT_Helper_DateTime.h</DependentOn>

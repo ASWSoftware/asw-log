@@ -207,6 +207,10 @@
             <DependentOn>..\..\ASWLog\ASWLog_Version.h</DependentOn>
             <BuildOrder>12</BuildOrder>
         </CppCompile>
+        <CppCompile Include="..\..\ASWLog\ASWLog_WindowsEventLog.cpp">
+            <DependentOn>..\..\ASWLog\ASWLog_WindowsEventLog.h</DependentOn>
+            <BuildOrder>20</BuildOrder>
+        </CppCompile>
         <PCHCompile Include="ASWLogExamplePCH1.h">
             <BuildOrder>0</BuildOrder>
             <PCH>true</PCH>

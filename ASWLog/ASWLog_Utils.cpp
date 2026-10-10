@@ -625,6 +625,9 @@ namespace Detail
 namespace
 {
 
+// Ends a text CutToFit() cut
+constexpr std::string_view CutMarker = " [cut]";
+
 // The line breaks MultilineMode::Escape writes
 constexpr std::string_view EscapedCR = "\\r";
 constexpr std::string_view EscapedLF = "\\n";
@@ -777,6 +780,25 @@ void ApplyMultilineMode(std::string& line, MultilineMode mode, LineEnding ending
         rewritten.append(NextMultilinePiece(line, index, mode, ending).Text);
 
     line = std::move(rewritten);
+}
+
+//---------------------------------------------------------------------------
+void CutToFit(std::string& text, std::size_t maxBytes)
+{
+    if (text.size() <= maxBytes)
+        return;
+
+    const bool hasMarker = maxBytes >= CutMarker.size();
+    std::size_t keptSize = hasMarker ? maxBytes - CutMarker.size() : maxBytes;
+
+    // Back to the start of a UTF-8 character (a continuation byte is 10xxxxxx)
+    while (keptSize > 0 && (static_cast<unsigned char>(text[keptSize]) & 0xC0) == 0x80)
+        --keptSize;
+
+    text.resize(keptSize);
+
+    if (hasMarker)
+        text.append(CutMarker);
 }
 
 //---------------------------------------------------------------------------

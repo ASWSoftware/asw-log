@@ -175,6 +175,21 @@ see [0.26.1](#0261---2026-09-17) for the initial versioned baseline.
   `TASWSyslogLog::GetInstance()` gives the shared one. Windows has no
   syslog: there the class builds but writes nothing (`ShouldLog()` is false
   and no line is formatted).
+- `TASWWindowsEventLog` (new `ASWLog_WindowsEventLog.h`): reports each line
+  to the Windows Event Log (Application log), without its line ending: Trace,
+  Debug and Info as Information events, Warn as Warning, Error and Critical
+  as Error. The new `TASWLogConfig::EventLog` group sets the event source
+  (`Source`, empty = the executable's file name without its extension) and
+  the event ID per level (`EventIds`, by default 1000 for Trace to 1005 for
+  Critical). A line longer than `TASWWindowsEventLog::MaxMessageSize`
+  (31,839 bytes) is cut to fit, ending with ` [cut]`. Each event takes
+  about a hundred microseconds, so it suits warnings and errors.
+  `TASWWindowsEventLog::RegisterSource()` and `UnregisterSource()` register
+  a source (administrator rights, e.g. in an installer) with the .NET
+  Framework's `EventLogMessages.dll`, so that Event Viewer shows the text
+  without "The description for Event ID ... cannot be found".
+  `TASWWindowsEventLog::GetInstance()` gives the shared one. Other platforms
+  have no Event Log: there the class builds but writes nothing.
 
 ### Changed
 

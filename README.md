@@ -57,6 +57,8 @@ ASWLog is a thread-safe light-weight C++ logging tool for Windows and Linux proj
   code under test.
 - A syslog logger (`ASWLog::TASWSyslogLog`) for the Linux system log and the systemd journal, with the level as the
   priority and the ident and facility in `TASWLogConfig::Syslog` (Linux; it writes nothing on Windows).
+- A Windows Event Log logger (`ASWLog::TASWWindowsEventLog`) for warnings and errors in Event Viewer, with an event ID
+  per level and a helper to register the event source (Windows; it writes nothing elsewhere).
 - Extensible: assign your own formatter (`IASWLogFormatter`) to `TASWLogConfig::Line.Formatter` for your own line layout,
   or derive a new text logger from `TASWTextLogBase` and implement only its output.
 
