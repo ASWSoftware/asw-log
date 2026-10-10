@@ -175,6 +175,10 @@
             <DependentOn>..\..\ASWLog\ASWLog_Interface.h</DependentOn>
             <BuildOrder>6</BuildOrder>
         </CppCompile>
+        <CppCompile Include="..\..\ASWLog\ASWLog_Limiter.cpp">
+            <DependentOn>..\..\ASWLog\ASWLog_Limiter.h</DependentOn>
+            <BuildOrder>21</BuildOrder>
+        </CppCompile>
         <CppCompile Include="..\..\ASWLog\ASWLog_MemoryLog.cpp">
             <DependentOn>..\..\ASWLog\ASWLog_MemoryLog.h</DependentOn>
             <BuildOrder>17</BuildOrder>

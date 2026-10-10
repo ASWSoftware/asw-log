@@ -190,6 +190,18 @@ see [0.26.1](#0261---2026-09-17) for the initial versioned baseline.
   without "The description for Event ID ... cannot be found".
   `TASWWindowsEventLog::GetInstance()` gives the shared one. Other platforms
   have no Event Log: there the class builds but writes nothing.
+- Rate-limited logging (new `ASWLog_Limiter.h`): `ASWLOG_ONCE(log, level,
+  ...)`, `ASWLOG_EVERY_N(log, n, level, ...)` and `ASWLOG_EVERY_INTERVAL(log,
+  interval, level, ...)` log only the first, every nth, or at most one entry
+  per interval at the place they are written, e.g.
+  `ASWLOG_EVERY_INTERVAL(log, std::chrono::seconds(5), ASWLog::Level::Warn,
+  "Retrying {}", host);`. The arguments after the level are those of
+  `LogFmt()` (format string, arguments, optional fields). Only entries the
+  logger would write count, and only those are formatted. After skipped calls,
+  `ASWLOG_EVERY_INTERVAL` adds a `suppressed` field with their number. The
+  macros keep a lock-free `TASWLogLimiter` (`Once()`, `EveryN()`,
+  `EveryInterval()`) in a static where they are written; the class can also be
+  used on its own.
 
 ### Changed
 
