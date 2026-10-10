@@ -1,6 +1,20 @@
 cmake_minimum_required(VERSION 3.20)
 
-project(ASWLog LANGUAGES CXX)
+# The version lives only in ASWLog/ASWLog_Version.h, so the project version comes from its ASWLOG_VERSION_MAJOR,
+# _MINOR, and _PATCH macros (a CMake version has no pre-release part).
+file(STRINGS "${CMAKE_CURRENT_SOURCE_DIR}/ASWLog/ASWLog_Version.h" ASWLOG_VERSION_DEFINES
+    REGEX "^#define ASWLOG_VERSION_(MAJOR|MINOR|PATCH) ")
+foreach(versionPart MAJOR MINOR PATCH)
+    if(NOT ASWLOG_VERSION_DEFINES MATCHES "#define ASWLOG_VERSION_${versionPart} ([0-9]+)")
+        message(FATAL_ERROR "ASWLog/ASWLog_Version.h doesn't define ASWLOG_VERSION_${versionPart} as a number")
+    endif()
+    set(ASWLOG_VERSION_${versionPart} "${CMAKE_MATCH_1}")
+endforeach()
+
+project(ASWLog
+    VERSION ${ASWLOG_VERSION_MAJOR}.${ASWLOG_VERSION_MINOR}.${ASWLOG_VERSION_PATCH}
+    LANGUAGES CXX
+)
 
 # Building ASWLog itself (cmake -S .) rather than consuming it through add_subdirectory() or FetchContent.
 if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
@@ -11,6 +25,8 @@ endif()
 
 option(ASWLOG_BUILD_EXAMPLE "Build the ASWLog example (example/cmake)" OFF)
 option(ASWLOG_BUILD_TESTS "Build the ASWLog unit tests (tests/cmake; needs the asw-unit-tests submodule)" OFF)
+option(ASWLOG_INSTALL "Generate the install rules for the ASWLog library, headers, and CMake package files"
+    ${ASWLOG_IS_TOP_LEVEL})
 option(ASWLOG_WARNINGS "Compile the ASWLog sources with extra warnings" ${ASWLOG_IS_TOP_LEVEL})
 
 set(ASWLOG_SANITIZE "" CACHE STRING
@@ -64,9 +80,14 @@ add_library(ASWLog STATIC
 add_library(ASWLog::ASWLog ALIAS ASWLog)
 
 target_compile_features(ASWLog PUBLIC cxx_std_20)
-set_target_properties(ASWLog PROPERTIES CXX_EXTENSIONS OFF)
+# A Debug build is named ASWLogd, so Debug and Release can be installed to the same prefix.
+set_target_properties(ASWLog PROPERTIES
+    CXX_EXTENSIONS OFF
+    DEBUG_POSTFIX d
+)
 
-target_include_directories(ASWLog PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/ASWLog")
+# The installed target's include folder comes from install(TARGETS) below.
+target_include_directories(ASWLog PUBLIC "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/ASWLog>")
 
 if(WIN32)
     # ASWLog_Utils.cpp uses the process memory APIs from psapi, and ASWLog_WindowsEventLog.cpp the Event Log and
@@ -106,6 +127,48 @@ if(ASWLOG_SANITIZE)
     # Debug information and frame pointers give the sanitizer reports complete call stacks.
     target_compile_options(ASWLog PUBLIC ${ASWLOG_SANITIZE_FLAGS} -g -fno-omit-frame-pointer)
     target_link_options(ASWLog PUBLIC ${ASWLOG_SANITIZE_FLAGS})
+endif()
+
+# After `cmake --install`, find_package(ASWLog CONFIG) gives the ASWLog::ASWLog target. The headers are installed to
+# <prefix>/include/ASWLog, the installed target's include folder, so code includes them the same way as from the
+# sources (e.g. #include "ASWLog_FileLog.h").
+if(ASWLOG_INSTALL)
+    include(CMakePackageConfigHelpers)
+    include(GNUInstallDirs)
+
+    set(ASWLOG_INSTALL_CMAKEDIR "${CMAKE_INSTALL_LIBDIR}/cmake/ASWLog")
+
+    install(TARGETS ASWLog
+        EXPORT ASWLogTargets
+        ARCHIVE DESTINATION "${CMAKE_INSTALL_LIBDIR}"
+        INCLUDES DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/ASWLog"
+    )
+
+    # Every header is public.
+    get_target_property(ASWLOG_HEADERS ASWLog SOURCES)
+    list(FILTER ASWLOG_HEADERS INCLUDE REGEX "\\.h$")
+    install(FILES ${ASWLOG_HEADERS} DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/ASWLog")
+
+    install(EXPORT ASWLogTargets
+        NAMESPACE ASWLog::
+        DESTINATION "${ASWLOG_INSTALL_CMAKEDIR}"
+    )
+
+    configure_package_config_file(cmake/ASWLogConfig.cmake.in "${CMAKE_CURRENT_BINARY_DIR}/ASWLogConfig.cmake"
+        INSTALL_DESTINATION "${ASWLOG_INSTALL_CMAKEDIR}"
+    )
+
+    # As in Semantic Versioning, find_package(ASWLog 1.2) accepts version 1.2.0 or any later 1.x, but not 2.0.
+    write_basic_package_version_file("${CMAKE_CURRENT_BINARY_DIR}/ASWLogConfigVersion.cmake"
+        VERSION "${ASWLog_VERSION}"
+        COMPATIBILITY SameMajorVersion
+    )
+
+    install(FILES
+        "${CMAKE_CURRENT_BINARY_DIR}/ASWLogConfig.cmake"
+        "${CMAKE_CURRENT_BINARY_DIR}/ASWLogConfigVersion.cmake"
+        DESTINATION "${ASWLOG_INSTALL_CMAKEDIR}"
+    )
 endif()
 
 if(ASWLOG_BUILD_EXAMPLE)
