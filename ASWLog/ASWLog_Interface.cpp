@@ -25,10 +25,47 @@ limitations under the License.
 #include "ASWLog_Interface.h"
 //---------------------------------------------------------------------------
 // System includes here
+#include <span>
 //---------------------------------------------------------------------------
 
 namespace ASWLog
 {
+
+//---------------------------------------------------------------------------
+
+/////////////////////////////////////////////////////////////////////////////
+// IASWLog
+/////////////////////////////////////////////////////////////////////////////
+
+//---------------------------------------------------------------------------
+void IASWLog::WriteWide(Level level, TASWWideText message, const std::initializer_list<TASWLogField>* fields,
+    std::source_location loc, bool raw, bool forced) noexcept
+{
+    TASWLogRecord record = MakeRecord(level, {}, loc, raw, forced);
+    if (!ShouldLog(record))
+        return;
+
+    std::string utf8;
+    try
+    {
+        utf8 = message.ToUTF8();
+    }
+    catch (...)
+    {
+        return; // Out of memory: the entry is dropped, as Write() drops one it can't write
+    }
+
+    record.Message = utf8;
+
+    std::span<const TASWLogField> ownFields;
+    if (fields != nullptr)
+    {
+        ownFields = std::span<const TASWLogField>(fields->begin(), fields->size());
+        record.Fields = &ownFields;
+    }
+
+    Write(record);
+}
 
 //---------------------------------------------------------------------------
 

@@ -37,16 +37,25 @@ add_executable(ASWLogTests
     "${ASWLOG_TESTS_DIR}/Test_ASWLog_Config.cpp"
     "${ASWLOG_TESTS_DIR}/Test_ASWLog_ConsoleLog.cpp"
     "${ASWLOG_TESTS_DIR}/Test_ASWLog_CrashHandler.cpp"
+    "${ASWLOG_TESTS_DIR}/Test_ASWLog_DebuggerLog.cpp"
     "${ASWLOG_TESTS_DIR}/Test_ASWLog_Fields.cpp"
     "${ASWLOG_TESTS_DIR}/Test_ASWLog_FileLog.cpp"
     "${ASWLOG_TESTS_DIR}/Test_ASWLog_Formatter.cpp"
+    "${ASWLOG_TESTS_DIR}/Test_ASWLog_Limiter.cpp"
+    "${ASWLOG_TESTS_DIR}/Test_ASWLog_MemoryLog.cpp"
     "${ASWLOG_TESTS_DIR}/Test_ASWLog_MultiLog.cpp"
+    "${ASWLOG_TESTS_DIR}/Test_ASWLog_NullLog.cpp"
+    "${ASWLOG_TESTS_DIR}/Test_ASWLog_SyslogLog.cpp"
     "${ASWLOG_TESTS_DIR}/Test_ASWLog_TextLogBase.cpp"
     "${ASWLOG_TESTS_DIR}/Test_ASWLog_Types.cpp"
+    "${ASWLOG_TESTS_DIR}/Test_ASWLog_Unicode.cpp"
     "${ASWLOG_TESTS_DIR}/Test_ASWLog_Utils.cpp"
     "${ASWLOG_TESTS_DIR}/Test_ASWLog_Version.cpp"
+    "${ASWLOG_TESTS_DIR}/Test_ASWLog_WindowsEventLog.cpp"
     "${ASWLOG_TESTS_DIR}/UT_Helper_DateTime.cpp"
+    "${ASWLOG_TESTS_DIR}/UT_Helper_Environment.cpp"
     "${ASWLOG_TESTS_DIR}/UT_Helper_JSON.cpp"
+    "${ASWLOG_TESTS_DIR}/UT_Helper_StdErr.cpp"
 )
 
 target_include_directories(ASWLogTests PRIVATE
@@ -102,7 +111,7 @@ function(aswlog_check_format_string checkCase expectCompiles)
 endfunction()
 
 aswlog_check_format_string(0 TRUE)
-foreach(checkCase 1 2 3)
+foreach(checkCase 1 2 3 4 5 6)
     aswlog_check_format_string(${checkCase} FALSE)
 endforeach()
 message(STATUS "Format string compile-time checks: passed")

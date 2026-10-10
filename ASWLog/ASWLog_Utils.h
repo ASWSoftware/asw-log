@@ -33,6 +33,7 @@ limitations under the License.
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <system_error>
@@ -164,6 +165,21 @@ struct TMultilinePiece
 void ApplyMultilineMode(std::string& line, MultilineMode mode, LineEnding ending);
 
 /*
+    CutToFit
+
+    Cuts 'text' to at most 'maxBytes' bytes, between UTF-8 characters, ending with " [cut]" if that fits too. Leaves a
+    text that fits as it is.
+*/
+void CutToFit(std::string& text, std::size_t maxBytes);
+
+/*
+    EqualsIgnoringCase
+
+    True if 'a' and 'b' are the same text, ignoring the case of ASCII letters
+*/
+[[nodiscard]] bool EqualsIgnoringCase(std::string_view a, std::string_view b) noexcept;
+
+/*
     NextJSONPiece
 
     The next piece of 'text', from 'index' on, as JSON::AppendString() writes it between the quotes, and moves 'index'
@@ -183,6 +199,22 @@ void ApplyMultilineMode(std::string& line, MultilineMode mode, LineEnding ending
 */
 [[nodiscard]] TMultilinePiece NextMultilinePiece(std::string_view text, std::size_t& index, MultilineMode mode,
     LineEnding ending) noexcept;
+
+/*
+    ReadEnvironmentVariable
+
+    The value of the environment variable 'name' in UTF-8 (read with the wide Windows API on Windows, which the C
+    runtime's getenv() doesn't use), or nullopt if it isn't set or can't be read. A variable set to an empty value
+    gives an empty string. Never throws.
+*/
+[[nodiscard]] std::optional<std::string> ReadEnvironmentVariable(std::string_view name) noexcept;
+
+/*
+    TrimSpaces
+
+    'text' without the spaces and tabs at its start and end
+*/
+[[nodiscard]] std::string_view TrimSpaces(std::string_view text) noexcept;
 
 } // namespace Detail
 

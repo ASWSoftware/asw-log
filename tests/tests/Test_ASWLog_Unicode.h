@@ -1,5 +1,5 @@
 /* **************************************************************************
-Test_ASWLog_Config.h
+Test_ASWLog_Unicode.h
 Author: Anthony S. West - ASW Software
 
 Copyright 2026 ASW Software
@@ -18,8 +18,10 @@ limitations under the License.
 
 ************************************************************************** */
 
-#ifndef Test_ASWLog_ConfigH
-#define Test_ASWLog_ConfigH
+#pragma once
+
+#ifndef Test_ASWLog_UnicodeH
+#define Test_ASWLog_UnicodeH
 //---------------------------------------------------------------------------
 #include "ASWUnitTests_TestBase.h"
 //---------------------------------------------------------------------------
@@ -28,33 +30,30 @@ namespace ASWUnitTests
 {
 
 ///////////////////////////////////////////////////////////////////////////
-// TTest_ASWLog_Config
+// TTest_ASWLog_Unicode
 ///////////////////////////////////////////////////////////////////////////
-class TTest_ASWLog_Config : public TTestGroupBase
+class TTest_ASWLog_Unicode : public TTestGroupBase
 {
 private:
     typedef TTestGroupBase inherited;
 
 private: // Test methods
-    void Test_ApplyEnvironment_AppliesPatternAfterFormat();
-    void Test_ApplyEnvironment_AppliesTheCategoryLevels();
-    void Test_ApplyEnvironment_IgnoresUnsetAndEmptyVariables();
-    void Test_ApplyEnvironment_ReadsTheDefaultPrefix();
-    void Test_ApplyEnvironment_ReadsUTF8Values();
-    void Test_ApplyEnvironment_ReportsInvalidValues();
-    void Test_ApplyEnvironment_SeedsTheLevelAtInitialize();
-    void Test_ApplyEnvironment_SetsEachKey();
-    void Test_ApplySetting_ReportsAnUnknownKey();
-    void Test_ApplySetting_SetsOneSetting();
-    void Test_ApplySetting_WritesToStdErrWithoutHandler();
-    void Test_Defaults_MatchDocumentedValues();
-    void Test_ResolveFolder_CustomFolder();
-    void Test_ResolvePath_AbsolutePath();
-    void Test_ResolvePath_Defaults();
+    void Test_Formatters_ConvertTheWrappedText();
+    void Test_LogFmt_NarrowFormatTakesWideArguments();
+    void Test_LogFmt_WideFormatSkipsFilteredEntries();
+    void Test_LogFmt_WideFormatWritesUTF8();
+    void Test_LogWide_ConvertsOnlyEntriesThatAreUsed();
+    void Test_LogWide_EachMethodWritesUTF8();
+    void Test_LogWide_WritesThroughARealLogger();
+    void Test_RoundTrip_KeepsEveryCharacter();
+    void Test_UTF8ToUTF16_ReplacesInvalidSequences();
+    void Test_UTF8ToWide_FollowsTheWidthOfWchar();
+    void Test_WideText_TakesEachKindOfText();
+    void Test_WideToUTF8_ReplacesWhatIsNotACharacter();
 
 public:
-    TTest_ASWLog_Config();
-    ~TTest_ASWLog_Config() override;
+    TTest_ASWLog_Unicode();
+    ~TTest_ASWLog_Unicode() override;
 
     void SetUp_Group() override;
     void SetUp_Test(ITestCase& testCase) override;
@@ -65,4 +64,4 @@ public:
 } // ASWUnitTests
 
 //---------------------------------------------------------------------------
-#endif // #ifndef Test_ASWLog_ConfigH
+#endif // #ifndef Test_ASWLog_UnicodeH

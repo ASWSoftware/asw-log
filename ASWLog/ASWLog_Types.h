@@ -129,7 +129,8 @@ enum class ColorMode
 */
 enum class ErrorKind
 {
-    // The log file couldn't be opened (or its folder created), so entries are dropped until it can be.
+    // The log file couldn't be opened (or its folder created), or another output (e.g. a Windows Event Log source), so
+    // entries are dropped until it can be.
     OpenFailed,
 
     // An entry couldn't be written to the output (e.g. the disk is full).
@@ -157,10 +158,14 @@ enum class ErrorKind
     // An asynchronous logger's queue was full, so entries were dropped (see AsyncOverflowPolicy::DropNewest). The
     // message says how many.
     EntriesDropped,
+
+    // A setting given as text had an invalid value, which was left unused (see TASWLogConfig::ApplyEnvironment()). The
+    // message names the setting and the value.
+    InvalidSetting,
 };
 
 // Number of error kinds, e.g. for a table indexed by kind. Update this when a kind is added or removed.
-constexpr std::size_t ErrorKindCount = 9;
+constexpr std::size_t ErrorKindCount = 10;
 
 [[nodiscard]] constexpr std::string_view ErrorKind_ToString(ErrorKind errorKind) noexcept
 {
@@ -192,6 +197,9 @@ constexpr std::size_t ErrorKindCount = 9;
 
         case ErrorKind::EntriesDropped:
             return "ENTRIES_DROPPED";
+
+        case ErrorKind::InvalidSetting:
+            return "INVALID_SETTING";
     }
 
     return "UNKNOWN";
@@ -357,6 +365,64 @@ enum class MultilineMode
 
         case MultilineMode::Escape:
             return "ESCAPE";
+    }
+
+    return "UNKNOWN";
+}
+
+//---------------------------------------------------------------------------
+
+// The syslog facility a TASWSyslogLog sends its entries with (see TASWSyslogConfig::Facility). The values are the
+// facility codes of RFC 5424, the same as the LOG_* facilities of <syslog.h> divided by 8.
+enum class SyslogFacility
+{
+    User   = 1,  // LOG_USER: an application's messages
+    Daemon = 3,  // LOG_DAEMON: a system service's
+    Local0 = 16, // LOG_LOCAL0 to LOG_LOCAL7: for the site's own use, e.g. to route an application's messages to a file
+    Local1 = 17,
+    Local2 = 18,
+    Local3 = 19,
+    Local4 = 20,
+    Local5 = 21,
+    Local6 = 22,
+    Local7 = 23,
+};
+
+[[nodiscard]] std::optional<SyslogFacility> SyslogFacility_FromString(std::string_view str) noexcept;
+
+[[nodiscard]] constexpr std::string_view SyslogFacility_ToString(SyslogFacility facility) noexcept
+{
+    switch (facility)
+    {
+        case SyslogFacility::User:
+            return "USER";
+
+        case SyslogFacility::Daemon:
+            return "DAEMON";
+
+        case SyslogFacility::Local0:
+            return "LOCAL0";
+
+        case SyslogFacility::Local1:
+            return "LOCAL1";
+
+        case SyslogFacility::Local2:
+            return "LOCAL2";
+
+        case SyslogFacility::Local3:
+            return "LOCAL3";
+
+        case SyslogFacility::Local4:
+            return "LOCAL4";
+
+        case SyslogFacility::Local5:
+            return "LOCAL5";
+
+        case SyslogFacility::Local6:
+            return "LOCAL6";
+
+        case SyslogFacility::Local7:
+            return "LOCAL7";
     }
 
     return "UNKNOWN";

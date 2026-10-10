@@ -40,18 +40,13 @@ limitations under the License.
 #include <type_traits>
 #include <utility>
 #include <vector>
-
-#if defined(_WIN32)
-#include <io.h>
-#include <share.h>
-#else
-#include <unistd.h>
-#endif
 //---------------------------------------------------------------------------
 #include "ASWUnitTests_Registry.h"
 //---------------------------------------------------------------------------
 #include "ASWLog_Base.h"
 #include "ASWLog_Utils.h"
+//---------------------------------------------------------------------------
+#include "UT_Helper_StdErr.h"
 //---------------------------------------------------------------------------
 
 namespace
@@ -215,67 +210,6 @@ ASWLog::TASWLogConfig MakeBacktraceConfig(std::size_t capacity, ASWLog::Level lo
     config.Backtrace.DumpAtLevel = dumpAtLevel;
     return config;
 }
-
-// While alive, sends what is written to stderr to 'file' instead, by pointing stderr's file descriptor at it. Inactive
-// if stderr has no file descriptor (e.g. in a GUI application without a console).
-class TStdErrRedirect
-{
-private:
-    int m_SavedDescriptor = -1;
-
-public:
-    explicit TStdErrRedirect(const std::filesystem::path& file)
-    {
-        std::fflush(stderr);
-#if defined(_WIN32)
-        std::FILE* target = _wfsopen(file.c_str(), L"wb", _SH_DENYNO);
-        if (target == nullptr)
-            return;
-
-        m_SavedDescriptor = _dup(_fileno(stderr));
-        if (m_SavedDescriptor >= 0 && _dup2(_fileno(target), _fileno(stderr)) != 0)
-        {
-            _close(m_SavedDescriptor);
-            m_SavedDescriptor = -1;
-        }
-#else
-        std::FILE* target = std::fopen(file.c_str(), "wb");
-        if (target == nullptr)
-            return;
-
-        m_SavedDescriptor = dup(fileno(stderr));
-        if (m_SavedDescriptor >= 0 && dup2(fileno(target), fileno(stderr)) < 0)
-        {
-            close(m_SavedDescriptor);
-            m_SavedDescriptor = -1;
-        }
-#endif
-        std::fclose(target);
-    }
-
-    ~TStdErrRedirect()
-    {
-        if (m_SavedDescriptor < 0)
-            return;
-
-        std::fflush(stderr);
-#if defined(_WIN32)
-        _dup2(m_SavedDescriptor, _fileno(stderr));
-        _close(m_SavedDescriptor);
-#else
-        dup2(m_SavedDescriptor, fileno(stderr));
-        close(m_SavedDescriptor);
-#endif
-    }
-
-    TStdErrRedirect(const TStdErrRedirect&) = delete;
-    TStdErrRedirect& operator=(const TStdErrRedirect&) = delete;
-
-    bool IsActive() const noexcept
-    {
-        return m_SavedDescriptor >= 0;
-    }
-};
 
 } // namespace
 

@@ -44,10 +44,24 @@ ASWLog is a thread-safe light-weight C++ logging tool for Windows and Linux proj
 - Multi-line messages (e.g. an HTTP body) written as they are, or, with `TASWLogConfig::Line.Multiline`, each line after
   the first marked with `    | ` (`MultilineMode::Indent`) or the line breaks escaped as `\r` and `\n`
   (`MultilineMode::Escape`), so that every entry is recognizable as one.
+- Rate-limited logging for entries that can repeat often: `ASWLOG_ONCE`, `ASWLOG_EVERY_N` and `ASWLOG_EVERY_INTERVAL`
+  (`ASWLog_Limiter.h`), e.g. `ASWLOG_EVERY_INTERVAL(log, std::chrono::seconds(5), ASWLog::Level::Warn, "Retrying {}",
+  host);`, which counts the skipped entries in a `suppressed` field.
 - A hook to drop or change entries before they are written (`TASWLogConfig::OnBeforeWrite`), e.g. to redact secrets
   or drop noisy entries by content, category or field.
 - Structured fields per entry, e.g. `logger.LogInfo("Order placed", {{"orderId", 17}})`, and scoped context that every
   entry on the thread carries, e.g. `ASWLog::TASWLogScope scope{{"requestId", id}};` (`ASWLog_Fields.h`).
+- A debugger output logger (`ASWLog::TASWDebuggerLog`) for the RAD Studio Event Log, Visual Studio's Output window and
+  DebugView (Windows; it writes nothing elsewhere).
+- A memory logger (`ASWLog::TASWMemoryLog`) that keeps the newest lines, limited by count and size
+  (`TASWLogConfig::Memory`), for an in-app log viewer (`GetLinesSince()` returns only the new ones), a crash report or
+  tests.
+- A null logger (`ASWLog::TASWNullLog`) that writes nothing, to turn logging off behind an `IASWLog&` or to pass to
+  code under test.
+- A syslog logger (`ASWLog::TASWSyslogLog`) for the Linux system log and the systemd journal, with the level as the
+  priority and the ident and facility in `TASWLogConfig::Syslog` (Linux; it writes nothing on Windows).
+- A Windows Event Log logger (`ASWLog::TASWWindowsEventLog`) for warnings and errors in Event Viewer, with an event ID
+  per level and a helper to register the event source (Windows; it writes nothing elsewhere).
 - Extensible: assign your own formatter (`IASWLogFormatter`) to `TASWLogConfig::Line.Formatter` for your own line layout,
   or derive a new text logger from `TASWTextLogBase` and implement only its output.
 

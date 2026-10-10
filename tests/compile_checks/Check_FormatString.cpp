@@ -40,6 +40,13 @@ void LogFormattedEntries(ASWLog::IASWLog& logger)
     logger.LogInfoFmt("{} {}", 1, "text");
     logger.LogFmt(ASWLog::Level::Warn, "{:d}", 2);
     logger.LogErrorFmt(ASWLog::RuntimeFormat(runtimeFormat), 3, 4);
+
+    // The same with wide format strings, and wide and UTF-8 text as arguments
+    const std::wstring wideRuntimeFormat = L"{} {}";
+    logger.LogInfoFmt(L"{} {} {}", 1, L"text", ASWLog::UTF8("utf8"));
+    logger.LogFmt(ASWLog::Level::Warn, L"{:d}", 2);
+    logger.LogErrorFmt(ASWLog::RuntimeFormat(wideRuntimeFormat), 3, 4);
+    logger.LogInfoFmt("{} {}", ASWLog::Wide(L"wide"), ASWLog::Wide(u"utf16"));
 #elif ASWLOG_CHECK_CASE == 1
     logger.LogInfoFmt("{} {}", 1); // Too few arguments
 #elif ASWLOG_CHECK_CASE == 2
@@ -47,6 +54,13 @@ void LogFormattedEntries(ASWLog::IASWLog& logger)
 #elif ASWLOG_CHECK_CASE == 3
     const std::string runtimeFormat = "{} {}";
     logger.LogErrorFmt(runtimeFormat, 3, 4); // A runtime format string without RuntimeFormat()
+#elif ASWLOG_CHECK_CASE == 4
+    logger.LogInfoFmt(L"{} {}", 1); // Too few arguments for a wide format string
+#elif ASWLOG_CHECK_CASE == 5
+    logger.LogInfoFmt(L"{}", std::string("text")); // Narrow text in a wide format string (use ASWLog::UTF8())
+#elif ASWLOG_CHECK_CASE == 6
+    const std::wstring runtimeFormat = L"{} {}";
+    logger.LogErrorFmt(runtimeFormat, 3, 4); // A wide runtime format string without RuntimeFormat()
 #else
 #error Unknown ASWLOG_CHECK_CASE
 #endif

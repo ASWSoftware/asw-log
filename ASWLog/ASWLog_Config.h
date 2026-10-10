@@ -29,6 +29,7 @@ limitations under the License.
 #ifndef ASWLog_ConfigH
 #define ASWLog_ConfigH
 //---------------------------------------------------------------------------
+#include <array>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
@@ -108,6 +109,21 @@ struct TASWBackupInfo
     std::filesystem::path LogPath; // The log file that was rotated
     std::filesystem::path BackupPath; // What it was renamed to: "<stem>.<reason>.<time>.bak"
     std::string Reason; // "size", "daily", or the reason tag given to TASWFileLog::RotateLogFiles()
+};
+
+
+/////////////////////////////////////////////////////////////////////////////
+// TASWEventLogConfig
+//
+// How a TASWWindowsEventLog reports its entries to the Windows Event Log (TASWLogConfig::EventLog).
+/////////////////////////////////////////////////////////////////////////////
+struct TASWEventLogConfig
+{
+    // The event source Event Viewer shows, in the Application log. Empty: the executable's file name without its
+    // extension. Register it once to get plain messages (see TASWWindowsEventLog::RegisterSource()).
+    std::string Source;
+    // The event ID of each level's entries, indexed by Level (Trace first): by default 1000 to 1005, Critical 1005
+    std::array<std::uint16_t, LevelCount> EventIds{ 1000, 1001, 1002, 1003, 1004, 1005 };
 };
 
 
@@ -248,6 +264,20 @@ struct TASWLineConfig
 
 
 /////////////////////////////////////////////////////////////////////////////
+// TASWMemoryConfig
+//
+// How much a TASWMemoryLog keeps (TASWLogConfig::Memory). When a new line doesn't fit, the oldest lines go.
+/////////////////////////////////////////////////////////////////////////////
+struct TASWMemoryConfig
+{
+    std::size_t MaxLines = 1000; // 0 = no limit
+    // The most bytes of text kept, the lines' characters (not the memory each line takes beyond them); 0 = no limit. A
+    // line longer than this on its own is kept cut to fit, ending with " [cut]".
+    std::size_t MaxBytes = 0;
+};
+
+
+/////////////////////////////////////////////////////////////////////////////
 // TASWShutdownConfig
 //
 // The lines a text logger writes when it shuts down, or when the application crashes (TASWLogConfig::Shutdown).
@@ -281,6 +311,21 @@ struct TASWStartupConfig
 
 
 /////////////////////////////////////////////////////////////////////////////
+// TASWSyslogConfig
+//
+// How a TASWSyslogLog sends its entries to syslog (TASWLogConfig::Syslog).
+/////////////////////////////////////////////////////////////////////////////
+struct TASWSyslogConfig
+{
+    // The name syslog shows for each message, e.g. "myapp" in "myapp[1234]: ...". Empty: the executable's file name.
+    // Process-wide: the syslog logger initialized or reconfigured last sets it, and the application's own openlog()
+    // call replaces it (see TASWSyslogLog).
+    std::string Ident;
+    SyslogFacility Facility = SyslogFacility::User; // Sent with each message, so each syslog logger can have its own
+};
+
+
+/////////////////////////////////////////////////////////////////////////////
 // TASWLogConfig
 //
 // A logger's settings, passed to IASWLog::Initialize(). The groups hold the settings for one concern each; a logger
@@ -300,6 +345,9 @@ struct TASWLogConfig
     TASWFileConfig File;
     TASWAsyncConfig Async;
     TASWBacktraceConfig Backtrace;
+    TASWMemoryConfig Memory;
+    TASWSyslogConfig Syslog;
+    TASWEventLogConfig EventLog;
 
     // --- Pre-write Hook ---
     // A last chance for the application to drop or change each of its entries before the logger writes it, e.g. to
@@ -337,6 +385,39 @@ struct TASWLogConfig
     // and counts the failures it leaves out in its next report of that kind (TASWLogError::SuppressedCount). Measured
     // on the logger's clock (see TASWLogBase::NowUTC()). 0 = report every failure.
     std::chrono::milliseconds ErrorReportInterval{ std::chrono::minutes(1) };
+
+    // --- Settings from the Environment ---
+    // Sets the settings below from environment variables named with 'prefix', e.g. ASWLOG_LEVEL=Debug, so that a
+    // deployed application can log more, or elsewhere, without being rebuilt. Nothing reads them unless the application
+    // calls this; call it on the config before Initialize(), after setting OnError. Their values replace what the code
+    // set; LEVEL seeds the minimum level at Initialize() only (Reconfigure() keeps the current level). Each logger can
+    // read its own variables, e.g. config.ApplyEnvironment("MYAPP_CONSOLE_"). A variable that isn't set, or is empty,
+    // leaves its setting as it is, and so does an invalid value, which is reported to OnError (or written to stderr if
+    // it's empty) as ErrorKind::InvalidSetting. Variables with the prefix that aren't keys are ignored. Returns false
+    // if a value was invalid. Keys and values (ignoring case and the spaces around a value):
+    //   LEVEL           Trace, Debug, Info, Warn, Error, Critical or Off      InitialMinimumLevel
+    //   CATEGORIES      the category levels, e.g. "*=Info,Net=Debug"; process-wide, so set it under one prefix only
+    //                   (see TASWCategoryLog::ApplyLevels())
+    //   FOLDER          a folder (UTF-8)                                      File.FolderPath
+    //   FILE            a file name or path (UTF-8)                           File.FilePath
+    //   FLUSH           EveryWrite, OnNewLine, Manual or Periodic             File.Flush
+    //   SYNC_AT_LEVEL   a level                                               File.SyncToDiskAtLevel
+    //   ASYNC           1, true, yes or on; 0, false, no or off               Async.Enabled
+    //   BACKTRACE       how many entries to keep, 0 = none                    Backtrace.Capacity
+    //   TIME_ZONE       UTC or Local                                          Line.TimestampZone
+    //   TIME_PRECISION  ms, us or ns (or Milliseconds, Microseconds...)       Line.TimestampPrecision
+    //   MULTILINE       Preserve, Indent or Escape                            Line.Multiline
+    //   SHOW_FUNCTION   as ASYNC                                              Line.ShowFunctionName
+    //   SHOW_SOURCE     as ASYNC                                              Line.ShowSourceLine
+    //   FORMAT          Text (the built-in layout) or JSON                    Line.Formatter
+    //   PATTERN         a TASWPatternFormatter pattern, e.g. "{time} {message}", applied after FORMAT
+    // Throws std::bad_alloc if out of memory.
+    bool ApplyEnvironment(std::string_view prefix = "ASWLOG_");
+    // Sets one of ApplyEnvironment()'s settings, 'key' (without a prefix, ignoring case), from 'value', e.g. from the
+    // application's command line or settings file. An empty value leaves the setting as it is. Reports an unknown key
+    // or an invalid value as ApplyEnvironment() does, and returns false for them. Throws std::bad_alloc if out of
+    // memory.
+    bool ApplySetting(std::string_view key, std::string_view value);
 };
 
 } // namespace ASWLog

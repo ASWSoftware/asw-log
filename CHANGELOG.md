@@ -136,6 +136,114 @@ see [0.26.1](#0261---2026-09-17) for the initial versioned baseline.
   logger's own lines (startup, shutdown, backtrace markers, crash lines)
   don't pass through it. A multi-log runs its hook once per entry and
   passes its config on without it.
+- `TASWNullLog` (new `ASWLog_NullLog.h`): a logger that writes nothing,
+  e.g. to turn logging off behind an `IASWLog&` or to pass to code under
+  test; `TASWNullLog::GetInstance()` gives a shared one, e.g. for a default
+  argument. No logging call formats or copies anything (`ShouldLog()` and
+  `IsEnabled()` are always false), while the lifecycle methods succeed,
+  `GetConfig()` returns the config last passed in, and the minimum level
+  reads back as set.
+- `TASWMemoryLog` (new `ASWLog_MemoryLog.h`): a text logger that keeps its
+  newest lines in memory, formatted like a file logger's and without the
+  line ending, e.g. for an in-app log viewer, a crash report or tests of
+  code that logs. The new `TASWLogConfig::Memory` group sets how much it
+  keeps: `MaxLines` (default 1000) and `MaxBytes` (default 0, no limit; a
+  single longer line is cut to fit, ending with " [cut]"); the oldest lines
+  go first. `GetLines()`, `GetLineCount()` and `Clear()` read and clear
+  them, and `GetLinesSince(n)` returns only the lines numbered n and up
+  (every kept line gets the next sequence number), with the number to ask
+  for next and how many lines were missed, so a viewer can poll for new
+  lines.
+- `TASWDebuggerLog` (new `ASWLog_DebuggerLog.h`): writes each line to the
+  debugger's output with `OutputDebugStringW` on Windows, shown in the RAD
+  Studio Event Log, Visual Studio's Output window and DebugView (even
+  without a debugger; each line then still costs some microseconds, so add
+  it where wanted, e.g. in debug builds). `TASWDebuggerLog::GetInstance()`
+  gives the shared one. Other platforms have no debugger output: there the
+  class builds but writes nothing (`ShouldLog()` is false and no line is
+  formatted), so the same code can add it everywhere.
+- `TASWSyslogLog` (new `ASWLog_SyslogLog.h`): sends each line to the system
+  log with `syslog()` on Linux (the journal on systemd hosts), without its
+  line ending, the level as the priority (Trace and Debug `LOG_DEBUG`, Info
+  `LOG_INFO`, Warn `LOG_WARNING`, Error `LOG_ERR`, Critical `LOG_CRIT`).
+  The new `TASWLogConfig::Syslog` group sets the ident (`Ident`, empty =
+  the executable's file name; passed to `openlog()` with `LOG_PID`, so it
+  is process-wide) and the facility (`Facility`, a new `SyslogFacility`:
+  `User`, the default, `Daemon` or `Local0` to `Local7`; sent with each
+  message). The line is formatted as configured, so consider turning off
+  `Line.ShowTimestamp` and `Line.ShowProcessId`, which syslog adds itself.
+  `TASWSyslogLog::GetInstance()` gives the shared one. Windows has no
+  syslog: there the class builds but writes nothing (`ShouldLog()` is false
+  and no line is formatted).
+- `TASWWindowsEventLog` (new `ASWLog_WindowsEventLog.h`): reports each line
+  to the Windows Event Log (Application log), without its line ending: Trace,
+  Debug and Info as Information events, Warn as Warning, Error and Critical
+  as Error. The new `TASWLogConfig::EventLog` group sets the event source
+  (`Source`, empty = the executable's file name without its extension) and
+  the event ID per level (`EventIds`, by default 1000 for Trace to 1005 for
+  Critical). A line longer than `TASWWindowsEventLog::MaxMessageSize`
+  (31,839 bytes) is cut to fit, ending with ` [cut]`. Each event takes
+  about a hundred microseconds, so it suits warnings and errors.
+  `TASWWindowsEventLog::RegisterSource()` and `UnregisterSource()` register
+  a source (administrator rights, e.g. in an installer) with the .NET
+  Framework's `EventLogMessages.dll`, so that Event Viewer shows the text
+  without "The description for Event ID ... cannot be found".
+  `TASWWindowsEventLog::GetInstance()` gives the shared one. Other platforms
+  have no Event Log: there the class builds but writes nothing.
+- Rate-limited logging (new `ASWLog_Limiter.h`): `ASWLOG_ONCE(log, level,
+  ...)`, `ASWLOG_EVERY_N(log, n, level, ...)` and `ASWLOG_EVERY_INTERVAL(log,
+  interval, level, ...)` log only the first, every nth, or at most one entry
+  per interval at the place they are written, e.g.
+  `ASWLOG_EVERY_INTERVAL(log, std::chrono::seconds(5), ASWLog::Level::Warn,
+  "Retrying {}", host);`. The arguments after the level are those of
+  `LogFmt()` (format string, arguments, optional fields). Only entries the
+  logger would write count, and only those are formatted. After skipped calls,
+  `ASWLOG_EVERY_INTERVAL` adds a `suppressed` field with their number. The
+  macros keep a lock-free `TASWLogLimiter` (`Once()`, `EveryN()`,
+  `EveryInterval()`) in a static where they are written; the class can also be
+  used on its own.
+- Settings from environment variables, e.g. to turn on full verbosity in a
+  deployed release build without rebuilding it:
+  `config.ApplyEnvironment();` before `Initialize()` reads `ASWLOG_LEVEL`,
+  `ASWLOG_CATEGORIES`, `ASWLOG_FOLDER`, `ASWLOG_FILE`, `ASWLOG_FLUSH`,
+  `ASWLOG_SYNC_AT_LEVEL`, `ASWLOG_ASYNC`, `ASWLOG_BACKTRACE`,
+  `ASWLOG_TIME_ZONE`, `ASWLOG_TIME_PRECISION`, `ASWLOG_MULTILINE`,
+  `ASWLOG_SHOW_FUNCTION`, `ASWLOG_SHOW_SOURCE`, `ASWLOG_FORMAT` (`Text` or
+  `JSON`) and `ASWLOG_PATTERN` (a `TASWPatternFormatter` pattern), and their
+  values replace what the code set (see `TASWLogConfig::ApplyEnvironment()`
+  for the values; case doesn't matter). Nothing reads the environment unless
+  the application calls it, and each logger can have its own prefix, e.g.
+  `ApplyEnvironment("MYAPP_CONSOLE_")`. A variable that isn't set or is
+  empty changes nothing; an invalid value changes nothing either and is
+  reported to `OnError` (or stderr) as the new `ErrorKind::InvalidSetting`.
+  `ApplySetting(key, value)` sets one of the same settings, e.g. from a
+  command line or a settings file. `ASWLOG_CATEGORIES`, e.g.
+  `*=Info,Net=Debug,Net.Http=Trace`, sets category levels through the new
+  `TASWCategoryLog::ApplyLevels()`: a name covers that category and those
+  under it (`Net` covers `Net.Http`), `*` covers all, and the longest name
+  wins; it applies process-wide, to the categories that exist and to those
+  made later, and a spec with an invalid item changes nothing. On Windows,
+  the values are read as UTF-8 (paths included). Breaking only for code that
+  lists every `ErrorKind` (e.g. a `switch`) or relies on `ErrorKindCount`
+  being 9.
+- Wide-string logging (new `ASWLog_Unicode.h`; add `ASWLog_Unicode.cpp` to
+  projects that list the ASWLog sources). Every logging method also takes a
+  message of wide text, `wchar_t` (e.g. `L"Opened"`, a `std::wstring`, or
+  C++Builder's `UnicodeString::c_str()`) or `char16_t` (e.g. `u"Opened"`),
+  converted to UTF-8 only if the entry is used, so a filtered call converts
+  nothing; field keys and texts stay UTF-8. Every `*Fmt` method also takes a
+  `wchar_t` format string, checked at compile time like a narrow one, e.g.
+  `log.LogInfoFmt(L"Opened {} ({} bytes)", fileName, size);` (wrap a
+  run-time one in `RuntimeFormat()`); its arguments are formatted as wide
+  text, so pass UTF-8 text as `ASWLog::UTF8(text)` (a narrow `std::string`
+  doesn't compile there). In a narrow `*Fmt` call, `ASWLog::Wide(text)`
+  formats wide text, converted only if the entry is formatted, e.g.
+  `log.LogInfoFmt("Opened {}", ASWLog::Wide(fileName));`. `WideToUTF8()`
+  (from `std::wstring_view` or `std::u16string_view`), `UTF8ToWide()` and
+  `UTF8ToUTF16()` convert on any platform (`wchar_t` text is UTF-16 on
+  Windows and UTF-32 on Linux); invalid input becomes U+FFFD. `std::format`
+  has no `char16_t` format strings, so `char16_t` text goes in as a message
+  or through `Wide()`.
 
 ### Changed
 

@@ -26,7 +26,6 @@ limitations under the License.
 //---------------------------------------------------------------------------
 #include <chrono>
 #include <cstdint>
-#include <cstdlib>
 #include <iostream>
 #include <streambuf>
 #include <optional>
@@ -35,17 +34,13 @@ limitations under the License.
 #include <thread>
 #include <utility>
 #include <vector>
-
-#if defined(_WIN32)
-#include <windows.h>
-#undef min
-#undef max
-#endif
 //---------------------------------------------------------------------------
 #include "ASWUnitTests_Registry.h"
 //---------------------------------------------------------------------------
 #include "ASWLog_ConsoleLog.h"
 #include "ASWLog_Utils.h"
+//---------------------------------------------------------------------------
+#include "UT_Helper_Environment.h"
 //---------------------------------------------------------------------------
 
 namespace ASWUnitTests
@@ -153,64 +148,6 @@ public:
     {
         return m_Buffer.SyncCount;
     }
-};
-
-// RAII helper: sets an environment variable (or removes it, given std::nullopt), restoring its previous value on
-// destruction.
-class TScopedEnvironmentVariable
-{
-private:
-    std::string m_Name;
-    std::optional<std::string> m_PreviousValue;
-
-    static std::optional<std::string> Get(const std::string& name)
-    {
-#if defined(_WIN32)
-        // The Windows API rather than the C runtime, since that's what TASWConsoleLog reads (and MinGW's runtime has
-        // no _dupenv_s)
-        const DWORD size = GetEnvironmentVariableA(name.c_str(), nullptr, 0);
-        if (size == 0)
-            return std::nullopt;
-
-        std::string value(size, '\0');
-        value.resize(GetEnvironmentVariableA(name.c_str(), value.data(), size));
-        return value;
-#else
-        const char* value = std::getenv(name.c_str());
-        if (value == nullptr)
-            return std::nullopt;
-
-        return std::string(value);
-#endif
-    }
-
-    static void Set(const std::string& name, const std::optional<std::string>& value)
-    {
-#if defined(_WIN32)
-        SetEnvironmentVariableA(name.c_str(), value ? value->c_str() : nullptr); // nullptr removes the variable
-#else
-        if (value)
-            setenv(name.c_str(), value->c_str(), 1);
-        else
-            unsetenv(name.c_str());
-#endif
-    }
-
-public:
-    TScopedEnvironmentVariable(std::string name, std::optional<std::string> value)
-        : m_Name(std::move(name)),
-          m_PreviousValue(Get(m_Name))
-    {
-        Set(m_Name, value);
-    }
-
-    ~TScopedEnvironmentVariable()
-    {
-        Set(m_Name, m_PreviousValue);
-    }
-
-    TScopedEnvironmentVariable(const TScopedEnvironmentVariable&) = delete;
-    TScopedEnvironmentVariable& operator=(const TScopedEnvironmentVariable&) = delete;
 };
 
 // RAII helper: redirects a standard stream's buffer to an internal buffer for
@@ -406,11 +343,28 @@ void TTest_ASWLog_ConsoleLog::Test_ColorModeAuto_HonorsNoColor()
         alwaysContents = outCapture.Str();
     }
 
+    // Act: NO_COLOR set to an empty value doesn't count (see https://no-color.org)
+    std::string emptyContents;
+    bool emptyInitialized = false;
+    {
+        TScopedEnvironmentVariable emptyNoColor("NO_COLOR", "");
+        TColorDetectConsoleLog emptyLogger;
+        emptyLogger.StdOutSupportsColor = true;
+        emptyLogger.StdErrSupportsColor = true;
+
+        TStreamCapture outCapture(std::cout);
+        emptyInitialized = emptyLogger.Initialize(config);
+        emptyLogger.LogInfo("empty_message");
+        emptyLogger.Close();
+        emptyContents = outCapture.Str();
+    }
+
     // Assert
-    CheckTrue(autoInitialized && alwaysInitialized, "Initialize should succeed");
+    CheckTrue(autoInitialized && alwaysInitialized && emptyInitialized, "Initialize should succeed");
     CheckNotContains(autoContents, "\x1b[", "Auto should not color any stream when NO_COLOR is set");
     CheckContains(autoContents, "auto_message", "The uncolored message should still be written");
     CheckContains(alwaysContents, "\x1b[", "Always should color even when NO_COLOR is set");
+    CheckContains(emptyContents, "\x1b[", "Auto should still color when NO_COLOR is set but empty");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_ConsoleLog::Test_ColorModeNever_SuppressesAnsiCodes()

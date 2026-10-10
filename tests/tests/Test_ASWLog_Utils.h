@@ -40,6 +40,7 @@ private: // Test methods
     void Test_ApplyMultilineMode_FindsLineBreaksAnywhereInALongText();
     void Test_ApplyMultilineMode_IndentMarksEachLineAfterTheFirst();
     void Test_ApplyMultilineMode_LeavesOtherLinesAsTheyAre();
+    void Test_EqualsIgnoringCase_IgnoresOnlyASCIICase();
     void Test_GenerateLogFileName_ContainsExpectedFields();
     void Test_GenerateLogFileName_PrefixAndPostfixAreOptional();
     void Test_GetCurrentOSProcessId_MatchesOS();
@@ -54,6 +55,7 @@ private: // Test methods
     void Test_JSON_AppendString_KeepsValidUTF8();
     void Test_JSON_AppendString_ReplacesInvalidUTF8();
     void Test_MatchesWildcard_Patterns();
+    void Test_ReadEnvironmentVariable_ReadsUTF8Values();
     void Test_RenameWithoutReplacing_KeepsExistingTarget();
     void Test_Time_GetUTCOffsetMinutes_FollowsDaylightSavingTime();
     void Test_Time_ToDateString();
@@ -63,6 +65,7 @@ private: // Test methods
     void Test_Time_WriteISO8601_CalendarEdges();
     void Test_Time_WriteISO8601_LocalTimeWithEachPrecision();
     void Test_Time_WriteISO8601_UTCWithEachPrecision();
+    void Test_TrimSpaces_RemovesOuterSpacesAndTabs();
 
 public:
     TTest_ASWLog_Utils();

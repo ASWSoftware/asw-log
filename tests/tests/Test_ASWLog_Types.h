@@ -55,6 +55,8 @@ private: // Test methods
     void Test_PendingEntry_SetFieldReplacesOrAddsACopy();
     void Test_PendingEntry_SetMessageOwnsTheText();
     void Test_LogError_ToString();
+    void Test_SyslogFacility_FromString();
+    void Test_SyslogFacility_ToString();
     void Test_TimePrecision_FromString();
     void Test_TimePrecision_ToString();
     void Test_TimeZone_FromString();

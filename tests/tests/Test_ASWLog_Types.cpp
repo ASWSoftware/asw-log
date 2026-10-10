@@ -83,6 +83,8 @@ TTest_ASWLog_Types::TTest_ASWLog_Types()
     RegisterTest(&TTest_ASWLog_Types::Test_PendingEntry_RemoveFieldRemovesItForThisEntry, "PendingEntry_RemoveFieldRemovesItForThisEntry");
     RegisterTest(&TTest_ASWLog_Types::Test_PendingEntry_SetFieldReplacesOrAddsACopy, "PendingEntry_SetFieldReplacesOrAddsACopy");
     RegisterTest(&TTest_ASWLog_Types::Test_PendingEntry_SetMessageOwnsTheText, "PendingEntry_SetMessageOwnsTheText");
+    RegisterTest(&TTest_ASWLog_Types::Test_SyslogFacility_FromString, "SyslogFacility_FromString");
+    RegisterTest(&TTest_ASWLog_Types::Test_SyslogFacility_ToString, "SyslogFacility_ToString");
     RegisterTest(&TTest_ASWLog_Types::Test_TimePrecision_FromString, "TimePrecision_FromString");
     RegisterTest(&TTest_ASWLog_Types::Test_TimePrecision_ToString, "TimePrecision_ToString");
     RegisterTest(&TTest_ASWLog_Types::Test_TimeZone_FromString, "TimeZone_FromString");
@@ -184,7 +186,8 @@ void TTest_ASWLog_Types::Test_ErrorKind_ToString()
     CheckEquals(std::string("DELETE_FAILED"), std::string(ASWLog::ErrorKind_ToString(ASWLog::ErrorKind::DeleteFailed)), "DeleteFailed should stringify as DELETE_FAILED");
     CheckEquals(std::string("EXCEPTION"), std::string(ASWLog::ErrorKind_ToString(ASWLog::ErrorKind::Exception)), "Exception should stringify as EXCEPTION");
     CheckEquals(std::string("ENTRIES_DROPPED"), std::string(ASWLog::ErrorKind_ToString(ASWLog::ErrorKind::EntriesDropped)), "EntriesDropped should stringify as ENTRIES_DROPPED");
-    CheckEquals(static_cast<std::size_t>(ASWLog::ErrorKind::EntriesDropped) + 1, ASWLog::ErrorKindCount, "ErrorKindCount should count every kind (EntriesDropped is the last)");
+    CheckEquals(std::string("INVALID_SETTING"), std::string(ASWLog::ErrorKind_ToString(ASWLog::ErrorKind::InvalidSetting)), "InvalidSetting should stringify as INVALID_SETTING");
+    CheckEquals(static_cast<std::size_t>(ASWLog::ErrorKind::InvalidSetting) + 1, ASWLog::ErrorKindCount, "ErrorKindCount should count every kind (InvalidSetting is the last)");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_Types::Test_FlushMode_FromString()
@@ -501,6 +504,37 @@ void TTest_ASWLog_Types::Test_PendingEntry_SetMessageOwnsTheText()
     CheckEquals(ASWLog::Level::Warn, entry.GetRecord().LogLevel, "The level should be kept");
     CheckTrue(entry.GetRecord().Raw, "The flags should be kept");
     CheckEquals(std::string("Net"), std::string(entry.GetRecord().Category), "The category should be kept");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_Types::Test_SyslogFacility_FromString()
+{
+    // Arrange
+    const auto user = ASWLog::SyslogFacility_FromString("USER");
+    const auto daemon = ASWLog::SyslogFacility_FromString("daemon");
+    const auto local0 = ASWLog::SyslogFacility_FromString("Local0");
+    const auto local7 = ASWLog::SyslogFacility_FromString("LOCAL7");
+    const auto local8 = ASWLog::SyslogFacility_FromString("LOCAL8");
+    const auto kernel = ASWLog::SyslogFacility_FromString("KERN");
+
+    // Act & Assert
+    CheckTrue(user == ASWLog::SyslogFacility::User, "USER should map to User");
+    CheckTrue(daemon == ASWLog::SyslogFacility::Daemon, "daemon should map to Daemon, ignoring case");
+    CheckTrue(local0 == ASWLog::SyslogFacility::Local0, "Local0 should map to Local0, ignoring case");
+    CheckTrue(local7 == ASWLog::SyslogFacility::Local7, "LOCAL7 should map to Local7");
+    CheckFalse(local8.has_value(), "There is no LOCAL8");
+    CheckFalse(kernel.has_value(), "A facility the logger doesn't offer should not parse");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_Types::Test_SyslogFacility_ToString()
+{
+    // Act & Assert
+    CheckEquals(std::string("USER"), std::string(ASWLog::SyslogFacility_ToString(ASWLog::SyslogFacility::User)), "User should stringify as USER");
+    CheckEquals(std::string("DAEMON"), std::string(ASWLog::SyslogFacility_ToString(ASWLog::SyslogFacility::Daemon)), "Daemon should stringify as DAEMON");
+    CheckEquals(std::string("LOCAL0"), std::string(ASWLog::SyslogFacility_ToString(ASWLog::SyslogFacility::Local0)), "Local0 should stringify as LOCAL0");
+    CheckEquals(std::string("LOCAL4"), std::string(ASWLog::SyslogFacility_ToString(ASWLog::SyslogFacility::Local4)), "Local4 should stringify as LOCAL4");
+    CheckEquals(std::string("LOCAL7"), std::string(ASWLog::SyslogFacility_ToString(ASWLog::SyslogFacility::Local7)), "Local7 should stringify as LOCAL7");
+    CheckEquals(8, static_cast<int>(ASWLog::SyslogFacility::User) << 3, "User should be RFC 5424 facility 1 (LOG_USER = 8)");
+    CheckEquals(184, static_cast<int>(ASWLog::SyslogFacility::Local7) << 3, "Local7 should be RFC 5424 facility 23 (LOG_LOCAL7 = 184)");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_Types::Test_TimePrecision_FromString()

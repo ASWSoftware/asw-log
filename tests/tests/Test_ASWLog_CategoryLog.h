@@ -38,6 +38,11 @@ private:
     typedef TTestGroupBase inherited;
 
 private: // Test methods
+    void Test_ApplyLevels_AppliesToCategoriesMadeLater();
+    void Test_ApplyLevels_GivesTheLongestCoveringNamesLevel();
+    void Test_ApplyLevels_IsSafeWhileCategoriesComeAndGo();
+    void Test_ApplyLevels_LeavesUncoveredCategories();
+    void Test_ApplyLevels_RejectsAnInvalidSpec();
     void Test_Async_KeepsItsOwnCopyOfTheName();
     void Test_Backtrace_KeepsEntriesBelowTheCategoryLevel();
     void Test_Backtrace_KeepsItsOwnCopyOfTheName();
