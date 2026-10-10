@@ -224,6 +224,10 @@
             <DependentOn>..\..\..\..\ASWLog\ASWLog_Interface.h</DependentOn>
             <BuildOrder>6</BuildOrder>
         </CppCompile>
+        <CppCompile Include="..\..\..\..\ASWLog\ASWLog_MemoryLog.cpp">
+            <DependentOn>..\..\..\..\ASWLog\ASWLog_MemoryLog.h</DependentOn>
+            <BuildOrder>54</BuildOrder>
+        </CppCompile>
         <CppCompile Include="..\..\..\..\ASWLog\ASWLog_MultiLog.cpp">
             <DependentOn>..\..\..\..\ASWLog\ASWLog_MultiLog.h</DependentOn>
             <BuildOrder>7</BuildOrder>
@@ -279,6 +283,10 @@
         <CppCompile Include="..\..\..\tests\Test_ASWLog_Formatter.cpp">
             <DependentOn>..\..\..\tests\Test_ASWLog_Formatter.h</DependentOn>
             <BuildOrder>37</BuildOrder>
+        </CppCompile>
+        <CppCompile Include="..\..\..\tests\Test_ASWLog_MemoryLog.cpp">
+            <DependentOn>..\..\..\tests\Test_ASWLog_MemoryLog.h</DependentOn>
+            <BuildOrder>55</BuildOrder>
         </CppCompile>
         <CppCompile Include="..\..\..\tests\Test_ASWLog_MultiLog.cpp">
             <DependentOn>..\..\..\tests\Test_ASWLog_MultiLog.h</DependentOn>

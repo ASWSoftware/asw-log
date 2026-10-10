@@ -248,6 +248,20 @@ struct TASWLineConfig
 
 
 /////////////////////////////////////////////////////////////////////////////
+// TASWMemoryConfig
+//
+// How much a TASWMemoryLog keeps (TASWLogConfig::Memory). When a new line doesn't fit, the oldest lines go.
+/////////////////////////////////////////////////////////////////////////////
+struct TASWMemoryConfig
+{
+    std::size_t MaxLines = 1000; // 0 = no limit
+    // The most bytes of text kept, the lines' characters (not the memory each line takes beyond them); 0 = no limit. A
+    // line longer than this on its own is kept cut to fit, ending with " [cut]".
+    std::size_t MaxBytes = 0;
+};
+
+
+/////////////////////////////////////////////////////////////////////////////
 // TASWShutdownConfig
 //
 // The lines a text logger writes when it shuts down, or when the application crashes (TASWLogConfig::Shutdown).
@@ -300,6 +314,7 @@ struct TASWLogConfig
     TASWFileConfig File;
     TASWAsyncConfig Async;
     TASWBacktraceConfig Backtrace;
+    TASWMemoryConfig Memory;
 
     // --- Pre-write Hook ---
     // A last chance for the application to drop or change each of its entries before the logger writes it, e.g. to

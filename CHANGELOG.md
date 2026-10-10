@@ -143,6 +143,17 @@ see [0.26.1](#0261---2026-09-17) for the initial versioned baseline.
   `IsEnabled()` are always false), while the lifecycle methods succeed,
   `GetConfig()` returns the config last passed in, and the minimum level
   reads back as set.
+- `TASWMemoryLog` (new `ASWLog_MemoryLog.h`): a text logger that keeps its
+  newest lines in memory, formatted like a file logger's and without the
+  line ending, e.g. for an in-app log viewer, a crash report or tests of
+  code that logs. The new `TASWLogConfig::Memory` group sets how much it
+  keeps: `MaxLines` (default 1000) and `MaxBytes` (default 0, no limit; a
+  single longer line is cut to fit, ending with " [cut]"); the oldest lines
+  go first. `GetLines()`, `GetLineCount()` and `Clear()` read and clear
+  them, and `GetLinesSince(n)` returns only the lines numbered n and up
+  (every kept line gets the next sequence number), with the number to ask
+  for next and how many lines were missed, so a viewer can poll for new
+  lines.
 
 ### Changed
 

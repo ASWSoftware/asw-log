@@ -40,6 +40,7 @@ add_executable(ASWLogTests
     "${ASWLOG_TESTS_DIR}/Test_ASWLog_Fields.cpp"
     "${ASWLOG_TESTS_DIR}/Test_ASWLog_FileLog.cpp"
     "${ASWLOG_TESTS_DIR}/Test_ASWLog_Formatter.cpp"
+    "${ASWLOG_TESTS_DIR}/Test_ASWLog_MemoryLog.cpp"
     "${ASWLOG_TESTS_DIR}/Test_ASWLog_MultiLog.cpp"
     "${ASWLOG_TESTS_DIR}/Test_ASWLog_NullLog.cpp"
     "${ASWLOG_TESTS_DIR}/Test_ASWLog_TextLogBase.cpp"

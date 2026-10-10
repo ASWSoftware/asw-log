@@ -36,6 +36,8 @@ add_library(ASWLog STATIC
     ASWLog/ASWLog_Formatter.h
     ASWLog/ASWLog_Interface.cpp
     ASWLog/ASWLog_Interface.h
+    ASWLog/ASWLog_MemoryLog.cpp
+    ASWLog/ASWLog_MemoryLog.h
     ASWLog/ASWLog_MultiLog.cpp
     ASWLog/ASWLog_MultiLog.h
     ASWLog/ASWLog_NullLog.cpp

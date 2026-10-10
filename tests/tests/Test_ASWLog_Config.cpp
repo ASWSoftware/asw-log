@@ -81,6 +81,8 @@ void TTest_ASWLog_Config::Test_Defaults_MatchDocumentedValues()
     CheckEquals(ASWLog::Level::Error, config.OnLogEntryMinimumLevel, "OnLogEntryMinimumLevel should default to Error");
     CheckNull(config.OnError, "OnError should default to unset (reports go to stderr)");
     CheckNull(config.OnBeforeWrite, "OnBeforeWrite should default to unset");
+    CheckEquals(1000, config.Memory.MaxLines, "Memory.MaxLines should default to 1000");
+    CheckEquals(0, config.Memory.MaxBytes, "Memory.MaxBytes should default to 0 (no limit)");
     CheckFalse(config.Async.Enabled, "Async.Enabled should default to false");
     CheckEquals(8192, config.Async.QueueCapacity, "Async.QueueCapacity should default to 8192");
     CheckEquals(ASWLog::AsyncOverflowPolicy::Block, config.Async.OverflowPolicy, "Async.OverflowPolicy should default to Block");
