@@ -27,6 +27,7 @@ limitations under the License.
 #include <algorithm>
 #include <cctype>
 #include <format>
+#include <initializer_list>
 #include <iomanip>
 #include <iostream>
 #include <sstream>
@@ -153,6 +154,18 @@ std::optional<MultilineMode> MultilineMode_FromString(std::string_view str) noex
 
     if (iequals(str, "ESCAPE"))
         return MultilineMode::Escape;
+
+    return std::nullopt;
+}
+
+//---------------------------------------------------------------------------
+std::optional<SyslogFacility> SyslogFacility_FromString(std::string_view str) noexcept
+{
+    for (const auto facility : { SyslogFacility::User, SyslogFacility::Daemon, SyslogFacility::Local0, SyslogFacility::Local1, SyslogFacility::Local2, SyslogFacility::Local3, SyslogFacility::Local4, SyslogFacility::Local5, SyslogFacility::Local6, SyslogFacility::Local7 })
+    {
+        if (iequals(str, SyslogFacility_ToString(facility)))
+            return facility;
+    }
 
     return std::nullopt;
 }

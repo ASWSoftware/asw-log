@@ -364,6 +364,64 @@ enum class MultilineMode
 
 //---------------------------------------------------------------------------
 
+// The syslog facility a TASWSyslogLog sends its entries with (see TASWSyslogConfig::Facility). The values are the
+// facility codes of RFC 5424, the same as the LOG_* facilities of <syslog.h> divided by 8.
+enum class SyslogFacility
+{
+    User   = 1,  // LOG_USER: an application's messages
+    Daemon = 3,  // LOG_DAEMON: a system service's
+    Local0 = 16, // LOG_LOCAL0 to LOG_LOCAL7: for the site's own use, e.g. to route an application's messages to a file
+    Local1 = 17,
+    Local2 = 18,
+    Local3 = 19,
+    Local4 = 20,
+    Local5 = 21,
+    Local6 = 22,
+    Local7 = 23,
+};
+
+[[nodiscard]] std::optional<SyslogFacility> SyslogFacility_FromString(std::string_view str) noexcept;
+
+[[nodiscard]] constexpr std::string_view SyslogFacility_ToString(SyslogFacility facility) noexcept
+{
+    switch (facility)
+    {
+        case SyslogFacility::User:
+            return "USER";
+
+        case SyslogFacility::Daemon:
+            return "DAEMON";
+
+        case SyslogFacility::Local0:
+            return "LOCAL0";
+
+        case SyslogFacility::Local1:
+            return "LOCAL1";
+
+        case SyslogFacility::Local2:
+            return "LOCAL2";
+
+        case SyslogFacility::Local3:
+            return "LOCAL3";
+
+        case SyslogFacility::Local4:
+            return "LOCAL4";
+
+        case SyslogFacility::Local5:
+            return "LOCAL5";
+
+        case SyslogFacility::Local6:
+            return "LOCAL6";
+
+        case SyslogFacility::Local7:
+            return "LOCAL7";
+    }
+
+    return "UNKNOWN";
+}
+
+//---------------------------------------------------------------------------
+
 // How many digits of the second a timestamp shows (see TASWLineConfig::TimestampPrecision). The digits past the system
 // clock's resolution are 0: with nanoseconds, the last two with MSVC and MinGW on Windows (100 ns), the last three with
 // libc++ (1 us, e.g. RAD Studio).

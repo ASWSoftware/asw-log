@@ -295,6 +295,21 @@ struct TASWStartupConfig
 
 
 /////////////////////////////////////////////////////////////////////////////
+// TASWSyslogConfig
+//
+// How a TASWSyslogLog sends its entries to syslog (TASWLogConfig::Syslog).
+/////////////////////////////////////////////////////////////////////////////
+struct TASWSyslogConfig
+{
+    // The name syslog shows for each message, e.g. "myapp" in "myapp[1234]: ...". Empty: the executable's file name.
+    // Process-wide: the syslog logger initialized or reconfigured last sets it, and the application's own openlog()
+    // call replaces it (see TASWSyslogLog).
+    std::string Ident;
+    SyslogFacility Facility = SyslogFacility::User; // Sent with each message, so each syslog logger can have its own
+};
+
+
+/////////////////////////////////////////////////////////////////////////////
 // TASWLogConfig
 //
 // A logger's settings, passed to IASWLog::Initialize(). The groups hold the settings for one concern each; a logger
@@ -315,6 +330,7 @@ struct TASWLogConfig
     TASWAsyncConfig Async;
     TASWBacktraceConfig Backtrace;
     TASWMemoryConfig Memory;
+    TASWSyslogConfig Syslog;
 
     // --- Pre-write Hook ---
     // A last chance for the application to drop or change each of its entries before the logger writes it, e.g. to

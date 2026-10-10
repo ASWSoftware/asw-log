@@ -116,6 +116,10 @@ call :CopyFile "ASWLog\ASWLog_NullLog.cpp" "%TARGET_DIR%\ASWLog\ASWLog_NullLog.c
 if errorlevel 1 exit /b 1
 call :CopyFile "ASWLog\ASWLog_NullLog.h" "%TARGET_DIR%\ASWLog\ASWLog_NullLog.h"
 if errorlevel 1 exit /b 1
+call :CopyFile "ASWLog\ASWLog_SyslogLog.cpp" "%TARGET_DIR%\ASWLog\ASWLog_SyslogLog.cpp"
+if errorlevel 1 exit /b 1
+call :CopyFile "ASWLog\ASWLog_SyslogLog.h" "%TARGET_DIR%\ASWLog\ASWLog_SyslogLog.h"
+if errorlevel 1 exit /b 1
 call :CopyFile "ASWLog\ASWLog_TextLogBase.cpp" "%TARGET_DIR%\ASWLog\ASWLog_TextLogBase.cpp"
 if errorlevel 1 exit /b 1
 call :CopyFile "ASWLog\ASWLog_TextLogBase.h" "%TARGET_DIR%\ASWLog\ASWLog_TextLogBase.h"

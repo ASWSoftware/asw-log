@@ -1,5 +1,5 @@
 /* **************************************************************************
-Test_ASWLog_Types.h
+Test_ASWLog_SyslogLog.h
 Author: Anthony S. West - ASW Software
 
 Copyright 2026 ASW Software
@@ -18,8 +18,10 @@ limitations under the License.
 
 ************************************************************************** */
 
-#ifndef Test_ASWLog_TypesH
-#define Test_ASWLog_TypesH
+#pragma once
+
+#ifndef Test_ASWLog_SyslogLogH
+#define Test_ASWLog_SyslogLogH
 //---------------------------------------------------------------------------
 #include "ASWUnitTests_TestBase.h"
 //---------------------------------------------------------------------------
@@ -28,43 +30,26 @@ namespace ASWUnitTests
 {
 
 ///////////////////////////////////////////////////////////////////////////
-// TTest_ASWLog_Types
+// TTest_ASWLog_SyslogLog
 ///////////////////////////////////////////////////////////////////////////
-class TTest_ASWLog_Types : public TTestGroupBase
+class TTest_ASWLog_SyslogLog : public TTestGroupBase
 {
 private:
     typedef TTestGroupBase inherited;
 
 private: // Test methods
-    void Test_AsyncOverflowPolicy_FromString();
-    void Test_AsyncOverflowPolicy_ToString();
-    void Test_ColorMode_FromString();
-    void Test_ColorMode_ToString();
-    void Test_ErrorKind_ToString();
-    void Test_FlushMode_FromString();
-    void Test_FlushMode_ToString();
-    void Test_Level_FromString();
-    void Test_Level_ToString();
-    void Test_LineEnding_FromString();
-    void Test_LineEnding_ToString();
-    void Test_MultilineMode_FromString();
-    void Test_MultilineMode_ToString();
-    void Test_PendingEntry_ChangingFieldsWhileVisitingIsSafe();
-    void Test_PendingEntry_FindsFieldsOfTheEntryAndItsScopes();
-    void Test_PendingEntry_RemoveFieldRemovesItForThisEntry();
-    void Test_PendingEntry_SetFieldReplacesOrAddsACopy();
-    void Test_PendingEntry_SetMessageOwnsTheText();
-    void Test_LogError_ToString();
-    void Test_SyslogFacility_FromString();
-    void Test_SyslogFacility_ToString();
-    void Test_TimePrecision_FromString();
-    void Test_TimePrecision_ToString();
-    void Test_TimeZone_FromString();
-    void Test_TimeZone_ToString();
+    void Test_GetInstance_ReturnsTheSameLogger();
+    void Test_HandleCrash_SendsTheFormattedCrashLineOnly();
+    void Test_Initialize_OpensSyslogWithTheIdentAndFacility();
+    void Test_Linux_SendsToTheRealSyslog();
+    void Test_Send_FollowsTheMultilineMode();
+    void Test_Send_MapsEachLevelToAPriority();
+    void Test_Send_StripsOnlyTheLineEnding();
+    void Test_ShouldLog_FollowsThePlatform();
 
 public:
-    TTest_ASWLog_Types();
-    ~TTest_ASWLog_Types() override;
+    TTest_ASWLog_SyslogLog();
+    ~TTest_ASWLog_SyslogLog() override;
 
     void SetUp_Group() override;
     void SetUp_Test(ITestCase& testCase) override;
@@ -75,4 +60,4 @@ public:
 } // ASWUnitTests
 
 //---------------------------------------------------------------------------
-#endif // #ifndef Test_ASWLog_TypesH
+#endif // #ifndef Test_ASWLog_SyslogLogH

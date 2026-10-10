@@ -44,6 +44,8 @@ add_library(ASWLog STATIC
     ASWLog/ASWLog_MultiLog.h
     ASWLog/ASWLog_NullLog.cpp
     ASWLog/ASWLog_NullLog.h
+    ASWLog/ASWLog_SyslogLog.cpp
+    ASWLog/ASWLog_SyslogLog.h
     ASWLog/ASWLog_TextLogBase.cpp
     ASWLog/ASWLog_TextLogBase.h
     ASWLog/ASWLog_Types.cpp

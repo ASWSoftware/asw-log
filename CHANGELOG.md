@@ -162,6 +162,19 @@ see [0.26.1](#0261---2026-09-17) for the initial versioned baseline.
   gives the shared one. Other platforms have no debugger output: there the
   class builds but writes nothing (`ShouldLog()` is false and no line is
   formatted), so the same code can add it everywhere.
+- `TASWSyslogLog` (new `ASWLog_SyslogLog.h`): sends each line to the system
+  log with `syslog()` on Linux (the journal on systemd hosts), without its
+  line ending, the level as the priority (Trace and Debug `LOG_DEBUG`, Info
+  `LOG_INFO`, Warn `LOG_WARNING`, Error `LOG_ERR`, Critical `LOG_CRIT`).
+  The new `TASWLogConfig::Syslog` group sets the ident (`Ident`, empty =
+  the executable's file name; passed to `openlog()` with `LOG_PID`, so it
+  is process-wide) and the facility (`Facility`, a new `SyslogFacility`:
+  `User`, the default, `Daemon` or `Local0` to `Local7`; sent with each
+  message). The line is formatted as configured, so consider turning off
+  `Line.ShowTimestamp` and `Line.ShowProcessId`, which syslog adds itself.
+  `TASWSyslogLog::GetInstance()` gives the shared one. Windows has no
+  syslog: there the class builds but writes nothing (`ShouldLog()` is false
+  and no line is formatted).
 
 ### Changed
 
