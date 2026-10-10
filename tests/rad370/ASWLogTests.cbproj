@@ -190,6 +190,10 @@
             <DependentOn>..\..\ASWLog\ASWLog_MultiLog.h</DependentOn>
             <BuildOrder>5</BuildOrder>
         </CppCompile>
+        <CppCompile Include="..\..\ASWLog\ASWLog_NullLog.cpp">
+            <DependentOn>..\..\ASWLog\ASWLog_NullLog.h</DependentOn>
+            <BuildOrder>41</BuildOrder>
+        </CppCompile>
         <CppCompile Include="..\..\ASWLog\ASWLog_TextLogBase.cpp">
             <DependentOn>..\..\ASWLog\ASWLog_TextLogBase.h</DependentOn>
             <BuildOrder>26</BuildOrder>
@@ -245,6 +249,10 @@
         <CppCompile Include="..\tests\Test_ASWLog_MultiLog.cpp">
             <DependentOn>..\tests\Test_ASWLog_MultiLog.h</DependentOn>
             <BuildOrder>23</BuildOrder>
+        </CppCompile>
+        <CppCompile Include="..\tests\Test_ASWLog_NullLog.cpp">
+            <DependentOn>..\tests\Test_ASWLog_NullLog.h</DependentOn>
+            <BuildOrder>42</BuildOrder>
         </CppCompile>
         <CppCompile Include="..\tests\Test_ASWLog_TextLogBase.cpp">
             <DependentOn>..\tests\Test_ASWLog_TextLogBase.h</DependentOn>

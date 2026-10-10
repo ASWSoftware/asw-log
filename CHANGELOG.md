@@ -136,6 +136,13 @@ see [0.26.1](#0261---2026-09-17) for the initial versioned baseline.
   logger's own lines (startup, shutdown, backtrace markers, crash lines)
   don't pass through it. A multi-log runs its hook once per entry and
   passes its config on without it.
+- `TASWNullLog` (new `ASWLog_NullLog.h`): a logger that writes nothing,
+  e.g. to turn logging off behind an `IASWLog&` or to pass to code under
+  test; `TASWNullLog::GetInstance()` gives a shared one, e.g. for a default
+  argument. No logging call formats or copies anything (`ShouldLog()` and
+  `IsEnabled()` are always false), while the lifecycle methods succeed,
+  `GetConfig()` returns the config last passed in, and the minimum level
+  reads back as set.
 
 ### Changed
 

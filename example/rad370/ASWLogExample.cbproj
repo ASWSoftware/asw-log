@@ -175,6 +175,10 @@
             <DependentOn>..\..\ASWLog\ASWLog_MultiLog.h</DependentOn>
             <BuildOrder>7</BuildOrder>
         </CppCompile>
+        <CppCompile Include="..\..\ASWLog\ASWLog_NullLog.cpp">
+            <DependentOn>..\..\ASWLog\ASWLog_NullLog.h</DependentOn>
+            <BuildOrder>16</BuildOrder>
+        </CppCompile>
         <CppCompile Include="..\..\ASWLog\ASWLog_TextLogBase.cpp">
             <DependentOn>..\..\ASWLog\ASWLog_TextLogBase.h</DependentOn>
             <BuildOrder>10</BuildOrder>
