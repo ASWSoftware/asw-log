@@ -63,9 +63,12 @@ namespace ASWLog
 // a log the rest of the application uses. SetEnabled(false) silences only this category (and the categories wrapping
 // it); the wrapped logger must be enabled too.
 //
-// Lock-free and thread-safe. The wrapped logger must outlive the category, and must not be a multi-log that holds the
-// category. A logger that keeps an entry beyond the call (e.g. in its backtrace) copies the category's name, so the
-// category may be destroyed meanwhile.
+// The levels of several categories can also be set by name, e.g. from an environment variable, with ApplyLevels() (see
+// TASWLogConfig::ApplyEnvironment()).
+//
+// Lock-free and thread-safe (making or destroying a category takes a process-wide lock, for ApplyLevels()). The wrapped
+// logger must outlive the category, and must not be a multi-log that holds the category. A logger that keeps an entry
+// beyond the call (e.g. in its backtrace) copies the category's name, so the category may be destroyed meanwhile.
 /////////////////////////////////////////////////////////////////////////////
 class TASWCategoryLog : public IASWLog
 {
@@ -86,10 +89,23 @@ private:
     TASWLogRecord WithCategory(const TASWLogRecord& record) const noexcept;
 
 public:
-    // Shows 'name' as is, or, if 'log' is a category, after that category's name and a '.'. Throws std::bad_alloc if
-    // the name can't be copied.
+    // Sets the minimum level of the categories 'spec' covers, process-wide: of those that exist now, and of those made
+    // until the next call. 'spec' is a list of "name=level" items separated by commas, e.g. "*=Info,Net=Debug,
+    // Net.Http=Trace": a name covers the category of that name and those under it (Net covers Net and Net.Http, but
+    // not Network), "*" covers every category, and the longest name that covers a category gives its level. Names and
+    // levels ignore case and the spaces around them; the levels are those of Level_FromString(). The categories it
+    // doesn't cover keep their level, and a later SetMinimumLevel() or ResetMinimumLevel() changes a category's level
+    // as usual. An empty spec covers none. Returns false and changes nothing if an item is invalid (no '=', no name, a
+    // '*' in a name other than "*", or an unknown level), describing it in 'error'. Throws std::bad_alloc if out of
+    // memory.
+    static bool ApplyLevels(std::string_view spec);
+    static bool ApplyLevels(std::string_view spec, std::string& error);
+
+public:
+    // Shows 'name' as is, or, if 'log' is a category, after that category's name and a '.'. Takes its level from the
+    // levels ApplyLevels() set last, if they cover it. Throws std::bad_alloc if out of memory.
     TASWCategoryLog(std::string_view name, IASWLog& log);
-    ~TASWCategoryLog() override = default;
+    ~TASWCategoryLog() override;
 
     TASWCategoryLog(const TASWCategoryLog&) = delete;
     TASWCategoryLog& operator=(const TASWCategoryLog&) = delete;

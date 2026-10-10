@@ -25,7 +25,6 @@ limitations under the License.
 #include "ASWLog_Types.h"
 //---------------------------------------------------------------------------
 #include <algorithm>
-#include <cctype>
 #include <format>
 #include <initializer_list>
 #include <iomanip>
@@ -40,32 +39,15 @@ limitations under the License.
 namespace ASWLog
 {
 
-namespace
-{
-
-// Helper to check if two strings match case-insensitively without
-// creating a new, modified string allocation on the heap.
-bool iequals(std::string_view a, std::string_view b) noexcept
-{
-    return std::equal(a.begin(), a.end(), b.begin(), b.end(),
-        [](char char_a, char char_b)
-            {
-                // Cast to unsigned char before passing to tolower to avoid UB with negative values
-                return std::tolower(static_cast<unsigned char>(char_a)) == std::tolower(static_cast<unsigned char>(char_b));
-            });
-}
-
-} // namespace
-
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
 std::optional<AsyncOverflowPolicy> AsyncOverflowPolicy_FromString(std::string_view str) noexcept
 {
-    if (iequals(str, "BLOCK"))
+    if (Detail::EqualsIgnoringCase(str, "BLOCK"))
         return AsyncOverflowPolicy::Block;
 
-    if (iequals(str, "DROP_NEWEST") || iequals(str, "DROPNEWEST"))
+    if (Detail::EqualsIgnoringCase(str, "DROP_NEWEST") || Detail::EqualsIgnoringCase(str, "DROPNEWEST"))
         return AsyncOverflowPolicy::DropNewest;
 
     return std::nullopt;
@@ -74,13 +56,13 @@ std::optional<AsyncOverflowPolicy> AsyncOverflowPolicy_FromString(std::string_vi
 //---------------------------------------------------------------------------
 std::optional<ColorMode> ColorMode_FromString(std::string_view str) noexcept
 {
-    if (iequals(str, "AUTO"))
+    if (Detail::EqualsIgnoringCase(str, "AUTO"))
         return ColorMode::Auto;
 
-    if (iequals(str, "ALWAYS"))
+    if (Detail::EqualsIgnoringCase(str, "ALWAYS"))
         return ColorMode::Always;
 
-    if (iequals(str, "NEVER"))
+    if (Detail::EqualsIgnoringCase(str, "NEVER"))
         return ColorMode::Never;
 
     return std::nullopt; // Return empty optional if the string is not recognized
@@ -89,16 +71,16 @@ std::optional<ColorMode> ColorMode_FromString(std::string_view str) noexcept
 //---------------------------------------------------------------------------
 std::optional<FlushMode> FlushMode_FromString(std::string_view str) noexcept
 {
-    if (iequals(str, "EVERY_WRITE") || iequals(str, "EVERYWRITE"))
+    if (Detail::EqualsIgnoringCase(str, "EVERY_WRITE") || Detail::EqualsIgnoringCase(str, "EVERYWRITE"))
         return FlushMode::EveryWrite;
 
-    if (iequals(str, "ON_NEW_LINE") || iequals(str, "ONNEWLINE"))
+    if (Detail::EqualsIgnoringCase(str, "ON_NEW_LINE") || Detail::EqualsIgnoringCase(str, "ONNEWLINE"))
         return FlushMode::OnNewLine;
 
-    if (iequals(str, "MANUAL"))
+    if (Detail::EqualsIgnoringCase(str, "MANUAL"))
         return FlushMode::Manual;
 
-    if (iequals(str, "PERIODIC"))
+    if (Detail::EqualsIgnoringCase(str, "PERIODIC"))
         return FlushMode::Periodic;
 
     return std::nullopt;
@@ -107,25 +89,25 @@ std::optional<FlushMode> FlushMode_FromString(std::string_view str) noexcept
 //---------------------------------------------------------------------------
 std::optional<Level> Level_FromString(std::string_view str) noexcept
 {
-    if (iequals(str, "TRACE"))
+    if (Detail::EqualsIgnoringCase(str, "TRACE"))
         return Level::Trace;
 
-    if (iequals(str, "DEBUG"))
+    if (Detail::EqualsIgnoringCase(str, "DEBUG"))
         return Level::Debug;
 
-    if (iequals(str, "INFO"))
+    if (Detail::EqualsIgnoringCase(str, "INFO"))
         return Level::Info;
 
-    if (iequals(str, "WARN") || iequals(str, "WARNING"))
+    if (Detail::EqualsIgnoringCase(str, "WARN") || Detail::EqualsIgnoringCase(str, "WARNING"))
         return Level::Warn;
 
-    if (iequals(str, "ERROR"))
+    if (Detail::EqualsIgnoringCase(str, "ERROR"))
         return Level::Error;
 
-    if (iequals(str, "CRITICAL") || iequals(str, "FATAL"))
+    if (Detail::EqualsIgnoringCase(str, "CRITICAL") || Detail::EqualsIgnoringCase(str, "FATAL"))
         return Level::Critical;
 
-    if (iequals(str, "OFF") || iequals(str, "NONE"))
+    if (Detail::EqualsIgnoringCase(str, "OFF") || Detail::EqualsIgnoringCase(str, "NONE"))
         return Level::Off;
 
     return std::nullopt; // Return empty optional if the string is not recognized
@@ -134,10 +116,10 @@ std::optional<Level> Level_FromString(std::string_view str) noexcept
 //---------------------------------------------------------------------------
 std::optional<LineEnding> LineEnding_FromString(std::string_view str) noexcept
 {
-    if (iequals(str, "LF") || iequals(str, "LINUX"))
+    if (Detail::EqualsIgnoringCase(str, "LF") || Detail::EqualsIgnoringCase(str, "LINUX"))
         return LineEnding::LF;
 
-    if (iequals(str, "CRLF") || iequals(str, "WINDOWS"))
+    if (Detail::EqualsIgnoringCase(str, "CRLF") || Detail::EqualsIgnoringCase(str, "WINDOWS"))
         return LineEnding::CRLF;
 
     return std::nullopt; // Return empty optional if the string is not recognized
@@ -146,13 +128,13 @@ std::optional<LineEnding> LineEnding_FromString(std::string_view str) noexcept
 //---------------------------------------------------------------------------
 std::optional<MultilineMode> MultilineMode_FromString(std::string_view str) noexcept
 {
-    if (iequals(str, "PRESERVE"))
+    if (Detail::EqualsIgnoringCase(str, "PRESERVE"))
         return MultilineMode::Preserve;
 
-    if (iequals(str, "INDENT"))
+    if (Detail::EqualsIgnoringCase(str, "INDENT"))
         return MultilineMode::Indent;
 
-    if (iequals(str, "ESCAPE"))
+    if (Detail::EqualsIgnoringCase(str, "ESCAPE"))
         return MultilineMode::Escape;
 
     return std::nullopt;
@@ -163,7 +145,7 @@ std::optional<SyslogFacility> SyslogFacility_FromString(std::string_view str) no
 {
     for (const auto facility : { SyslogFacility::User, SyslogFacility::Daemon, SyslogFacility::Local0, SyslogFacility::Local1, SyslogFacility::Local2, SyslogFacility::Local3, SyslogFacility::Local4, SyslogFacility::Local5, SyslogFacility::Local6, SyslogFacility::Local7 })
     {
-        if (iequals(str, SyslogFacility_ToString(facility)))
+        if (Detail::EqualsIgnoringCase(str, SyslogFacility_ToString(facility)))
             return facility;
     }
 
@@ -173,13 +155,13 @@ std::optional<SyslogFacility> SyslogFacility_FromString(std::string_view str) no
 //---------------------------------------------------------------------------
 std::optional<TimePrecision> TimePrecision_FromString(std::string_view str) noexcept
 {
-    if (iequals(str, "MILLISECONDS") || iequals(str, "MS"))
+    if (Detail::EqualsIgnoringCase(str, "MILLISECONDS") || Detail::EqualsIgnoringCase(str, "MS"))
         return TimePrecision::Milliseconds;
 
-    if (iequals(str, "MICROSECONDS") || iequals(str, "US"))
+    if (Detail::EqualsIgnoringCase(str, "MICROSECONDS") || Detail::EqualsIgnoringCase(str, "US"))
         return TimePrecision::Microseconds;
 
-    if (iequals(str, "NANOSECONDS") || iequals(str, "NS"))
+    if (Detail::EqualsIgnoringCase(str, "NANOSECONDS") || Detail::EqualsIgnoringCase(str, "NS"))
         return TimePrecision::Nanoseconds;
 
     return std::nullopt;
@@ -188,10 +170,10 @@ std::optional<TimePrecision> TimePrecision_FromString(std::string_view str) noex
 //---------------------------------------------------------------------------
 std::optional<TimeZone> TimeZone_FromString(std::string_view str) noexcept
 {
-    if (iequals(str, "UTC"))
+    if (Detail::EqualsIgnoringCase(str, "UTC"))
         return TimeZone::UTC;
 
-    if (iequals(str, "LOCAL"))
+    if (Detail::EqualsIgnoringCase(str, "LOCAL"))
         return TimeZone::Local;
 
     return std::nullopt;

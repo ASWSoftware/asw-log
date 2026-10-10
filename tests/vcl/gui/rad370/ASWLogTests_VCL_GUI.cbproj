@@ -348,9 +348,17 @@
             <DependentOn>..\..\..\tests\UT_Helper_DateTime.h</DependentOn>
             <BuildOrder>44</BuildOrder>
         </CppCompile>
+        <CppCompile Include="..\..\..\tests\UT_Helper_Environment.cpp">
+            <DependentOn>..\..\..\tests\UT_Helper_Environment.h</DependentOn>
+            <BuildOrder>64</BuildOrder>
+        </CppCompile>
         <CppCompile Include="..\..\..\tests\UT_Helper_JSON.cpp">
             <DependentOn>..\..\..\tests\UT_Helper_JSON.h</DependentOn>
             <BuildOrder>49</BuildOrder>
+        </CppCompile>
+        <CppCompile Include="..\..\..\tests\UT_Helper_StdErr.cpp">
+            <DependentOn>..\..\..\tests\UT_Helper_StdErr.h</DependentOn>
+            <BuildOrder>65</BuildOrder>
         </CppCompile>
         <CppCompile Include="ASWLogTests_VCL_GUI.cpp">
             <BuildOrder>0</BuildOrder>

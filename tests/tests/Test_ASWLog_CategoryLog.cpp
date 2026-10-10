@@ -24,6 +24,7 @@ limitations under the License.
 // Module header
 #include "Test_ASWLog_CategoryLog.h"
 //---------------------------------------------------------------------------
+#include <atomic>
 #include <chrono>
 #include <cstdint>
 #include <filesystem>
@@ -44,6 +45,7 @@ limitations under the License.
 #include "ASWLog_CategoryLog.h"
 #include "ASWLog_FileLog.h"
 #include "ASWLog_MultiLog.h"
+#include "ASWLog_NullLog.h"
 //---------------------------------------------------------------------------
 
 namespace
@@ -202,6 +204,19 @@ std::string ReadFileText(const std::filesystem::path& path)
     return std::string((std::istreambuf_iterator<char>(stream)), std::istreambuf_iterator<char>());
 }
 
+// Clears the category levels a test applied (they are process-wide) when it ends
+struct TCategoryLevelsReset
+{
+    TCategoryLevelsReset() = default;
+    TCategoryLevelsReset(const TCategoryLevelsReset&) = delete;
+    TCategoryLevelsReset& operator=(const TCategoryLevelsReset&) = delete;
+
+    ~TCategoryLevelsReset()
+    {
+        ASWLog::TASWCategoryLog::ApplyLevels("");
+    }
+};
+
 // Checks 'condition' until it is true, for at most WaitTimeout. Returns false if it never was.
 bool WaitUntil(const std::function<bool()>& condition)
 {
@@ -229,6 +244,11 @@ bool WaitUntil(const std::function<bool()>& condition)
 TTest_ASWLog_CategoryLog::TTest_ASWLog_CategoryLog()
     : inherited("ASWLog_CategoryLog_Tests")
 {
+    RegisterTest(&TTest_ASWLog_CategoryLog::Test_ApplyLevels_AppliesToCategoriesMadeLater, "ApplyLevels_AppliesToCategoriesMadeLater");
+    RegisterTest(&TTest_ASWLog_CategoryLog::Test_ApplyLevels_GivesTheLongestCoveringNamesLevel, "ApplyLevels_GivesTheLongestCoveringNamesLevel");
+    RegisterTest(&TTest_ASWLog_CategoryLog::Test_ApplyLevels_IsSafeWhileCategoriesComeAndGo, "ApplyLevels_IsSafeWhileCategoriesComeAndGo");
+    RegisterTest(&TTest_ASWLog_CategoryLog::Test_ApplyLevels_LeavesUncoveredCategories, "ApplyLevels_LeavesUncoveredCategories");
+    RegisterTest(&TTest_ASWLog_CategoryLog::Test_ApplyLevels_RejectsAnInvalidSpec, "ApplyLevels_RejectsAnInvalidSpec");
     RegisterTest(&TTest_ASWLog_CategoryLog::Test_Async_KeepsItsOwnCopyOfTheName, "Async_KeepsItsOwnCopyOfTheName");
     RegisterTest(&TTest_ASWLog_CategoryLog::Test_Backtrace_KeepsEntriesBelowTheCategoryLevel, "Backtrace_KeepsEntriesBelowTheCategoryLevel");
     RegisterTest(&TTest_ASWLog_CategoryLog::Test_Backtrace_KeepsItsOwnCopyOfTheName, "Backtrace_KeepsItsOwnCopyOfTheName");
@@ -276,6 +296,189 @@ void TTest_ASWLog_CategoryLog::TearDown_Test(ITestCase& testCase)
 
 // /////// Begin tests after this line ///////////////////////
 
+//---------------------------------------------------------------------------
+void TTest_ASWLog_CategoryLog::Test_ApplyLevels_AppliesToCategoriesMadeLater()
+{
+    // Arrange
+    TCategoryLevelsReset resetLevels;
+    TRecordingLogger logger;
+
+    // Act
+    const bool isValid = ASWLog::TASWCategoryLog::ApplyLevels("Later=Debug");
+    ASWLog::TASWCategoryLog laterLog("Later", logger);
+    ASWLog::TASWCategoryLog httpLog("Http", laterLog);
+    ASWLog::TASWCategoryLog otherLog("Other", logger);
+
+    // Assert
+    CheckTrue(isValid, "The spec should be valid");
+    CheckEquals(ASWLog::Level::Debug, laterLog.GetMinimumLevel(), "A category made after ApplyLevels() should get its level");
+    CheckTrue(laterLog.HasOwnMinimumLevel(), "The spec's level should be the category's own");
+    CheckTrue(httpLog.HasOwnMinimumLevel(), "A category under a covered one should get the level too");
+    CheckEquals(ASWLog::Level::Debug, httpLog.GetMinimumLevel(), "Later.Http should get Later's level");
+    CheckFalse(otherLog.HasOwnMinimumLevel(), "A category the spec doesn't cover should get no level");
+
+    // Act: an empty spec covers no category made later
+    ASWLog::TASWCategoryLog::ApplyLevels("");
+    ASWLog::TASWCategoryLog afterClearLog("Later", logger);
+
+    // Assert
+    CheckFalse(afterClearLog.HasOwnMinimumLevel(), "After an empty spec, a new category should get no level");
+    CheckEquals(ASWLog::Level::Debug, laterLog.GetMinimumLevel(), "An empty spec should leave the levels already set");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_CategoryLog::Test_ApplyLevels_GivesTheLongestCoveringNamesLevel()
+{
+    // Arrange
+    TCategoryLevelsReset resetLevels;
+    TRecordingLogger logger;
+    ASWLog::TASWCategoryLog dbLog("Db", logger);
+    ASWLog::TASWCategoryLog netLog("Net", logger);
+    ASWLog::TASWCategoryLog dnsLog("Dns", netLog);
+    ASWLog::TASWCategoryLog httpLog("Http", netLog);
+    ASWLog::TASWCategoryLog proxyLog("Proxy", httpLog);
+    ASWLog::TASWCategoryLog networkLog("Network", logger);
+
+    // Act: broader names first, any case, spaces, an empty item, and Net given twice (the last wins)
+    const bool isValid = ASWLog::TASWCategoryLog::ApplyLevels(" * = Warn , net=Debug, NET.HTTP = trace,, Net=Info, ");
+
+    // Assert
+    CheckTrue(isValid, "The spec should be valid");
+    CheckEquals(ASWLog::Level::Warn, dbLog.GetMinimumLevel(), "* should cover Db");
+    CheckEquals(ASWLog::Level::Info, netLog.GetMinimumLevel(), "Net should get its last level");
+    CheckEquals(ASWLog::Level::Info, dnsLog.GetMinimumLevel(), "Net should cover Net.Dns");
+    CheckEquals(ASWLog::Level::Trace, httpLog.GetMinimumLevel(), "Net.Http should win over Net for Net.Http");
+    CheckEquals(ASWLog::Level::Trace, proxyLog.GetMinimumLevel(), "Net.Http should cover Net.Http.Proxy");
+    CheckEquals(ASWLog::Level::Warn, networkLog.GetMinimumLevel(), "Net should not cover Network, only * should");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_CategoryLog::Test_ApplyLevels_IsSafeWhileCategoriesComeAndGo()
+{
+    // Arrange
+    constexpr int ThreadCount = 4;
+    constexpr int CategoriesPerThread = 2000;
+
+    TCategoryLevelsReset resetLevels;
+    ASWLog::TASWNullLog logger; // Thread-safe
+    std::atomic<bool> isDone{ false };
+    std::atomic<int> withoutLevelCount{ 0 };
+    ASWLog::TASWCategoryLog::ApplyLevels("Churn=Warn");
+
+    // Act: threads make, use and destroy categories while the levels change
+    std::vector<std::thread> threads;
+    for (int thread = 0; thread < ThreadCount; ++thread)
+    {
+        threads.emplace_back([&logger, &withoutLevelCount]
+            {
+                for (int index = 0; index < CategoriesPerThread; ++index)
+                {
+                    ASWLog::TASWCategoryLog churnLog("Churn", logger);
+                    const auto level = churnLog.GetMinimumLevel();
+                    if (!churnLog.HasOwnMinimumLevel() || (level != ASWLog::Level::Warn && level != ASWLog::Level::Debug))
+                        ++withoutLevelCount;
+
+                    churnLog.LogDebug("churn");
+                }
+            });
+    }
+
+    const auto applyLevels = [&isDone]
+        {
+            for (int round = 0; !isDone.load(); ++round)
+                ASWLog::TASWCategoryLog::ApplyLevels(round % 2 == 0 ? "Churn=Warn" : "Churn=Debug");
+        };
+    std::thread applier(applyLevels);
+
+    for (auto& thread : threads)
+        thread.join();
+
+    isDone.store(true);
+    applier.join();
+
+    // Assert
+    CheckEquals(0, withoutLevelCount.load(), "Every category made after the first spec should get a level");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_CategoryLog::Test_ApplyLevels_LeavesUncoveredCategories()
+{
+    // Arrange
+    TCategoryLevelsReset resetLevels;
+    TRecordingLogger logger;
+    ASWLog::TASWCategoryLog coveredLog("Covered", logger);
+    ASWLog::TASWCategoryLog freeLog("Free", logger);
+    ASWLog::TASWCategoryLog codedLog("Coded", logger);
+    codedLog.SetMinimumLevel(ASWLog::Level::Error);
+
+    // Act
+    ASWLog::TASWCategoryLog::ApplyLevels("Covered=Debug");
+    logger.SetMinimumLevel(ASWLog::Level::Warn);
+
+    // Assert
+    CheckEquals(ASWLog::Level::Debug, coveredLog.GetMinimumLevel(), "The covered category should get the spec's level");
+    CheckFalse(freeLog.HasOwnMinimumLevel(), "An uncovered category should get no level");
+    CheckEquals(ASWLog::Level::Warn, freeLog.GetMinimumLevel(), "An uncovered category should still follow the wrapped logger");
+    CheckEquals(ASWLog::Level::Error, codedLog.GetMinimumLevel(), "An uncovered category should keep the level the code set");
+
+    // Act: a spec that no longer covers it leaves its level; the code can still change it
+    ASWLog::TASWCategoryLog::ApplyLevels("Other=Info");
+    const auto levelAfterOtherSpec = coveredLog.GetMinimumLevel();
+    coveredLog.SetMinimumLevel(ASWLog::Level::Critical);
+    const auto levelAfterSet = coveredLog.GetMinimumLevel();
+    coveredLog.ResetMinimumLevel();
+
+    // Assert
+    CheckEquals(ASWLog::Level::Debug, levelAfterOtherSpec, "A spec that doesn't cover the category should leave its level");
+    CheckEquals(ASWLog::Level::Critical, levelAfterSet, "SetMinimumLevel() after ApplyLevels() should win");
+    CheckFalse(coveredLog.HasOwnMinimumLevel(), "ResetMinimumLevel() should make the category follow again");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_CategoryLog::Test_ApplyLevels_RejectsAnInvalidSpec()
+{
+    // Arrange
+    struct TInvalidSpec
+    {
+        std::string_view Spec;
+        std::string_view Error;
+    };
+
+    const TInvalidSpec invalidSpecs[]{
+        { "Spec=Trace,Net", "'Net' has no '=' (expected name=level)" },
+        { "Spec=Trace, =Info", "'=Info' has no category name" },
+        { "Spec=Trace,Net.*=Info", "'Net.*=Info': a name can't hold '*' (a name covers the categories under it; \"*\" covers all)" },
+        { "Spec=Trace,Net=Loud", "'Net=Loud': 'Loud' isn't a level (Trace, Debug, Info, Warn, Error, Critical or Off)" },
+        { "Spec=Trace,Net=", "'Net=': '' isn't a level (Trace, Debug, Info, Warn, Error, Critical or Off)" },
+    };
+
+    TCategoryLevelsReset resetLevels;
+    TRecordingLogger logger;
+    ASWLog::TASWCategoryLog specLog("Spec", logger);
+    ASWLog::TASWCategoryLog::ApplyLevels("Spec=Debug");
+
+    for (const auto& invalidSpec : invalidSpecs)
+    {
+        // Act
+        std::string error = "previous";
+        const bool isValid = ASWLog::TASWCategoryLog::ApplyLevels(invalidSpec.Spec, error);
+        const bool isValidWithoutError = ASWLog::TASWCategoryLog::ApplyLevels(invalidSpec.Spec);
+        ASWLog::TASWCategoryLog laterLog("Spec", logger);
+
+        // Assert
+        const auto spec = std::string(invalidSpec.Spec);
+        CheckFalse(isValid, "The spec should be invalid: " + spec);
+        CheckFalse(isValidWithoutError, "The spec should be invalid without an error text too: " + spec);
+        CheckEquals(std::string(invalidSpec.Error), error, "The error should describe the bad item: " + spec);
+        CheckEquals(ASWLog::Level::Debug, specLog.GetMinimumLevel(), "An invalid spec should change no level: " + spec);
+        CheckEquals(ASWLog::Level::Debug, laterLog.GetMinimumLevel(), "An invalid spec should keep the levels for new categories: " + spec);
+    }
+
+    // Act: a valid spec clears the error
+    std::string error = "previous";
+    const bool isValid = ASWLog::TASWCategoryLog::ApplyLevels("Spec=Info", error);
+
+    // Assert
+    CheckTrue(isValid, "The spec should be valid");
+    CheckEmpty(error, "A valid spec should leave the error empty");
+    CheckEquals(ASWLog::Level::Info, specLog.GetMinimumLevel(), "A valid spec should set the level");
+}
 //---------------------------------------------------------------------------
 void TTest_ASWLog_CategoryLog::Test_Async_KeepsItsOwnCopyOfTheName()
 {

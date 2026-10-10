@@ -186,7 +186,8 @@ void TTest_ASWLog_Types::Test_ErrorKind_ToString()
     CheckEquals(std::string("DELETE_FAILED"), std::string(ASWLog::ErrorKind_ToString(ASWLog::ErrorKind::DeleteFailed)), "DeleteFailed should stringify as DELETE_FAILED");
     CheckEquals(std::string("EXCEPTION"), std::string(ASWLog::ErrorKind_ToString(ASWLog::ErrorKind::Exception)), "Exception should stringify as EXCEPTION");
     CheckEquals(std::string("ENTRIES_DROPPED"), std::string(ASWLog::ErrorKind_ToString(ASWLog::ErrorKind::EntriesDropped)), "EntriesDropped should stringify as ENTRIES_DROPPED");
-    CheckEquals(static_cast<std::size_t>(ASWLog::ErrorKind::EntriesDropped) + 1, ASWLog::ErrorKindCount, "ErrorKindCount should count every kind (EntriesDropped is the last)");
+    CheckEquals(std::string("INVALID_SETTING"), std::string(ASWLog::ErrorKind_ToString(ASWLog::ErrorKind::InvalidSetting)), "InvalidSetting should stringify as INVALID_SETTING");
+    CheckEquals(static_cast<std::size_t>(ASWLog::ErrorKind::InvalidSetting) + 1, ASWLog::ErrorKindCount, "ErrorKindCount should count every kind (InvalidSetting is the last)");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_Types::Test_FlushMode_FromString()

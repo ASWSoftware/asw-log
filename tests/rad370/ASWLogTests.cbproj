@@ -314,9 +314,17 @@
             <DependentOn>..\tests\UT_Helper_DateTime.h</DependentOn>
             <BuildOrder>35</BuildOrder>
         </CppCompile>
+        <CppCompile Include="..\tests\UT_Helper_Environment.cpp">
+            <DependentOn>..\tests\UT_Helper_Environment.h</DependentOn>
+            <BuildOrder>53</BuildOrder>
+        </CppCompile>
         <CppCompile Include="..\tests\UT_Helper_JSON.cpp">
             <DependentOn>..\tests\UT_Helper_JSON.h</DependentOn>
             <BuildOrder>38</BuildOrder>
+        </CppCompile>
+        <CppCompile Include="..\tests\UT_Helper_StdErr.cpp">
+            <DependentOn>..\tests\UT_Helper_StdErr.h</DependentOn>
+            <BuildOrder>54</BuildOrder>
         </CppCompile>
         <CppCompile Include="..\..\third_party\asw-unit-tests\src\ASWUnitTests_CLI.cpp">
             <DependentOn>..\..\third_party\asw-unit-tests\src\ASWUnitTests_CLI.h</DependentOn>

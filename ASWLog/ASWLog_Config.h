@@ -385,6 +385,39 @@ struct TASWLogConfig
     // and counts the failures it leaves out in its next report of that kind (TASWLogError::SuppressedCount). Measured
     // on the logger's clock (see TASWLogBase::NowUTC()). 0 = report every failure.
     std::chrono::milliseconds ErrorReportInterval{ std::chrono::minutes(1) };
+
+    // --- Settings from the Environment ---
+    // Sets the settings below from environment variables named with 'prefix', e.g. ASWLOG_LEVEL=Debug, so that a
+    // deployed application can log more, or elsewhere, without being rebuilt. Nothing reads them unless the application
+    // calls this; call it on the config before Initialize(), after setting OnError. Their values replace what the code
+    // set; LEVEL seeds the minimum level at Initialize() only (Reconfigure() keeps the current level). Each logger can
+    // read its own variables, e.g. config.ApplyEnvironment("MYAPP_CONSOLE_"). A variable that isn't set, or is empty,
+    // leaves its setting as it is, and so does an invalid value, which is reported to OnError (or written to stderr if
+    // it's empty) as ErrorKind::InvalidSetting. Variables with the prefix that aren't keys are ignored. Returns false
+    // if a value was invalid. Keys and values (ignoring case and the spaces around a value):
+    //   LEVEL           Trace, Debug, Info, Warn, Error, Critical or Off      InitialMinimumLevel
+    //   CATEGORIES      the category levels, e.g. "*=Info,Net=Debug"; process-wide, so set it under one prefix only
+    //                   (see TASWCategoryLog::ApplyLevels())
+    //   FOLDER          a folder (UTF-8)                                      File.FolderPath
+    //   FILE            a file name or path (UTF-8)                           File.FilePath
+    //   FLUSH           EveryWrite, OnNewLine, Manual or Periodic             File.Flush
+    //   SYNC_AT_LEVEL   a level                                               File.SyncToDiskAtLevel
+    //   ASYNC           1, true, yes or on; 0, false, no or off               Async.Enabled
+    //   BACKTRACE       how many entries to keep, 0 = none                    Backtrace.Capacity
+    //   TIME_ZONE       UTC or Local                                          Line.TimestampZone
+    //   TIME_PRECISION  ms, us or ns (or Milliseconds, Microseconds...)       Line.TimestampPrecision
+    //   MULTILINE       Preserve, Indent or Escape                            Line.Multiline
+    //   SHOW_FUNCTION   as ASYNC                                              Line.ShowFunctionName
+    //   SHOW_SOURCE     as ASYNC                                              Line.ShowSourceLine
+    //   FORMAT          Text (the built-in layout) or JSON                    Line.Formatter
+    //   PATTERN         a TASWPatternFormatter pattern, e.g. "{time} {message}", applied after FORMAT
+    // Throws std::bad_alloc if out of memory.
+    bool ApplyEnvironment(std::string_view prefix = "ASWLOG_");
+    // Sets one of ApplyEnvironment()'s settings, 'key' (without a prefix, ignoring case), from 'value', e.g. from the
+    // application's command line or settings file. An empty value leaves the setting as it is. Reports an unknown key
+    // or an invalid value as ApplyEnvironment() does, and returns false for them. Throws std::bad_alloc if out of
+    // memory.
+    bool ApplySetting(std::string_view key, std::string_view value);
 };
 
 } // namespace ASWLog

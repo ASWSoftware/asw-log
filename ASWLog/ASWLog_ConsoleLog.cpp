@@ -38,6 +38,8 @@ limitations under the License.
 #include <unistd.h>
 #endif
 //---------------------------------------------------------------------------
+#include "ASWLog_Utils.h"
+//---------------------------------------------------------------------------
 
 namespace ASWLog
 {
@@ -48,16 +50,11 @@ namespace
 constexpr std::string_view AnsiReset = "\x1b[0m";
 
 // True if the environment variable 'name' is set to a non-empty value.
-bool IsEnvironmentVariableSet(const char* name) noexcept
+bool IsEnvironmentVariableSet(std::string_view name) noexcept
 {
-#if defined(_WIN32)
-    // With no buffer, returns the size the value needs including its terminating null (1 for an empty value), or 0
-    // if the variable isn't set. Avoids getenv(), which MSVC warns about.
-    return GetEnvironmentVariableA(name, nullptr, 0) > 1;
-#else
-    const char* value = std::getenv(name);
-    return value != nullptr && *value != '\0';
-#endif
+    const auto value = Detail::ReadEnvironmentVariable(name);
+
+    return value.has_value() && !value->empty();
 }
 
 } // namespace

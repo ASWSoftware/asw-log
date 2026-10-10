@@ -158,10 +158,14 @@ enum class ErrorKind
     // An asynchronous logger's queue was full, so entries were dropped (see AsyncOverflowPolicy::DropNewest). The
     // message says how many.
     EntriesDropped,
+
+    // A setting given as text had an invalid value, which was left unused (see TASWLogConfig::ApplyEnvironment()). The
+    // message names the setting and the value.
+    InvalidSetting,
 };
 
 // Number of error kinds, e.g. for a table indexed by kind. Update this when a kind is added or removed.
-constexpr std::size_t ErrorKindCount = 9;
+constexpr std::size_t ErrorKindCount = 10;
 
 [[nodiscard]] constexpr std::string_view ErrorKind_ToString(ErrorKind errorKind) noexcept
 {
@@ -193,6 +197,9 @@ constexpr std::size_t ErrorKindCount = 9;
 
         case ErrorKind::EntriesDropped:
             return "ENTRIES_DROPPED";
+
+        case ErrorKind::InvalidSetting:
+            return "INVALID_SETTING";
     }
 
     return "UNKNOWN";

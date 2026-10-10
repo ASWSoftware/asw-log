@@ -52,7 +52,9 @@ add_executable(ASWLogTests
     "${ASWLOG_TESTS_DIR}/Test_ASWLog_Version.cpp"
     "${ASWLOG_TESTS_DIR}/Test_ASWLog_WindowsEventLog.cpp"
     "${ASWLOG_TESTS_DIR}/UT_Helper_DateTime.cpp"
+    "${ASWLOG_TESTS_DIR}/UT_Helper_Environment.cpp"
     "${ASWLOG_TESTS_DIR}/UT_Helper_JSON.cpp"
+    "${ASWLOG_TESTS_DIR}/UT_Helper_StdErr.cpp"
 )
 
 target_include_directories(ASWLogTests PRIVATE

@@ -48,6 +48,7 @@ limitations under the License.
 #include "ASWUnitTests_Registry.h"
 //---------------------------------------------------------------------------
 #include "UT_Helper_DateTime.h"
+#include "UT_Helper_Environment.h"
 //---------------------------------------------------------------------------
 
 namespace ASWUnitTests
@@ -107,6 +108,7 @@ TTest_ASWLog_Utils::TTest_ASWLog_Utils()
     RegisterTest(&TTest_ASWLog_Utils::Test_ApplyMultilineMode_FindsLineBreaksAnywhereInALongText, "ApplyMultilineMode_FindsLineBreaksAnywhereInALongText");
     RegisterTest(&TTest_ASWLog_Utils::Test_ApplyMultilineMode_IndentMarksEachLineAfterTheFirst, "ApplyMultilineMode_IndentMarksEachLineAfterTheFirst");
     RegisterTest(&TTest_ASWLog_Utils::Test_ApplyMultilineMode_LeavesOtherLinesAsTheyAre, "ApplyMultilineMode_LeavesOtherLinesAsTheyAre");
+    RegisterTest(&TTest_ASWLog_Utils::Test_EqualsIgnoringCase_IgnoresOnlyASCIICase, "EqualsIgnoringCase_IgnoresOnlyASCIICase");
     RegisterTest(&TTest_ASWLog_Utils::Test_GenerateLogFileName_ContainsExpectedFields, "GenerateLogFileName_ContainsExpectedFields");
     RegisterTest(&TTest_ASWLog_Utils::Test_GenerateLogFileName_PrefixAndPostfixAreOptional, "GenerateLogFileName_PrefixAndPostfixAreOptional");
     RegisterTest(&TTest_ASWLog_Utils::Test_GetCurrentOSProcessId_MatchesOS, "GetCurrentOSProcessId_MatchesOS");
@@ -121,6 +123,7 @@ TTest_ASWLog_Utils::TTest_ASWLog_Utils()
     RegisterTest(&TTest_ASWLog_Utils::Test_JSON_AppendString_KeepsValidUTF8, "JSON_AppendString_KeepsValidUTF8");
     RegisterTest(&TTest_ASWLog_Utils::Test_JSON_AppendString_ReplacesInvalidUTF8, "JSON_AppendString_ReplacesInvalidUTF8");
     RegisterTest(&TTest_ASWLog_Utils::Test_MatchesWildcard_Patterns, "MatchesWildcard_Patterns");
+    RegisterTest(&TTest_ASWLog_Utils::Test_ReadEnvironmentVariable_ReadsUTF8Values, "ReadEnvironmentVariable_ReadsUTF8Values");
     RegisterTest(&TTest_ASWLog_Utils::Test_RenameWithoutReplacing_KeepsExistingTarget, "RenameWithoutReplacing_KeepsExistingTarget");
     RegisterTest(&TTest_ASWLog_Utils::Test_Time_GetUTCOffsetMinutes_FollowsDaylightSavingTime, "Time_GetUTCOffsetMinutes_FollowsDaylightSavingTime");
     RegisterTest(&TTest_ASWLog_Utils::Test_Time_ToDateString, "Time_ToDateString");
@@ -130,7 +133,9 @@ TTest_ASWLog_Utils::TTest_ASWLog_Utils()
     RegisterTest(&TTest_ASWLog_Utils::Test_Time_WriteISO8601_CalendarEdges, "Time_WriteISO8601_CalendarEdges");
     RegisterTest(&TTest_ASWLog_Utils::Test_Time_WriteISO8601_LocalTimeWithEachPrecision, "Time_WriteISO8601_LocalTimeWithEachPrecision");
     RegisterTest(&TTest_ASWLog_Utils::Test_Time_WriteISO8601_UTCWithEachPrecision, "Time_WriteISO8601_UTCWithEachPrecision");
+    RegisterTest(&TTest_ASWLog_Utils::Test_TrimSpaces_RemovesOuterSpacesAndTabs, "TrimSpaces_RemovesOuterSpacesAndTabs");
     RegisterTest(&TTest_ASWLog_Utils::Test_UTF8ToWideString_ConvertsToUTF16, "UTF8ToWideString_ConvertsToUTF16");
+    RegisterTest(&TTest_ASWLog_Utils::Test_WideStringToUTF8_ConvertsFromUTF16, "WideStringToUTF8_ConvertsFromUTF16");
 }
 //---------------------------------------------------------------------------
 TTest_ASWLog_Utils::~TTest_ASWLog_Utils()
@@ -263,6 +268,20 @@ void TTest_ASWLog_Utils::Test_ApplyMultilineMode_LeavesOtherLinesAsTheyAre()
         "A line without line breaks should stay as it is");
     CheckSame(plainData, plain.data(), "A line without line breaks should be left in place, not copied");
     CheckEquals(std::string(), ApplyMode("", ASWLog::MultilineMode::Indent), "An empty line should stay empty");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_Utils::Test_EqualsIgnoringCase_IgnoresOnlyASCIICase()
+{
+    // Arrange / Act / Assert
+    CheckTrue(ASWLog::Detail::EqualsIgnoringCase("", ""), "Two empty texts should be equal");
+    CheckTrue(ASWLog::Detail::EqualsIgnoringCase("Net.Http_2", "NET.HTTP_2"), "Letters should match in either case");
+    CheckTrue(ASWLog::Detail::EqualsIgnoringCase("az", "AZ"), "The first and last letters should match too");
+    CheckFalse(ASWLog::Detail::EqualsIgnoringCase("Net", "Nets"), "Texts of different lengths should differ");
+    CheckFalse(ASWLog::Detail::EqualsIgnoringCase("Nets", "Net"), "Texts of different lengths should differ either way");
+    CheckFalse(ASWLog::Detail::EqualsIgnoringCase("abc", "abd"), "Different letters should differ");
+    CheckFalse(ASWLog::Detail::EqualsIgnoringCase("@", "`"), "Characters next to the letters should not be folded");
+    CheckFalse(ASWLog::Detail::EqualsIgnoringCase("[", "{"), "Characters next to the letters should not be folded");
+    CheckFalse(ASWLog::Detail::EqualsIgnoringCase("\xC3\x84", "\xC3\xA4"), "Non-ASCII letters should keep their case");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_Utils::Test_GenerateLogFileName_ContainsExpectedFields()
@@ -601,6 +620,33 @@ void TTest_ASWLog_Utils::Test_MatchesWildcard_Patterns()
     CheckTrue(ASWLog::MatchesWildcard("no_extension", "*"), "A lone '*' should match any name, with or without a dot");
 }
 //---------------------------------------------------------------------------
+void TTest_ASWLog_Utils::Test_ReadEnvironmentVariable_ReadsUTF8Values()
+{
+    // Arrange: a name with a lambda in it, a value with a lambda and a CJK character, and a value longer than any
+    // first guess at its size
+    const std::string longValue(5000, 'x');
+    TScopedEnvironmentVariable unset("ASWLOGTEST_UTILS_UNSET", std::nullopt);
+    TScopedEnvironmentVariable empty("ASWLOGTEST_UTILS_EMPTY", "");
+    TScopedEnvironmentVariable plain("ASWLOGTEST_UTILS_PLAIN", "plain value");
+    TScopedEnvironmentVariable utf8("ASWLOGTEST_UTILS_\xCE\xBB", "a\xCE\xBB\xE6\x97\xA5");
+    TScopedEnvironmentVariable longVariable("ASWLOGTEST_UTILS_LONG", longValue);
+
+    // Act
+    const auto unsetValue = ASWLog::Detail::ReadEnvironmentVariable("ASWLOGTEST_UTILS_UNSET");
+    const auto emptyValue = ASWLog::Detail::ReadEnvironmentVariable("ASWLOGTEST_UTILS_EMPTY");
+    const auto plainValue = ASWLog::Detail::ReadEnvironmentVariable("ASWLOGTEST_UTILS_PLAIN");
+    const auto utf8Value = ASWLog::Detail::ReadEnvironmentVariable("ASWLOGTEST_UTILS_\xCE\xBB");
+    const auto longReadValue = ASWLog::Detail::ReadEnvironmentVariable("ASWLOGTEST_UTILS_LONG");
+
+    // Assert
+    CheckFalse(unsetValue.has_value(), "An unset variable should give nullopt");
+    CheckTrue(emptyValue.has_value(), "A variable set to an empty value should be set");
+    CheckEquals(std::string(), emptyValue.value_or("unset"), "A variable set to an empty value should give an empty text");
+    CheckEquals(std::string("plain value"), plainValue.value_or("unset"), "A variable should give its value");
+    CheckEquals(std::string("a\xCE\xBB\xE6\x97\xA5"), utf8Value.value_or("unset"), "A non-ASCII name and value should be UTF-8");
+    CheckEquals(longValue, longReadValue.value_or("unset"), "A long value should be read whole");
+}
+//---------------------------------------------------------------------------
 void TTest_ASWLog_Utils::Test_RenameWithoutReplacing_KeepsExistingTarget()
 {
     // Arrange
@@ -819,6 +865,16 @@ void TTest_ASWLog_Utils::Test_Time_WriteISO8601_UTCWithEachPrecision()
     }
 }
 //---------------------------------------------------------------------------
+void TTest_ASWLog_Utils::Test_TrimSpaces_RemovesOuterSpacesAndTabs()
+{
+    // Arrange / Act / Assert
+    CheckEquals(std::string(), std::string(ASWLog::Detail::TrimSpaces("")), "An empty text should stay empty");
+    CheckEquals(std::string(), std::string(ASWLog::Detail::TrimSpaces(" \t \t")), "Only spaces and tabs should become empty");
+    CheckEquals(std::string("a b"), std::string(ASWLog::Detail::TrimSpaces("\t a b \t")), "Outer spaces and tabs should go, inner ones stay");
+    CheckEquals(std::string("x"), std::string(ASWLog::Detail::TrimSpaces("x")), "A single character should stay");
+    CheckEquals(std::string("\nx\n"), std::string(ASWLog::Detail::TrimSpaces(" \nx\n ")), "Line breaks should stay");
+}
+//---------------------------------------------------------------------------
 void TTest_ASWLog_Utils::Test_UTF8ToWideString_ConvertsToUTF16()
 {
 #if defined(_WIN32)
@@ -839,6 +895,29 @@ void TTest_ASWLog_Utils::Test_UTF8ToWideString_ConvertsToUTF16()
         CheckTrue(ASWLog::Detail::UTF8ToWideString(item.Text) == item.Expected, "UTF-8 should become UTF-16: " + ToHex(item.Text));
 #else
     Skip("UTF8ToWideString() exists only on Windows");
+#endif
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_Utils::Test_WideStringToUTF8_ConvertsFromUTF16()
+{
+#if defined(_WIN32)
+    // Arrange: ASCII, a 2-byte and a 4-byte character (a surrogate pair in UTF-16), and an unpaired surrogate
+    struct TCase
+    {
+        std::wstring Text;
+        std::string Expected;
+    };
+
+    const std::vector<TCase> cases{
+        { L"", "" }, { L"plain text\n", "plain text\n" }, { L"a\x03BB" L"b", "a\xCE\xBB" "b" },
+        { L"\xD83D\xDE00", "\xF0\x9F\x98\x80" }, { L"x\xD800y", "x\xEF\xBF\xBDy" }
+    };
+
+    // Act & Assert
+    for (const auto& item : cases)
+        CheckEquals(item.Expected, ASWLog::Detail::WideStringToUTF8(item.Text), "UTF-16 should become UTF-8: " + ToHex(item.Expected));
+#else
+    Skip("WideStringToUTF8() exists only on Windows");
 #endif
 }
 //---------------------------------------------------------------------------

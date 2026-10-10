@@ -30,6 +30,7 @@ limitations under the License.
 #include <charconv>
 #include <chrono>
 #include <climits>
+#include <cstdlib>
 #include <cstring>
 #include <ctime>
 #include <filesystem>
@@ -802,6 +803,20 @@ void CutToFit(std::string& text, std::size_t maxBytes)
 }
 
 //---------------------------------------------------------------------------
+bool EqualsIgnoringCase(std::string_view a, std::string_view b) noexcept
+{
+    const auto toLower = [](char character)
+        {
+            return character >= 'A' && character <= 'Z' ? static_cast<char>(character - 'A' + 'a') : character;
+        };
+
+    return std::equal(a.begin(), a.end(), b.begin(), b.end(), [&](char charA, char charB)
+            {
+                return toLower(charA) == toLower(charB);
+            });
+}
+
+//---------------------------------------------------------------------------
 TJSONPiece NextJSONPiece(std::string_view text, std::size_t& index, char (& escape)[6]) noexcept
 {
     const std::size_t start = index;
@@ -934,6 +949,62 @@ TMultilinePiece NextMultilinePiece(std::string_view text, std::size_t& index, Mu
     return TMultilinePiece{ isNextLineEmpty ? indented.substr(0, indented.size() - 1) : indented, true };
 }
 
+//---------------------------------------------------------------------------
+std::optional<std::string> ReadEnvironmentVariable(std::string_view name) noexcept
+{
+    try
+    {
+#if defined(_WIN32)
+        const auto wideName = UTF8ToWideString(name);
+
+        // The size the value needs, including its terminating null (1 for an empty value), or 0 if it isn't set
+        DWORD size = GetEnvironmentVariableW(wideName.c_str(), nullptr, 0);
+        std::wstring value;
+
+        while (size > 0)
+        {
+            value.resize(size);
+            SetLastError(ERROR_SUCCESS); // An empty value also returns 0, without an error
+            const DWORD length = GetEnvironmentVariableW(wideName.c_str(), value.data(), size);
+            if (length == 0 && GetLastError() == ERROR_ENVVAR_NOT_FOUND)
+                return std::nullopt; // Removed meanwhile
+
+            if (length < size)
+            {
+                value.resize(length);
+                return WideStringToUTF8(value);
+            }
+
+            size = length; // Another thread made it longer meanwhile: the size it needs now
+        }
+
+        return std::nullopt;
+#else
+        const char* value = std::getenv(std::string(name).c_str());
+        if (value == nullptr)
+            return std::nullopt;
+
+        return std::string(value);
+#endif
+    }
+    catch (...)
+    {
+        return std::nullopt;
+    }
+}
+
+//---------------------------------------------------------------------------
+std::string_view TrimSpaces(std::string_view text) noexcept
+{
+    const auto start = text.find_first_not_of(" \t");
+    if (start == std::string_view::npos)
+        return {};
+
+    const auto end = text.find_last_not_of(" \t");
+
+    return text.substr(start, end - start + 1);
+}
+
 #if defined(_WIN32)
 //---------------------------------------------------------------------------
 std::wstring UTF8ToWideString(std::string_view text)
@@ -950,6 +1021,23 @@ std::wstring UTF8ToWideString(std::string_view text)
     MultiByteToWideChar(CP_UTF8, 0, text.data(), size, wide.data(), wideSize);
 
     return wide;
+}
+
+//---------------------------------------------------------------------------
+std::string WideStringToUTF8(std::wstring_view text)
+{
+    // WideCharToMultiByte takes an int length; a longer text is cut
+    const int size = text.size() > static_cast<std::size_t>(INT_MAX) ? INT_MAX : static_cast<int>(text.size());
+
+    // Without WC_ERR_INVALID_CHARS, unpaired surrogates become U+FFFD
+    const int utf8Size = size > 0 ? WideCharToMultiByte(CP_UTF8, 0, text.data(), size, nullptr, 0, nullptr, nullptr) : 0;
+    if (utf8Size <= 0)
+        return {};
+
+    std::string utf8(static_cast<std::size_t>(utf8Size), '\0');
+    WideCharToMultiByte(CP_UTF8, 0, text.data(), size, utf8.data(), utf8Size, nullptr, nullptr);
+
+    return utf8;
 }
 #endif
 

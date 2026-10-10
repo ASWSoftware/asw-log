@@ -202,6 +202,30 @@ see [0.26.1](#0261---2026-09-17) for the initial versioned baseline.
   macros keep a lock-free `TASWLogLimiter` (`Once()`, `EveryN()`,
   `EveryInterval()`) in a static where they are written; the class can also be
   used on its own.
+- Settings from environment variables, e.g. to turn on full verbosity in a
+  deployed release build without rebuilding it:
+  `config.ApplyEnvironment();` before `Initialize()` reads `ASWLOG_LEVEL`,
+  `ASWLOG_CATEGORIES`, `ASWLOG_FOLDER`, `ASWLOG_FILE`, `ASWLOG_FLUSH`,
+  `ASWLOG_SYNC_AT_LEVEL`, `ASWLOG_ASYNC`, `ASWLOG_BACKTRACE`,
+  `ASWLOG_TIME_ZONE`, `ASWLOG_TIME_PRECISION`, `ASWLOG_MULTILINE`,
+  `ASWLOG_SHOW_FUNCTION`, `ASWLOG_SHOW_SOURCE`, `ASWLOG_FORMAT` (`Text` or
+  `JSON`) and `ASWLOG_PATTERN` (a `TASWPatternFormatter` pattern), and their
+  values replace what the code set (see `TASWLogConfig::ApplyEnvironment()`
+  for the values; case doesn't matter). Nothing reads the environment unless
+  the application calls it, and each logger can have its own prefix, e.g.
+  `ApplyEnvironment("MYAPP_CONSOLE_")`. A variable that isn't set or is
+  empty changes nothing; an invalid value changes nothing either and is
+  reported to `OnError` (or stderr) as the new `ErrorKind::InvalidSetting`.
+  `ApplySetting(key, value)` sets one of the same settings, e.g. from a
+  command line or a settings file. `ASWLOG_CATEGORIES`, e.g.
+  `*=Info,Net=Debug,Net.Http=Trace`, sets category levels through the new
+  `TASWCategoryLog::ApplyLevels()`: a name covers that category and those
+  under it (`Net` covers `Net.Http`), `*` covers all, and the longest name
+  wins; it applies process-wide, to the categories that exist and to those
+  made later, and a spec with an invalid item changes nothing. On Windows,
+  the values are read as UTF-8 (paths included). Breaking only for code that
+  lists every `ErrorKind` (e.g. a `switch`) or relies on `ErrorKindCount`
+  being 9.
 
 ### Changed
 
