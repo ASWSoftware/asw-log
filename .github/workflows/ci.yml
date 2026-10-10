@@ -23,7 +23,11 @@ jobs:
     # Safety net: a hung/looping test should fail the job quickly instead of burning the runner's full time
     # allotment. --test-timeout-seconds below covers a single hung test; this covers everything else. A sanitizer
     # build compiles and runs several times slower, so it gets longer.
-    timeout-minutes: ${{ matrix.sanitize && 10 || 5 }}
+    timeout-minutes: ${{ matrix.sanitize && 15 || 10 }}
+    env:
+      # cmake --build compiles up to 4 files at once (the runners have 4 cores). The Visual Studio generator only
+      # builds projects in parallel with it, so the MSVC job also compiles with -MP (its cxxflags).
+      CMAKE_BUILD_PARALLEL_LEVEL: 4
     strategy:
       fail-fast: false
       matrix:
@@ -33,6 +37,8 @@ jobs:
             generator: ""
             build_args: "--config Release"
             exe_path: build/bin/Release/ASWLogTests.exe
+            # cl takes -MP as well as /MP; Git Bash would turn "/MP" into a path when it starts CMake.
+            cxxflags: -MP
             sanitize: ""
           - name: Windows (MinGW)
             os: windows-latest
@@ -100,6 +106,10 @@ jobs:
           if [ -n "${{ matrix.cc }}" ]; then
             export CC="${{ matrix.cc }}"
             export CXX="${{ matrix.cxx }}"
+          fi
+          # CMake adds CXXFLAGS to its default flags (setting CMAKE_CXX_FLAGS instead would replace them).
+          if [ -n "${{ matrix.cxxflags }}" ]; then
+            export CXXFLAGS="${{ matrix.cxxflags }}"
           fi
           if [ -n "${{ matrix.generator }}" ]; then
             cmake -S tests/cmake -B build -G "${{ matrix.generator }}" -DCMAKE_BUILD_TYPE=Release \
