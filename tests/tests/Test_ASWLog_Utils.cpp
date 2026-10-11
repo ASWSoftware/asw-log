@@ -107,39 +107,6 @@ std::string ToJSONString(std::string_view text)
 TTest_ASWLog_Utils::TTest_ASWLog_Utils()
     : inherited("ASWLog_Utils_Tests")
 {
-    RegisterTest(&TTest_ASWLog_Utils::Test_ApplyMultilineMode_EscapeWritesCRAndLFAsText, "ApplyMultilineMode_EscapeWritesCRAndLFAsText");
-    RegisterTest(&TTest_ASWLog_Utils::Test_ApplyMultilineMode_FindsLineBreaksAnywhereInALongText, "ApplyMultilineMode_FindsLineBreaksAnywhereInALongText");
-    RegisterTest(&TTest_ASWLog_Utils::Test_ApplyMultilineMode_IndentMarksEachLineAfterTheFirst, "ApplyMultilineMode_IndentMarksEachLineAfterTheFirst");
-    RegisterTest(&TTest_ASWLog_Utils::Test_ApplyMultilineMode_LeavesOtherLinesAsTheyAre, "ApplyMultilineMode_LeavesOtherLinesAsTheyAre");
-    RegisterTest(&TTest_ASWLog_Utils::Test_EqualsIgnoringCase_IgnoresOnlyASCIICase, "EqualsIgnoringCase_IgnoresOnlyASCIICase");
-    RegisterTest(&TTest_ASWLog_Utils::Test_GenerateLogFileName_ContainsExpectedFields, "GenerateLogFileName_ContainsExpectedFields");
-    RegisterTest(&TTest_ASWLog_Utils::Test_GenerateLogFileName_PrefixAndPostfixAreOptional, "GenerateLogFileName_PrefixAndPostfixAreOptional");
-    RegisterTest(&TTest_ASWLog_Utils::Test_GetCurrentOSProcessId_MatchesOS, "GetCurrentOSProcessId_MatchesOS");
-    RegisterTest(&TTest_ASWLog_Utils::Test_GetCurrentOSThreadId_IdentifiesCallingThread, "GetCurrentOSThreadId_IdentifiesCallingThread");
-    RegisterTest(&TTest_ASWLog_Utils::Test_GetFileVersionString_IsEmptyWithoutAVersionResource, "GetFileVersionString_IsEmptyWithoutAVersionResource");
-    RegisterTest(&TTest_ASWLog_Utils::Test_GetFileVersionString_ReadsTheFileVersion, "GetFileVersionString_ReadsTheFileVersion");
-    RegisterTest(&TTest_ASWLog_Utils::Test_GetOSInfoString_ContainsEdition, "GetOSInfoString_ContainsEdition");
-    RegisterTest(&TTest_ASWLog_Utils::Test_GetTimeInfoString_ReportsCurrentOffset, "GetTimeInfoString_ReportsCurrentOffset");
-    RegisterTest(&TTest_ASWLog_Utils::Test_GetWindowsEditionName_ProductTypes, "GetWindowsEditionName_ProductTypes");
-    RegisterTest(&TTest_ASWLog_Utils::Test_IsRootFolder_DetectsRootFolders, "IsRootFolder_DetectsRootFolders");
-    RegisterTest(&TTest_ASWLog_Utils::Test_IsRootFolder_ResolvesRelativePaths, "IsRootFolder_ResolvesRelativePaths");
-    RegisterTest(&TTest_ASWLog_Utils::Test_JSON_AppendString_EscapesQuotesBackslashAndControls, "JSON_AppendString_EscapesQuotesBackslashAndControls");
-    RegisterTest(&TTest_ASWLog_Utils::Test_JSON_AppendString_FindsSpecialCharactersAnywhereInALongText, "JSON_AppendString_FindsSpecialCharactersAnywhereInALongText");
-    RegisterTest(&TTest_ASWLog_Utils::Test_JSON_AppendString_KeepsValidUTF8, "JSON_AppendString_KeepsValidUTF8");
-    RegisterTest(&TTest_ASWLog_Utils::Test_JSON_AppendString_ReplacesInvalidUTF8, "JSON_AppendString_ReplacesInvalidUTF8");
-    RegisterTest(&TTest_ASWLog_Utils::Test_MatchesWildcard_Patterns, "MatchesWildcard_Patterns");
-    RegisterTest(&TTest_ASWLog_Utils::Test_ReadEnvironmentVariable_ReadsUTF8Values, "ReadEnvironmentVariable_ReadsUTF8Values");
-    RegisterTest(&TTest_ASWLog_Utils::Test_RenameWithoutReplacing_KeepsExistingTarget, "RenameWithoutReplacing_KeepsExistingTarget");
-    RegisterTest(&TTest_ASWLog_Utils::Test_Time_GetUTCOffsetMinutes_FollowsDaylightSavingTime, "Time_GetUTCOffsetMinutes_FollowsDaylightSavingTime");
-    RegisterTest(&TTest_ASWLog_Utils::Test_Time_ToDateString, "Time_ToDateString");
-    RegisterTest(&TTest_ASWLog_Utils::Test_Time_ToDateString_FollowsZone, "Time_ToDateString_FollowsZone");
-    RegisterTest(&TTest_ASWLog_Utils::Test_Time_ToISO8601String, "Time_ToISO8601String");
-    RegisterTest(&TTest_ASWLog_Utils::Test_Time_ToLocalISO8601String_IncludesOffset, "Time_ToLocalISO8601String_IncludesOffset");
-    RegisterTest(&TTest_ASWLog_Utils::Test_Time_WriteISO8601_CalendarEdges, "Time_WriteISO8601_CalendarEdges");
-    RegisterTest(&TTest_ASWLog_Utils::Test_Time_WriteISO8601_LocalTimeWithEachPrecision, "Time_WriteISO8601_LocalTimeWithEachPrecision");
-    RegisterTest(&TTest_ASWLog_Utils::Test_Time_WriteISO8601_UTCWithEachPrecision, "Time_WriteISO8601_UTCWithEachPrecision");
-    RegisterTest(&TTest_ASWLog_Utils::Test_Time_WriteISO8601_YearPast9999IsWrittenInFull, "Time_WriteISO8601_YearPast9999IsWrittenInFull");
-    RegisterTest(&TTest_ASWLog_Utils::Test_TrimSpaces_RemovesOuterSpacesAndTabs, "TrimSpaces_RemovesOuterSpacesAndTabs");
 }
 //---------------------------------------------------------------------------
 TTest_ASWLog_Utils::~TTest_ASWLog_Utils()
@@ -166,7 +133,7 @@ void TTest_ASWLog_Utils::TearDown_Test(ITestCase& /*testCase*/)
 // /////// Begin tests after this line ///////////////////////
 
 //---------------------------------------------------------------------------
-void TTest_ASWLog_Utils::Test_ApplyMultilineMode_EscapeWritesCRAndLFAsText()
+ASW_TEST(TTest_ASWLog_Utils, ApplyMultilineMode_EscapeWritesCRAndLFAsText)
 {
     // Arrange: each CR and LF, alone or together, and other text around them
     struct TCase
@@ -190,7 +157,7 @@ void TTest_ASWLog_Utils::Test_ApplyMultilineMode_EscapeWritesCRAndLFAsText()
     }
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_Utils::Test_ApplyMultilineMode_FindsLineBreaksAnywhereInALongText()
+ASW_TEST(TTest_ASWLog_Utils, ApplyMultilineMode_FindsLineBreaksAnywhereInALongText)
 {
     // Arrange: text is scanned 8 bytes at a time, so each line break goes at every position of the first two 8-byte
     // words of a longer text, with what it should become
@@ -221,7 +188,7 @@ void TTest_ASWLog_Utils::Test_ApplyMultilineMode_FindsLineBreaksAnywhereInALongT
     }
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_Utils::Test_ApplyMultilineMode_IndentMarksEachLineAfterTheFirst()
+ASW_TEST(TTest_ASWLog_Utils, ApplyMultilineMode_IndentMarksEachLineAfterTheFirst)
 {
     // Arrange
     struct TCase
@@ -252,7 +219,7 @@ void TTest_ASWLog_Utils::Test_ApplyMultilineMode_IndentMarksEachLineAfterTheFirs
     }
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_Utils::Test_ApplyMultilineMode_LeavesOtherLinesAsTheyAre()
+ASW_TEST(TTest_ASWLog_Utils, ApplyMultilineMode_LeavesOtherLinesAsTheyAre)
 {
     // Arrange
     const std::string multiline = "a\r\nb\n\rc\r";
@@ -274,7 +241,7 @@ void TTest_ASWLog_Utils::Test_ApplyMultilineMode_LeavesOtherLinesAsTheyAre()
     CheckEquals(std::string(), ApplyMode("", ASWLog::MultilineMode::Indent), "An empty line should stay empty");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_Utils::Test_EqualsIgnoringCase_IgnoresOnlyASCIICase()
+ASW_TEST(TTest_ASWLog_Utils, EqualsIgnoringCase_IgnoresOnlyASCIICase)
 {
     // Arrange / Act / Assert
     CheckTrue(ASWLog::Detail::EqualsIgnoringCase("", ""), "Two empty texts should be equal");
@@ -288,7 +255,7 @@ void TTest_ASWLog_Utils::Test_EqualsIgnoringCase_IgnoresOnlyASCIICase()
     CheckFalse(ASWLog::Detail::EqualsIgnoringCase("\xC3\x84", "\xC3\xA4"), "Non-ASCII letters should keep their case");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_Utils::Test_GenerateLogFileName_ContainsExpectedFields()
+ASW_TEST(TTest_ASWLog_Utils, GenerateLogFileName_ContainsExpectedFields)
 {
     // Arrange
     const std::string logName = ASWLog::GenerateLogFileName("", "ExampleLog.txt");
@@ -304,7 +271,7 @@ void TTest_ASWLog_Utils::Test_GenerateLogFileName_ContainsExpectedFields()
     CheckContains(logName, idsPart, "Generated file name should use the OS process and thread ids");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_Utils::Test_GenerateLogFileName_PrefixAndPostfixAreOptional()
+ASW_TEST(TTest_ASWLog_Utils, GenerateLogFileName_PrefixAndPostfixAreOptional)
 {
     // Arrange & Act
     const std::string withBoth = ASWLog::GenerateLogFileName("MyApp", "ExampleLog.txt");
@@ -328,7 +295,7 @@ void TTest_ASWLog_Utils::Test_GenerateLogFileName_PrefixAndPostfixAreOptional()
     CheckNotEndsWith(neither, "_", "An empty postfix should not leave a trailing separator when the prefix is also empty");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_Utils::Test_GetCurrentOSProcessId_MatchesOS()
+ASW_TEST(TTest_ASWLog_Utils, GetCurrentOSProcessId_MatchesOS)
 {
     // Act
     const auto processId = ASWLog::GetCurrentOSProcessId();
@@ -344,7 +311,7 @@ void TTest_ASWLog_Utils::Test_GetCurrentOSProcessId_MatchesOS()
 #endif
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_Utils::Test_GetCurrentOSThreadId_IdentifiesCallingThread()
+ASW_TEST(TTest_ASWLog_Utils, GetCurrentOSThreadId_IdentifiesCallingThread)
 {
     // Act
     const auto mainThreadId = ASWLog::GetCurrentOSThreadId();
@@ -376,7 +343,7 @@ void TTest_ASWLog_Utils::Test_GetCurrentOSThreadId_IdentifiesCallingThread()
 #endif
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_Utils::Test_GetFileVersionString_IsEmptyWithoutAVersionResource()
+ASW_TEST(TTest_ASWLog_Utils, GetFileVersionString_IsEmptyWithoutAVersionResource)
 {
     // Arrange: a text file, and a file that doesn't exist
     const auto folder = std::filesystem::temp_directory_path() / "aswlog_utils_version_test";
@@ -401,7 +368,7 @@ void TTest_ASWLog_Utils::Test_GetFileVersionString_IsEmptyWithoutAVersionResourc
     std::filesystem::remove_all(folder, errorCode);
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_Utils::Test_GetFileVersionString_ReadsTheFileVersion()
+ASW_TEST(TTest_ASWLog_Utils, GetFileVersionString_ReadsTheFileVersion)
 {
 #if defined(_WIN32)
     // Arrange: kernel32.dll, e.g. "10.0.19041.5794" on Windows 10. To an executable without a compatibility manifest,
@@ -443,7 +410,7 @@ void TTest_ASWLog_Utils::Test_GetFileVersionString_ReadsTheFileVersion()
 #endif
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_Utils::Test_GetOSInfoString_ContainsEdition()
+ASW_TEST(TTest_ASWLog_Utils, GetOSInfoString_ContainsEdition)
 {
     // Arrange
     const std::string osInfo = ASWLog::GetOSInfoString();
@@ -465,7 +432,7 @@ void TTest_ASWLog_Utils::Test_GetOSInfoString_ContainsEdition()
 #endif
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_Utils::Test_GetTimeInfoString_ReportsCurrentOffset()
+ASW_TEST(TTest_ASWLog_Utils, GetTimeInfoString_ReportsCurrentOffset)
 {
     // Arrange: US Eastern time, which is -300 minutes from UTC, or -240 while daylight saving time is in effect. The
     // C runtime's tm_isdst says which applies now.
@@ -493,7 +460,7 @@ void TTest_ASWLog_Utils::Test_GetTimeInfoString_ReportsCurrentOffset()
     CheckContains(timeInfo, expectedLocalSuffix + ", " + offsetLabel, "The local time should end with the zone's current offset");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_Utils::Test_GetWindowsEditionName_ProductTypes()
+ASW_TEST(TTest_ASWLog_Utils, GetWindowsEditionName_ProductTypes)
 {
 #if defined(_WIN32)
     // Act & Assert
@@ -514,7 +481,7 @@ void TTest_ASWLog_Utils::Test_GetWindowsEditionName_ProductTypes()
 #endif
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_Utils::Test_IsRootFolder_DetectsRootFolders()
+ASW_TEST(TTest_ASWLog_Utils, IsRootFolder_DetectsRootFolders)
 {
     // Arrange
     const auto tempDir = std::filesystem::temp_directory_path();
@@ -549,7 +516,7 @@ void TTest_ASWLog_Utils::Test_IsRootFolder_DetectsRootFolders()
 #endif
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_Utils::Test_IsRootFolder_ResolvesRelativePaths()
+ASW_TEST(TTest_ASWLog_Utils, IsRootFolder_ResolvesRelativePaths)
 {
     // Arrange: a relative path from the current folder up to its root, e.g. "..\..\.."
     const auto currentPath = std::filesystem::current_path();
@@ -562,7 +529,7 @@ void TTest_ASWLog_Utils::Test_IsRootFolder_ResolvesRelativePaths()
         CheckFalse(ASWLog::IsRootFolder("."), "\".\" should not be a root folder when the current folder isn't one");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_Utils::Test_JSON_AppendString_EscapesQuotesBackslashAndControls()
+ASW_TEST(TTest_ASWLog_Utils, JSON_AppendString_EscapesQuotesBackslashAndControls)
 {
     // Arrange: each control character's escape, the short form where JSON has one
     std::string appended = "key:";
@@ -595,7 +562,7 @@ void TTest_ASWLog_Utils::Test_JSON_AppendString_EscapesQuotesBackslashAndControl
     }
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_Utils::Test_JSON_AppendString_FindsSpecialCharactersAnywhereInALongText()
+ASW_TEST(TTest_ASWLog_Utils, JSON_AppendString_FindsSpecialCharactersAnywhereInALongText)
 {
     // Arrange: plain text is scanned 8 bytes at a time, so each special character goes at every position of the first
     // two 8-byte words of a longer text, with what it should become
@@ -624,7 +591,7 @@ void TTest_ASWLog_Utils::Test_JSON_AppendString_FindsSpecialCharactersAnywhereIn
     }
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_Utils::Test_JSON_AppendString_KeepsValidUTF8()
+ASW_TEST(TTest_ASWLog_Utils, JSON_AppendString_KeepsValidUTF8)
 {
     // Arrange: the first and last character of each UTF-8 length, the characters around the surrogates, and a few
     // common ones
@@ -638,7 +605,7 @@ void TTest_ASWLog_Utils::Test_JSON_AppendString_KeepsValidUTF8()
         CheckEquals("\"" + text + "\"", ToJSONString(text), "Valid UTF-8 should be written as it is: " + ToHex(text));
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_Utils::Test_JSON_AppendString_ReplacesInvalidUTF8()
+ASW_TEST(TTest_ASWLog_Utils, JSON_AppendString_ReplacesInvalidUTF8)
 {
     // Arrange: each invalid text and what it should become, U+FFFD (R) for each longest start of a valid sequence, or
     // else each byte
@@ -677,7 +644,7 @@ void TTest_ASWLog_Utils::Test_JSON_AppendString_ReplacesInvalidUTF8()
     }
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_Utils::Test_MatchesWildcard_Patterns()
+ASW_TEST(TTest_ASWLog_Utils, MatchesWildcard_Patterns)
 {
     // Arrange
     const std::string fileName = "app_123.log";
@@ -696,7 +663,7 @@ void TTest_ASWLog_Utils::Test_MatchesWildcard_Patterns()
     CheckFalse(ASWLog::MatchesWildcard("", "?"), "'?' should need a character");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_Utils::Test_ReadEnvironmentVariable_ReadsUTF8Values()
+ASW_TEST(TTest_ASWLog_Utils, ReadEnvironmentVariable_ReadsUTF8Values)
 {
     // Arrange: a name with a lambda in it, a value with a lambda and a CJK character, and a value longer than any
     // first guess at its size
@@ -723,7 +690,7 @@ void TTest_ASWLog_Utils::Test_ReadEnvironmentVariable_ReadsUTF8Values()
     CheckEquals(longValue, longReadValue.value_or("unset"), "A long value should be read whole");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_Utils::Test_RenameWithoutReplacing_KeepsExistingTarget()
+ASW_TEST(TTest_ASWLog_Utils, RenameWithoutReplacing_KeepsExistingTarget)
 {
     // Arrange
     const auto folder = std::filesystem::temp_directory_path() / "aswlog_utils_rename_test";
@@ -760,7 +727,7 @@ void TTest_ASWLog_Utils::Test_RenameWithoutReplacing_KeepsExistingTarget()
     std::filesystem::remove_all(folder, errorCode);
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_Utils::Test_Time_GetUTCOffsetMinutes_FollowsDaylightSavingTime()
+ASW_TEST(TTest_ASWLog_Utils, Time_GetUTCOffsetMinutes_FollowsDaylightSavingTime)
 {
     // Arrange: noon UTC on a summer and a winter day
     using namespace std::chrono_literals;
@@ -779,7 +746,7 @@ void TTest_ASWLog_Utils::Test_Time_GetUTCOffsetMinutes_FollowsDaylightSavingTime
     }
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_Utils::Test_Time_ToDateString()
+ASW_TEST(TTest_ASWLog_Utils, Time_ToDateString)
 {
     // Arrange
     const auto now = std::chrono::system_clock::now();
@@ -792,7 +759,7 @@ void TTest_ASWLog_Utils::Test_Time_ToDateString()
     CheckContains(date, "-", "Date string should include date separators");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_Utils::Test_Time_ToDateString_FollowsZone()
+ASW_TEST(TTest_ASWLog_Utils, Time_ToDateString_FollowsZone)
 {
     // Arrange: 02:00 UTC is still the evening before in US Eastern time
     using namespace std::chrono_literals;
@@ -808,7 +775,7 @@ void TTest_ASWLog_Utils::Test_Time_ToDateString_FollowsZone()
     CheckEquals(std::string("2026-06-30"), localDate, "The local date should be the day before, 4 hours behind UTC");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_Utils::Test_Time_ToISO8601String()
+ASW_TEST(TTest_ASWLog_Utils, Time_ToISO8601String)
 {
     // Arrange
     const auto now = std::chrono::system_clock::now();
@@ -822,7 +789,7 @@ void TTest_ASWLog_Utils::Test_Time_ToISO8601String()
     CheckGreaterThanOrEqual(iso.size(), 24, "ISO string should include date and time");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_Utils::Test_Time_ToLocalISO8601String_IncludesOffset()
+ASW_TEST(TTest_ASWLog_Utils, Time_ToLocalISO8601String_IncludesOffset)
 {
     // Arrange: just after noon UTC on a summer and a winter day
     using namespace std::chrono_literals;
@@ -846,7 +813,7 @@ void TTest_ASWLog_Utils::Test_Time_ToLocalISO8601String_IncludesOffset()
     }
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_Utils::Test_Time_WriteISO8601_CalendarEdges()
+ASW_TEST(TTest_ASWLog_Utils, Time_WriteISO8601_CalendarEdges)
 {
     // Arrange
     using namespace std::chrono_literals;
@@ -883,7 +850,7 @@ void TTest_ASWLog_Utils::Test_Time_WriteISO8601_CalendarEdges()
     }
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_Utils::Test_Time_WriteISO8601_LocalTimeWithEachPrecision()
+ASW_TEST(TTest_ASWLog_Utils, Time_WriteISO8601_LocalTimeWithEachPrecision)
 {
     // Arrange: a winter noon UTC, with a fraction whose 7th digit only a clock finer than 1 us keeps
     using namespace std::chrono_literals;
@@ -909,7 +876,7 @@ void TTest_ASWLog_Utils::Test_Time_WriteISO8601_LocalTimeWithEachPrecision()
     }
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_Utils::Test_Time_WriteISO8601_UTCWithEachPrecision()
+ASW_TEST(TTest_ASWLog_Utils, Time_WriteISO8601_UTCWithEachPrecision)
 {
     // Arrange: a fraction with a digit in each place, the 7th only kept by a clock finer than 1 us
     using namespace std::chrono_literals;
@@ -941,7 +908,7 @@ void TTest_ASWLog_Utils::Test_Time_WriteISO8601_UTCWithEachPrecision()
     }
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_Utils::Test_Time_WriteISO8601_YearPast9999IsWrittenInFull()
+ASW_TEST(TTest_ASWLog_Utils, Time_WriteISO8601_YearPast9999IsWrittenInFull)
 {
     // Arrange: libstdc++'s system_clock counts nanoseconds, which end in 2262; libc++'s microseconds and MSVC's 100 ns
     // ticks reach far past 9999. Compared in days, since converting the year to the clock's ticks could overflow.
@@ -962,7 +929,7 @@ void TTest_ASWLog_Utils::Test_Time_WriteISO8601_YearPast9999IsWrittenInFull()
     CheckEquals(std::string("10000-01-01T01:02:03.004Z"), std::string(buffer, size), "A year past 9999 should be written in full");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_Utils::Test_TrimSpaces_RemovesOuterSpacesAndTabs()
+ASW_TEST(TTest_ASWLog_Utils, TrimSpaces_RemovesOuterSpacesAndTabs)
 {
     // Arrange / Act / Assert
     CheckEquals(std::string(), std::string(ASWLog::Detail::TrimSpaces("")), "An empty text should stay empty");

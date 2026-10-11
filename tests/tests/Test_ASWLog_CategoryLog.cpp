@@ -245,25 +245,6 @@ bool WaitUntil(const std::function<bool()>& condition)
 TTest_ASWLog_CategoryLog::TTest_ASWLog_CategoryLog()
     : inherited("ASWLog_CategoryLog_Tests")
 {
-    RegisterTest(&TTest_ASWLog_CategoryLog::Test_ApplyLevels_AppliesToCategoriesMadeLater, "ApplyLevels_AppliesToCategoriesMadeLater");
-    RegisterTest(&TTest_ASWLog_CategoryLog::Test_ApplyLevels_GivesTheLongestCoveringNamesLevel, "ApplyLevels_GivesTheLongestCoveringNamesLevel");
-    RegisterTest(&TTest_ASWLog_CategoryLog::Test_ApplyLevels_IsSafeWhileCategoriesComeAndGo, "ApplyLevels_IsSafeWhileCategoriesComeAndGo");
-    RegisterTest(&TTest_ASWLog_CategoryLog::Test_ApplyLevels_LeavesUncoveredCategories, "ApplyLevels_LeavesUncoveredCategories");
-    RegisterTest(&TTest_ASWLog_CategoryLog::Test_ApplyLevels_RejectsAnInvalidSpec, "ApplyLevels_RejectsAnInvalidSpec");
-    RegisterTest(&TTest_ASWLog_CategoryLog::Test_Async_KeepsItsOwnCopyOfTheName, "Async_KeepsItsOwnCopyOfTheName");
-    RegisterTest(&TTest_ASWLog_CategoryLog::Test_Backtrace_KeepsEntriesBelowTheCategoryLevel, "Backtrace_KeepsEntriesBelowTheCategoryLevel");
-    RegisterTest(&TTest_ASWLog_CategoryLog::Test_Backtrace_KeepsItsOwnCopyOfTheName, "Backtrace_KeepsItsOwnCopyOfTheName");
-    RegisterTest(&TTest_ASWLog_CategoryLog::Test_FileLog_WritesTheCategoryAfterTheLevel, "FileLog_WritesTheCategoryAfterTheLevel");
-    RegisterTest(&TTest_ASWLog_CategoryLog::Test_GetMinimumLevel_FollowsTheWrappedLoggerUntilSet, "GetMinimumLevel_FollowsTheWrappedLoggerUntilSet");
-    RegisterTest(&TTest_ASWLog_CategoryLog::Test_Lifecycle_LeavesTheWrappedLoggerAlone, "Lifecycle_LeavesTheWrappedLoggerAlone");
-    RegisterTest(&TTest_ASWLog_CategoryLog::Test_MultiLog_CategoryLevelReplacesOnlyTheCompositeLevel, "MultiLog_CategoryLevelReplacesOnlyTheCompositeLevel");
-    RegisterTest(&TTest_ASWLog_CategoryLog::Test_Nesting_JoinsNamesAndInheritsLevels, "Nesting_JoinsNamesAndInheritsLevels");
-    RegisterTest(&TTest_ASWLog_CategoryLog::Test_SetEnabled_SilencesOnlyTheCategory, "SetEnabled_SilencesOnlyTheCategory");
-    RegisterTest(&TTest_ASWLog_CategoryLog::Test_SetMinimumLevel_OffSilencesAllButForcedEntries, "SetMinimumLevel_OffSilencesAllButForcedEntries");
-    RegisterTest(&TTest_ASWLog_CategoryLog::Test_SetMinimumLevel_ReplacesTheWrappedLoggersLevel, "SetMinimumLevel_ReplacesTheWrappedLoggersLevel");
-    RegisterTest(&TTest_ASWLog_CategoryLog::Test_ShouldLog_MatchesWhatIsWritten, "ShouldLog_MatchesWhatIsWritten");
-    RegisterTest(&TTest_ASWLog_CategoryLog::Test_Write_KeepsACategoryAlreadySet, "Write_KeepsACategoryAlreadySet");
-    RegisterTest(&TTest_ASWLog_CategoryLog::Test_Write_StampsTheNameAndOwnLevel, "Write_StampsTheNameAndOwnLevel");
 }
 //---------------------------------------------------------------------------
 TTest_ASWLog_CategoryLog::~TTest_ASWLog_CategoryLog()
@@ -298,7 +279,7 @@ void TTest_ASWLog_CategoryLog::TearDown_Test(ITestCase& testCase)
 // /////// Begin tests after this line ///////////////////////
 
 //---------------------------------------------------------------------------
-void TTest_ASWLog_CategoryLog::Test_ApplyLevels_AppliesToCategoriesMadeLater()
+ASW_TEST(TTest_ASWLog_CategoryLog, ApplyLevels_AppliesToCategoriesMadeLater)
 {
     // Arrange
     TCategoryLevelsReset resetLevels;
@@ -327,7 +308,7 @@ void TTest_ASWLog_CategoryLog::Test_ApplyLevels_AppliesToCategoriesMadeLater()
     CheckEquals(ASWLog::Level::Debug, laterLog.GetMinimumLevel(), "An empty spec should leave the levels already set");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_CategoryLog::Test_ApplyLevels_GivesTheLongestCoveringNamesLevel()
+ASW_TEST(TTest_ASWLog_CategoryLog, ApplyLevels_GivesTheLongestCoveringNamesLevel)
 {
     // Arrange
     TCategoryLevelsReset resetLevels;
@@ -352,7 +333,7 @@ void TTest_ASWLog_CategoryLog::Test_ApplyLevels_GivesTheLongestCoveringNamesLeve
     CheckEquals(ASWLog::Level::Warn, networkLog.GetMinimumLevel(), "Net should not cover Network, only * should");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_CategoryLog::Test_ApplyLevels_IsSafeWhileCategoriesComeAndGo()
+ASW_TEST(TTest_ASWLog_CategoryLog, ApplyLevels_IsSafeWhileCategoriesComeAndGo)
 {
     // Arrange
     constexpr int ThreadCount = 4;
@@ -399,7 +380,7 @@ void TTest_ASWLog_CategoryLog::Test_ApplyLevels_IsSafeWhileCategoriesComeAndGo()
     CheckEquals(0, withoutLevelCount.load(), "Every category made after the first spec should get a level");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_CategoryLog::Test_ApplyLevels_LeavesUncoveredCategories()
+ASW_TEST(TTest_ASWLog_CategoryLog, ApplyLevels_LeavesUncoveredCategories)
 {
     // Arrange
     TCategoryLevelsReset resetLevels;
@@ -432,7 +413,7 @@ void TTest_ASWLog_CategoryLog::Test_ApplyLevels_LeavesUncoveredCategories()
     CheckFalse(coveredLog.HasOwnMinimumLevel(), "ResetMinimumLevel() should make the category follow again");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_CategoryLog::Test_ApplyLevels_RejectsAnInvalidSpec()
+ASW_TEST(TTest_ASWLog_CategoryLog, ApplyLevels_RejectsAnInvalidSpec)
 {
     // Arrange
     struct TInvalidSpec
@@ -481,7 +462,7 @@ void TTest_ASWLog_CategoryLog::Test_ApplyLevels_RejectsAnInvalidSpec()
     CheckEquals(ASWLog::Level::Info, specLog.GetMinimumLevel(), "A valid spec should set the level");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_CategoryLog::Test_Async_KeepsItsOwnCopyOfTheName()
+ASW_TEST(TTest_ASWLog_CategoryLog, Async_KeepsItsOwnCopyOfTheName)
 {
     // Arrange: an asynchronous file logger calls OnLogEntry on its own thread, after the call that logged the entry
     std::mutex callbackMutex;
@@ -518,7 +499,7 @@ void TTest_ASWLog_CategoryLog::Test_Async_KeepsItsOwnCopyOfTheName()
         "The line should show the category");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_CategoryLog::Test_Backtrace_KeepsEntriesBelowTheCategoryLevel()
+ASW_TEST(TTest_ASWLog_CategoryLog, Backtrace_KeepsEntriesBelowTheCategoryLevel)
 {
     // Arrange: the logger keeps a backtrace from Trace; Db is raised to Warn, Net lowered to Debug
     TRecordingLogger logger;
@@ -549,7 +530,7 @@ void TTest_ASWLog_CategoryLog::Test_Backtrace_KeepsEntriesBelowTheCategoryLevel(
     CheckTrue(logger.Written == expected, "The entries below their category's level should be in the backtrace, with their category");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_CategoryLog::Test_Backtrace_KeepsItsOwnCopyOfTheName()
+ASW_TEST(TTest_ASWLog_CategoryLog, Backtrace_KeepsItsOwnCopyOfTheName)
 {
     // Arrange: a backtrace of one entry, so the second kept entry replaces the first
     TRecordingLogger logger;
@@ -571,7 +552,7 @@ void TTest_ASWLog_CategoryLog::Test_Backtrace_KeepsItsOwnCopyOfTheName()
         "The kept entry should keep its category's name after the category is gone");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_CategoryLog::Test_FileLog_WritesTheCategoryAfterTheLevel()
+ASW_TEST(TTest_ASWLog_CategoryLog, FileLog_WritesTheCategoryAfterTheLevel)
 {
     // Arrange: the file logger at Info; Net lowered to Debug
     const auto logFile = TestTempDir / "category.log";
@@ -598,7 +579,7 @@ void TTest_ASWLog_CategoryLog::Test_FileLog_WritesTheCategoryAfterTheLevel()
         "The category should follow the level, its own level should let its Debug entry in, and ShowCategory should hide it");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_CategoryLog::Test_GetMinimumLevel_FollowsTheWrappedLoggerUntilSet()
+ASW_TEST(TTest_ASWLog_CategoryLog, GetMinimumLevel_FollowsTheWrappedLoggerUntilSet)
 {
     // Arrange
     TRecordingLogger logger;
@@ -630,7 +611,7 @@ void TTest_ASWLog_CategoryLog::Test_GetMinimumLevel_FollowsTheWrappedLoggerUntil
     CheckFalse(hasOwnLevelAfterReset, "HasOwnMinimumLevel should be false after ResetMinimumLevel");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_CategoryLog::Test_Lifecycle_LeavesTheWrappedLoggerAlone()
+ASW_TEST(TTest_ASWLog_CategoryLog, Lifecycle_LeavesTheWrappedLoggerAlone)
 {
     // Arrange: a logger with a backtrace, so DumpBacktrace() shows whether it was passed on
     TRecordingLogger logger;
@@ -670,7 +651,7 @@ void TTest_ASWLog_CategoryLog::Test_Lifecycle_LeavesTheWrappedLoggerAlone()
     CheckEquals(3, logger.Written.size(), "DumpBacktrace should be passed on: the kept entry between the markers");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_CategoryLog::Test_MultiLog_CategoryLevelReplacesOnlyTheCompositeLevel()
+ASW_TEST(TTest_ASWLog_CategoryLog, MultiLog_CategoryLevelReplacesOnlyTheCompositeLevel)
 {
     // Arrange: a multi-log at Info with one sink at Trace and one at Info; Net lowered to Debug
     TRecordingLogger traceSink;
@@ -704,7 +685,7 @@ void TTest_ASWLog_CategoryLog::Test_MultiLog_CategoryLevelReplacesOnlyTheComposi
     CheckFalse(shouldLogDebugWithInfoSinkOnly, "ShouldLog should be false when no sink takes the entry");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_CategoryLog::Test_Nesting_JoinsNamesAndInheritsLevels()
+ASW_TEST(TTest_ASWLog_CategoryLog, Nesting_JoinsNamesAndInheritsLevels)
 {
     // Arrange
     TRecordingLogger logger;
@@ -733,7 +714,7 @@ void TTest_ASWLog_CategoryLog::Test_Nesting_JoinsNamesAndInheritsLevels()
     CheckFalse(shouldLogWhileNetDisabled, "Disabling a category should silence the categories wrapping it");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_CategoryLog::Test_SetEnabled_SilencesOnlyTheCategory()
+ASW_TEST(TTest_ASWLog_CategoryLog, SetEnabled_SilencesOnlyTheCategory)
 {
     // Arrange
     TRecordingLogger logger;
@@ -760,7 +741,7 @@ void TTest_ASWLog_CategoryLog::Test_SetEnabled_SilencesOnlyTheCategory()
     CheckFalse(shouldLogWhileLoggerDisabled, "ShouldLog should be false while the wrapped logger is disabled");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_CategoryLog::Test_SetMinimumLevel_OffSilencesAllButForcedEntries()
+ASW_TEST(TTest_ASWLog_CategoryLog, SetMinimumLevel_OffSilencesAllButForcedEntries)
 {
     // Arrange
     TRecordingLogger logger;
@@ -778,7 +759,7 @@ void TTest_ASWLog_CategoryLog::Test_SetMinimumLevel_OffSilencesAllButForcedEntri
     CheckEquals(ASWLog::Level::Info, logger.GetMinimumLevel(), "The wrapped logger's level should not change");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_CategoryLog::Test_SetMinimumLevel_ReplacesTheWrappedLoggersLevel()
+ASW_TEST(TTest_ASWLog_CategoryLog, SetMinimumLevel_ReplacesTheWrappedLoggersLevel)
 {
     // Arrange: the logger at Info; Net lowered to Debug, Db raised to Warn, UI following the logger
     TRecordingLogger logger;
@@ -802,7 +783,7 @@ void TTest_ASWLog_CategoryLog::Test_SetMinimumLevel_ReplacesTheWrappedLoggersLev
     CheckTrue(logger.Written == expected, "Each category's own level should replace the logger's, both ways, for its entries only");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_CategoryLog::Test_ShouldLog_MatchesWhatIsWritten()
+ASW_TEST(TTest_ASWLog_CategoryLog, ShouldLog_MatchesWhatIsWritten)
 {
     // Arrange: one logger without a backtrace, one keeping a backtrace from Debug, both at Info
     TRecordingLogger plainLogger;
@@ -845,7 +826,7 @@ void TTest_ASWLog_CategoryLog::Test_ShouldLog_MatchesWhatIsWritten()
     CheckTrue(plainLogger.Written == expected, "Only the entry at Net's level should be written");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_CategoryLog::Test_Write_KeepsACategoryAlreadySet()
+ASW_TEST(TTest_ASWLog_CategoryLog, Write_KeepsACategoryAlreadySet)
 {
     // Arrange: a record that already has a category and a level, as from a category wrapping this one
     TRecordingLogger logger;
@@ -865,7 +846,7 @@ void TTest_ASWLog_CategoryLog::Test_Write_KeepsACategoryAlreadySet()
     CheckTrue(logger.Written == expected, "The record's own category and level should be kept");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_CategoryLog::Test_Write_StampsTheNameAndOwnLevel()
+ASW_TEST(TTest_ASWLog_CategoryLog, Write_StampsTheNameAndOwnLevel)
 {
     // Arrange
     TRecordingLogger logger;

@@ -364,101 +364,6 @@ bool WaitUntil(const std::function<bool()>& condition)
 TTest_ASWLog_FileLog::TTest_ASWLog_FileLog()
     : inherited("ASWLog_FileLog_Tests")
 {
-    RegisterTest(&TTest_ASWLog_FileLog::Test_Async_DropsAnEntryWhileTheFileCantBeOpened, "Async_DropsAnEntryWhileTheFileCantBeOpened");
-    RegisterTest(&TTest_ASWLog_FileLog::Test_Async_EntryAtWaitAtLevelIsInTheFileWhenTheCallReturns, "Async_EntryAtWaitAtLevelIsInTheFileWhenTheCallReturns");
-    RegisterTest(&TTest_ASWLog_FileLog::Test_Async_EveryWriteFlushesEachBatch, "Async_EveryWriteFlushesEachBatch");
-    RegisterTest(&TTest_ASWLog_FileLog::Test_Async_PeriodicFlushesOnTheSameThread, "Async_PeriodicFlushesOnTheSameThread");
-    RegisterTest(&TTest_ASWLog_FileLog::Test_Async_ReconfigureWritesQueuedEntriesToTheOldFile, "Async_ReconfigureWritesQueuedEntriesToTheOldFile");
-    RegisterTest(&TTest_ASWLog_FileLog::Test_AutoOpenClose_StaysInitializedBetweenWrites, "AutoOpenClose_StaysInitializedBetweenWrites");
-    RegisterTest(&TTest_ASWLog_FileLog::Test_BackupLimits_ApplyOnlyToThisLogsBackups, "BackupLimits_ApplyOnlyToThisLogsBackups");
-    RegisterTest(&TTest_ASWLog_FileLog::Test_BackupLimits_MaxBackupFilesKeepsNewestByLastWrite, "BackupLimits_MaxBackupFilesKeepsNewestByLastWrite");
-    RegisterTest(&TTest_ASWLog_FileLog::Test_BackupLimits_MaxBackupTotalBytesDeletesOldestFirst, "BackupLimits_MaxBackupTotalBytesDeletesOldestFirst");
-    RegisterTest(&TTest_ASWLog_FileLog::Test_BackupLimits_MaxBackupTotalBytesIsStrict, "BackupLimits_MaxBackupTotalBytesIsStrict");
-    RegisterTest(&TTest_ASWLog_FileLog::Test_BackupLimits_ZeroKeepsEveryBackup, "BackupLimits_ZeroKeepsEveryBackup");
-    RegisterTest(&TTest_ASWLog_FileLog::Test_ChildProcess_DoesNotInheritLogFile, "ChildProcess_DoesNotInheritLogFile");
-    RegisterTest(&TTest_ASWLog_FileLog::Test_DailyRolling_KeepsExistingBackupForSameDate, "DailyRolling_KeepsExistingBackupForSameDate");
-    RegisterTest(&TTest_ASWLog_FileLog::Test_DailyRolling_KeepsLeftoverLogFromSameDay, "DailyRolling_KeepsLeftoverLogFromSameDay");
-    RegisterTest(&TTest_ASWLog_FileLog::Test_DailyRolling_LocalZoneRollsAtLocalMidnight, "DailyRolling_LocalZoneRollsAtLocalMidnight");
-    RegisterTest(&TTest_ASWLog_FileLog::Test_DailyRolling_NamesBackupForContentDate, "DailyRolling_NamesBackupForContentDate");
-    RegisterTest(&TTest_ASWLog_FileLog::Test_DailyRolling_ReconfiguredZoneRollsAtItsMidnight, "DailyRolling_ReconfiguredZoneRollsAtItsMidnight");
-    RegisterTest(&TTest_ASWLog_FileLog::Test_DailyRolling_RotatesLeftoverLogFromEarlierDay, "DailyRolling_RotatesLeftoverLogFromEarlierDay");
-    RegisterTest(&TTest_ASWLog_FileLog::Test_DailyRolling_RotatesLeftoverLogFromEarlierLocalDay, "DailyRolling_RotatesLeftoverLogFromEarlierLocalDay");
-    RegisterTest(&TTest_ASWLog_FileLog::Test_DailyRolling_SharedLogRollsOverOnce, "DailyRolling_SharedLogRollsOverOnce");
-    RegisterTest(&TTest_ASWLog_FileLog::Test_DeleteOldLogs_AcceptsShortRelativeFolder, "DeleteOldLogs_AcceptsShortRelativeFolder");
-    RegisterTest(&TTest_ASWLog_FileLog::Test_DeleteOldLogs_EmptyPatternDeletesNothing, "DeleteOldLogs_EmptyPatternDeletesNothing");
-    RegisterTest(&TTest_ASWLog_FileLog::Test_DeleteOldLogs_KeepsNonMatchingFilesAndSubfolders, "DeleteOldLogs_KeepsNonMatchingFilesAndSubfolders");
-    RegisterTest(&TTest_ASWLog_FileLog::Test_DeleteOldLogs_MatchesNonASCIIFileNames, "DeleteOldLogs_MatchesNonASCIIFileNames");
-    RegisterTest(&TTest_ASWLog_FileLog::Test_DeleteOldLogs_RemovesOldFiles, "DeleteOldLogs_RemovesOldFiles");
-    RegisterTest(&TTest_ASWLog_FileLog::Test_FailedOpen_TriesOpenRetryCountTimes, "FailedOpen_TriesOpenRetryCountTimes");
-    RegisterTest(&TTest_ASWLog_FileLog::Test_FailedReopen_RetriesAndResumesLogging, "FailedReopen_RetriesAndResumesLogging");
-    RegisterTest(&TTest_ASWLog_FileLog::Test_FailedReopen_ZeroResetDelayRetriesOnNextWrite, "FailedReopen_ZeroResetDelayRetriesOnNextWrite");
-    RegisterTest(&TTest_ASWLog_FileLog::Test_FailedSizeRotation_WaitsBeforeRetrying, "FailedSizeRotation_WaitsBeforeRetrying");
-    RegisterTest(&TTest_ASWLog_FileLog::Test_FileStream_FlushWorksAfterFailedWrite, "FileStream_FlushWorksAfterFailedWrite");
-    RegisterTest(&TTest_ASWLog_FileLog::Test_FileStream_InsertionIntoAClosedStreamFails, "FileStream_InsertionIntoAClosedStreamFails");
-    RegisterTest(&TTest_ASWLog_FileLog::Test_FileStream_InsertionWritesAndCountsTheSize, "FileStream_InsertionWritesAndCountsTheSize");
-    RegisterTest(&TTest_ASWLog_FileLog::Test_FlushImmediatelyAtLevel_FlushesEntriesAtOrAboveTheLevel, "FlushImmediatelyAtLevel_FlushesEntriesAtOrAboveTheLevel");
-    RegisterTest(&TTest_ASWLog_FileLog::Test_FlushImmediatelyAtLevel_OffLeavesFlushingToFlushMode, "FlushImmediatelyAtLevel_OffLeavesFlushingToFlushMode");
-    RegisterTest(&TTest_ASWLog_FileLog::Test_Flush_WritesBufferedManualModeEntries, "Flush_WritesBufferedManualModeEntries");
-    RegisterTest(&TTest_ASWLog_FileLog::Test_GetInstance_ReturnsSameInstance, "GetInstance_ReturnsSameInstance");
-    RegisterTest(&TTest_ASWLog_FileLog::Test_InitializeAndLogInfo_WritesText, "InitializeAndLogInfo_WritesText");
-    RegisterTest(&TTest_ASWLog_FileLog::Test_Initialize_SuppressesInfoBannersBelowMinimumLevel, "Initialize_SuppressesInfoBannersBelowMinimumLevel");
-    RegisterTest(&TTest_ASWLog_FileLog::Test_LogFormatMethods_FormatsMessage, "LogFormatMethods_FormatsMessage");
-    RegisterTest(&TTest_ASWLog_FileLog::Test_LogFormatMethods_WriteCallerSourceLine, "LogFormatMethods_WriteCallerSourceLine");
-    RegisterTest(&TTest_ASWLog_FileLog::Test_LogLineMetadata_Options, "LogLineMetadata_Options");
-    RegisterTest(&TTest_ASWLog_FileLog::Test_LogNewLineAndForceOptions, "LogNewLineAndForceOptions");
-    RegisterTest(&TTest_ASWLog_FileLog::Test_LogProcessAndThreadIds_AreOSIds, "LogProcessAndThreadIds_AreOSIds");
-    RegisterTest(&TTest_ASWLog_FileLog::Test_LogRawOptions, "LogRawOptions");
-    RegisterTest(&TTest_ASWLog_FileLog::Test_MultiThreadedStress_WritesAllMessagesToDisk, "MultiThreadedStress_WritesAllMessagesToDisk");
-    RegisterTest(&TTest_ASWLog_FileLog::Test_MultiThreadedStress_WritesAllMessagesToDisk_OpenClose, "MultiThreadedStress_WritesAllMessagesToDisk_OpenClose");
-    RegisterTest(&TTest_ASWLog_FileLog::Test_NewFile_AsyncWorkerWritesTheStartupLinesBeforeTheEntry, "NewFile_AsyncWorkerWritesTheStartupLinesBeforeTheEntry");
-    RegisterTest(&TTest_ASWLog_FileLog::Test_NewFile_DailyRollingStartsWithTheStartupLines, "NewFile_DailyRollingStartsWithTheStartupLines");
-    RegisterTest(&TTest_ASWLog_FileLog::Test_NewFile_FailedRotationWritesNoStartupLines, "NewFile_FailedRotationWritesNoStartupLines");
-    RegisterTest(&TTest_ASWLog_FileLog::Test_NewFile_InitializeWritesItsStartupLinesOnce, "NewFile_InitializeWritesItsStartupLinesOnce");
-    RegisterTest(&TTest_ASWLog_FileLog::Test_NewFile_ManualRotationOpensASharedLogForTheStartupLines, "NewFile_ManualRotationOpensASharedLogForTheStartupLines");
-    RegisterTest(&TTest_ASWLog_FileLog::Test_NewFile_MinimumLevelAboveInfoLeavesOutTheStartupLines, "NewFile_MinimumLevelAboveInfoLeavesOutTheStartupLines");
-    RegisterTest(&TTest_ASWLog_FileLog::Test_NewFile_ReconfigureToANewPathStartsWithTheStartupLines, "NewFile_ReconfigureToANewPathStartsWithTheStartupLines");
-    RegisterTest(&TTest_ASWLog_FileLog::Test_NewFile_RotationWaitsUntilTheStartupLinesAreWritten, "NewFile_RotationWaitsUntilTheStartupLinesAreWritten");
-    RegisterTest(&TTest_ASWLog_FileLog::Test_NewFile_SharedLogGetsTheStartupLinesOnce, "NewFile_SharedLogGetsTheStartupLinesOnce");
-    RegisterTest(&TTest_ASWLog_FileLog::Test_NewFile_SizeRotationStartsWithTheStartupLines, "NewFile_SizeRotationStartsWithTheStartupLines");
-    RegisterTest(&TTest_ASWLog_FileLog::Test_NewFile_UnopenedFileGetsTheStartupLinesWhenItOpens, "NewFile_UnopenedFileGetsTheStartupLinesWhenItOpens");
-    RegisterTest(&TTest_ASWLog_FileLog::Test_OnBackupCreated_IsNotCalledWhenRotationFails, "OnBackupCreated_IsNotCalledWhenRotationFails");
-    RegisterTest(&TTest_ASWLog_FileLog::Test_OnBackupCreated_LeavesARenamedBackupToTheApp, "OnBackupCreated_LeavesARenamedBackupToTheApp");
-    RegisterTest(&TTest_ASWLog_FileLog::Test_OnBackupCreated_ReportsDailyBackupAtInitialize, "OnBackupCreated_ReportsDailyBackupAtInitialize");
-    RegisterTest(&TTest_ASWLog_FileLog::Test_OnBackupCreated_ReportsEachBackup, "OnBackupCreated_ReportsEachBackup");
-    RegisterTest(&TTest_ASWLog_FileLog::Test_OnBackupCreated_RunsOutsideTheLockBeforeCleanup, "OnBackupCreated_RunsOutsideTheLockBeforeCleanup");
-    RegisterTest(&TTest_ASWLog_FileLog::Test_OnBackupCreated_ThrowingCallbackStillCleansUp, "OnBackupCreated_ThrowingCallbackStillCleansUp");
-    RegisterTest(&TTest_ASWLog_FileLog::Test_OnError_ReportsFailedDelete, "OnError_ReportsFailedDelete");
-    RegisterTest(&TTest_ASWLog_FileLog::Test_OnError_ReportsFailedOpen, "OnError_ReportsFailedOpen");
-    RegisterTest(&TTest_ASWLog_FileLog::Test_OnError_ReportsFailedRotationAndReopen, "OnError_ReportsFailedRotationAndReopen");
-    RegisterTest(&TTest_ASWLog_FileLog::Test_OnError_ReportsFailedSync, "OnError_ReportsFailedSync");
-    RegisterTest(&TTest_ASWLog_FileLog::Test_OnError_ReportsFullDisk, "OnError_ReportsFullDisk");
-    RegisterTest(&TTest_ASWLog_FileLog::Test_OnLogEntry_FiresForQualifyingLevelsOnly, "OnLogEntry_FiresForQualifyingLevelsOnly");
-    RegisterTest(&TTest_ASWLog_FileLog::Test_OnLogEntry_ReentrantCallbackDoesNotDeadlock, "OnLogEntry_ReentrantCallbackDoesNotDeadlock");
-    RegisterTest(&TTest_ASWLog_FileLog::Test_Open_KeepsAnOpenFile, "Open_KeepsAnOpenFile");
-    RegisterTest(&TTest_ASWLog_FileLog::Test_Periodic_CloseStopsAndOpenRestartsTheThread, "Periodic_CloseStopsAndOpenRestartsTheThread");
-    RegisterTest(&TTest_ASWLog_FileLog::Test_Periodic_CloseStopsTheThreadWithoutWaitingForTheInterval, "Periodic_CloseStopsTheThreadWithoutWaitingForTheInterval");
-    RegisterTest(&TTest_ASWLog_FileLog::Test_Periodic_ConcurrentLoggingAndReconfigure, "Periodic_ConcurrentLoggingAndReconfigure");
-    RegisterTest(&TTest_ASWLog_FileLog::Test_Periodic_DestructorStopsTheThreadWithoutWaitingForTheInterval, "Periodic_DestructorStopsTheThreadWithoutWaitingForTheInterval");
-    RegisterTest(&TTest_ASWLog_FileLog::Test_Periodic_ErrorHandlerCanCloseAndReopenOnTheThread, "Periodic_ErrorHandlerCanCloseAndReopenOnTheThread");
-    RegisterTest(&TTest_ASWLog_FileLog::Test_Periodic_FlushesAfterTheLastEntry, "Periodic_FlushesAfterTheLastEntry");
-    RegisterTest(&TTest_ASWLog_FileLog::Test_Periodic_ReconfigureAppliesANewInterval, "Periodic_ReconfigureAppliesANewInterval");
-    RegisterTest(&TTest_ASWLog_FileLog::Test_Periodic_ReconfigureStartsAndStopsTheThread, "Periodic_ReconfigureStartsAndStopsTheThread");
-    RegisterTest(&TTest_ASWLog_FileLog::Test_Periodic_ZeroIntervalFlushesEveryEntry, "Periodic_ZeroIntervalFlushesEveryEntry");
-    RegisterTest(&TTest_ASWLog_FileLog::Test_Reconfigure_FlushesEntriesBufferedByPreviousMode, "Reconfigure_FlushesEntriesBufferedByPreviousMode");
-    RegisterTest(&TTest_ASWLog_FileLog::Test_Reconfigure_MovesOutputToNewFile, "Reconfigure_MovesOutputToNewFile");
-    RegisterTest(&TTest_ASWLog_FileLog::Test_Reconfigure_UnopenableFileFailsButLoggerStaysInitialized, "Reconfigure_UnopenableFileFailsButLoggerStaysInitialized");
-    RegisterTest(&TTest_ASWLog_FileLog::Test_RetentionMaxAge_DefaultDisabledPreservesOldBackups, "RetentionMaxAge_DefaultDisabledPreservesOldBackups");
-    RegisterTest(&TTest_ASWLog_FileLog::Test_RetentionMaxAge_DeletesExpiredBackupsAfterRotation, "RetentionMaxAge_DeletesExpiredBackupsAfterRotation");
-    RegisterTest(&TTest_ASWLog_FileLog::Test_RotateLogFiles_FailsWhenEveryBackupNameIsTaken, "RotateLogFiles_FailsWhenEveryBackupNameIsTaken");
-    RegisterTest(&TTest_ASWLog_FileLog::Test_RotateLogFiles_KeepsEveryBackup, "RotateLogFiles_KeepsEveryBackup");
-    RegisterTest(&TTest_ASWLog_FileLog::Test_RotateLogFiles_NamesBackupInLocalTime, "RotateLogFiles_NamesBackupInLocalTime");
-    RegisterTest(&TTest_ASWLog_FileLog::Test_SetEnabled_FalseStopsAutoOpenCloseLogging, "SetEnabled_FalseStopsAutoOpenCloseLogging");
-    RegisterTest(&TTest_ASWLog_FileLog::Test_ShutdownLine_TimeFollowsTimestampZone, "ShutdownLine_TimeFollowsTimestampZone");
-    RegisterTest(&TTest_ASWLog_FileLog::Test_SizeRotation_AutoOpenCloseCountsOtherWriters, "SizeRotation_AutoOpenCloseCountsOtherWriters");
-    RegisterTest(&TTest_ASWLog_FileLog::Test_SizeRotation_CountsExistingFileSize, "SizeRotation_CountsExistingFileSize");
-    RegisterTest(&TTest_ASWLog_FileLog::Test_SizeRotation_RotatesWhenLimitReached, "SizeRotation_RotatesWhenLimitReached");
-    RegisterTest(&TTest_ASWLog_FileLog::Test_SyncToDiskAtLevel_FlushesAndSyncsEntriesAtOrAboveTheLevel, "SyncToDiskAtLevel_FlushesAndSyncsEntriesAtOrAboveTheLevel");
-    RegisterTest(&TTest_ASWLog_FileLog::Test_Write_EarlierRecordDoesNotRollLogBack, "Write_EarlierRecordDoesNotRollLogBack");
 }
 //---------------------------------------------------------------------------
 TTest_ASWLog_FileLog::~TTest_ASWLog_FileLog()
@@ -493,7 +398,7 @@ void TTest_ASWLog_FileLog::TearDown_Test(ITestCase& testCase)
 // /////// Begin tests after this line ///////////////////////
 
 //---------------------------------------------------------------------------
-void TTest_ASWLog_FileLog::Test_Async_DropsAnEntryWhileTheFileCantBeOpened()
+ASW_TEST(TTest_ASWLog_FileLog, Async_DropsAnEntryWhileTheFileCantBeOpened)
 {
     // Arrange: a "folder" that is a file can't hold the log, on any OS and for any user
     using namespace std::chrono_literals;
@@ -534,7 +439,7 @@ void TTest_ASWLog_FileLog::Test_Async_DropsAnEntryWhileTheFileCantBeOpened()
     CheckTrue(callbackMessages == expectedMessages, "OnLogEntry should be called only for the entries written");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_FileLog::Test_Async_EntryAtWaitAtLevelIsInTheFileWhenTheCallReturns()
+ASW_TEST(TTest_ASWLog_FileLog, Async_EntryAtWaitAtLevelIsInTheFileWhenTheCallReturns)
 {
     // Arrange: neither the flush mode nor the flush level would flush these entries
     const auto logFile = TestTempDir / "async_wait_level.log";
@@ -557,7 +462,7 @@ void TTest_ASWLog_FileLog::Test_Async_EntryAtWaitAtLevelIsInTheFileWhenTheCallRe
         "When the Error call returns, its entry and those before it should be in the file");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_FileLog::Test_Async_EveryWriteFlushesEachBatch()
+ASW_TEST(TTest_ASWLog_FileLog, Async_EveryWriteFlushesEachBatch)
 {
     // Arrange
     const auto logFile = TestTempDir / "async_every_write.log";
@@ -579,7 +484,7 @@ void TTest_ASWLog_FileLog::Test_Async_EveryWriteFlushesEachBatch()
     CheckEquals(std::string(": entry_1\n: entry_2\n"), contents, "The logger's thread should flush what it wrote");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_FileLog::Test_Async_PeriodicFlushesOnTheSameThread()
+ASW_TEST(TTest_ASWLog_FileLog, Async_PeriodicFlushesOnTheSameThread)
 {
     // Arrange
     const auto logFile = TestTempDir / "async_periodic.log";
@@ -601,7 +506,7 @@ void TTest_ASWLog_FileLog::Test_Async_PeriodicFlushesOnTheSameThread()
     CheckEquals(std::string(": entry\n"), contents, "The logger's thread should also flush every FlushInterval");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_FileLog::Test_Async_ReconfigureWritesQueuedEntriesToTheOldFile()
+ASW_TEST(TTest_ASWLog_FileLog, Async_ReconfigureWritesQueuedEntriesToTheOldFile)
 {
     // Arrange
     const auto oldFile = TestTempDir / "async_old.log";
@@ -632,7 +537,7 @@ void TTest_ASWLog_FileLog::Test_Async_ReconfigureWritesQueuedEntriesToTheOldFile
     CheckEquals(std::string(": new_entry\n"), newContents, "Only the entry logged after Reconfigure should go to the new file");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_FileLog::Test_AutoOpenClose_StaysInitializedBetweenWrites()
+ASW_TEST(TTest_ASWLog_FileLog, AutoOpenClose_StaysInitializedBetweenWrites)
 {
     // Arrange: with File.AutoOpenClosePerWrite the file is closed after every entry, which must not uninitialize the
     // logger
@@ -668,7 +573,7 @@ void TTest_ASWLog_FileLog::Test_AutoOpenClose_StaysInitializedBetweenWrites()
         "The destructor should write the shutdown line after the last entry: " + contents);
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_FileLog::Test_BackupLimits_ApplyOnlyToThisLogsBackups()
+ASW_TEST(TTest_ASWLog_FileLog, BackupLimits_ApplyOnlyToThisLogsBackups)
 {
     // Arrange: every file is old enough for File.RetentionMaxAge, and File.MaxBackupFiles keeps only the new backup
     using namespace std::chrono_literals;
@@ -712,7 +617,7 @@ void TTest_ASWLog_FileLog::Test_BackupLimits_ApplyOnlyToThisLogsBackups()
     CheckEquals(1, CountFilesStartingWith("app.manual."), "The new backup should be kept");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_FileLog::Test_BackupLimits_MaxBackupFilesKeepsNewestByLastWrite()
+ASW_TEST(TTest_ASWLog_FileLog, BackupLimits_MaxBackupFilesKeepsNewestByLastWrite)
 {
     // Arrange: last write times in a different order than the names. The daily backup holds the end of its day, so it
     // is newer than that day's size backups although its name sorts before theirs.
@@ -746,7 +651,7 @@ void TTest_ASWLog_FileLog::Test_BackupLimits_MaxBackupFilesKeepsNewestByLastWrit
     CheckFalse(std::filesystem::exists(sizeLatestName), "The oldest backup should be deleted, whatever its name says");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_FileLog::Test_BackupLimits_MaxBackupTotalBytesDeletesOldestFirst()
+ASW_TEST(TTest_ASWLog_FileLog, BackupLimits_MaxBackupTotalBytesDeletesOldestFirst)
 {
     // Arrange
     using namespace std::chrono_literals;
@@ -780,7 +685,7 @@ void TTest_ASWLog_FileLog::Test_BackupLimits_MaxBackupTotalBytesDeletesOldestFir
     CheckFalse(std::filesystem::exists(smallOldest), "An older backup should be deleted too, even though it would fit");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_FileLog::Test_BackupLimits_MaxBackupTotalBytesIsStrict()
+ASW_TEST(TTest_ASWLog_FileLog, BackupLimits_MaxBackupTotalBytesIsStrict)
 {
     // Arrange: a limit smaller than the backup that rotation makes
     using namespace std::chrono_literals;
@@ -806,7 +711,7 @@ void TTest_ASWLog_FileLog::Test_BackupLimits_MaxBackupTotalBytesIsStrict()
     CheckEquals(std::string(": after\n"), ReadFileText(TestTempDir / "strict.log"), "Logging should go on in the new log file");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_FileLog::Test_BackupLimits_ZeroKeepsEveryBackup()
+ASW_TEST(TTest_ASWLog_FileLog, BackupLimits_ZeroKeepsEveryBackup)
 {
     // Arrange: File.RetentionMaxAge is set, so the cleanup runs, but none of the backups has expired
     using namespace std::chrono_literals;
@@ -830,7 +735,7 @@ void TTest_ASWLog_FileLog::Test_BackupLimits_ZeroKeepsEveryBackup()
     CheckEquals(1, CountFilesStartingWith("zero.manual."), "The new backup should be kept");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_FileLog::Test_ChildProcess_DoesNotInheritLogFile()
+ASW_TEST(TTest_ASWLog_FileLog, ChildProcess_DoesNotInheritLogFile)
 {
     // Arrange
     const auto logFile = TestTempDir / "not_inherited.log";
@@ -889,7 +794,7 @@ void TTest_ASWLog_FileLog::Test_ChildProcess_DoesNotInheritLogFile()
 #endif
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_FileLog::Test_DailyRolling_KeepsExistingBackupForSameDate()
+ASW_TEST(TTest_ASWLog_FileLog, DailyRolling_KeepsExistingBackupForSameDate)
 {
     // Arrange
     using namespace std::chrono_literals;
@@ -922,7 +827,7 @@ void TTest_ASWLog_FileLog::Test_DailyRolling_KeepsExistingBackupForSameDate()
     CheckContains(newBackupContents, "day_one_entry", "Daily rolling should add _1 to the name when the day's backup already exists");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_FileLog::Test_DailyRolling_KeepsLeftoverLogFromSameDay()
+ASW_TEST(TTest_ASWLog_FileLog, DailyRolling_KeepsLeftoverLogFromSameDay)
 {
     // Arrange: a log last written 2 hours before the logger starts at 10:00 UTC, i.e. earlier the same UTC day
     using namespace std::chrono_literals;
@@ -953,7 +858,7 @@ void TTest_ASWLog_FileLog::Test_DailyRolling_KeepsLeftoverLogFromSameDay()
     CheckContains(contents, "new_entry", "New entries should be appended to the log");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_FileLog::Test_DailyRolling_LocalZoneRollsAtLocalMidnight()
+ASW_TEST(TTest_ASWLog_FileLog, DailyRolling_LocalZoneRollsAtLocalMidnight)
 {
     // Arrange: US Eastern time, 5 hours behind UTC in January
     using namespace std::chrono_literals;
@@ -989,7 +894,7 @@ void TTest_ASWLog_FileLog::Test_DailyRolling_LocalZoneRollsAtLocalMidnight()
     CheckNotContains(currentContents, "evening_entry", "The new local day's file should not contain the previous day's entries");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_FileLog::Test_DailyRolling_NamesBackupForContentDate()
+ASW_TEST(TTest_ASWLog_FileLog, DailyRolling_NamesBackupForContentDate)
 {
     // Arrange
     using namespace std::chrono_literals;
@@ -1019,7 +924,7 @@ void TTest_ASWLog_FileLog::Test_DailyRolling_NamesBackupForContentDate()
     CheckNotContains(currentContents, "day_one_entry", "The reopened log file should not contain the previous day's entries");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_FileLog::Test_DailyRolling_ReconfiguredZoneRollsAtItsMidnight()
+ASW_TEST(TTest_ASWLog_FileLog, DailyRolling_ReconfiguredZoneRollsAtItsMidnight)
 {
     // Arrange: 01:00 UTC on the 16th is 20:00 on the 15th in US Eastern time
     using namespace std::chrono_literals;
@@ -1053,7 +958,7 @@ void TTest_ASWLog_FileLog::Test_DailyRolling_ReconfiguredZoneRollsAtItsMidnight(
     CheckNotContains(currentContents, "after_switch", "The new local day's file should not contain the previous day's entries");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_FileLog::Test_DailyRolling_RotatesLeftoverLogFromEarlierDay()
+ASW_TEST(TTest_ASWLog_FileLog, DailyRolling_RotatesLeftoverLogFromEarlierDay)
 {
     // Arrange: a log last written 30 hours before the logger starts at 10:00 UTC on 2026-01-15, i.e. on 2026-01-14
     using namespace std::chrono_literals;
@@ -1086,7 +991,7 @@ void TTest_ASWLog_FileLog::Test_DailyRolling_RotatesLeftoverLogFromEarlierDay()
     CheckNotContains(currentContents, "yesterday_entry", "The new log file should not contain the earlier day's entries");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_FileLog::Test_DailyRolling_RotatesLeftoverLogFromEarlierLocalDay()
+ASW_TEST(TTest_ASWLog_FileLog, DailyRolling_RotatesLeftoverLogFromEarlierLocalDay)
 {
     // Arrange: the logger starts at 00:10 on the 16th in US Eastern time (05:10 UTC); the log was last written 20 minutes
     // earlier, on the 15th in local time but on the same UTC day
@@ -1119,7 +1024,7 @@ void TTest_ASWLog_FileLog::Test_DailyRolling_RotatesLeftoverLogFromEarlierLocalD
     CheckNotContains(ReadFileText(logFile), "local_yesterday_entry", "The new log file should not contain the earlier local day's entries");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_FileLog::Test_DailyRolling_SharedLogRollsOverOnce()
+ASW_TEST(TTest_ASWLog_FileLog, DailyRolling_SharedLogRollsOverOnce)
 {
     // Arrange: two loggers sharing one log, as two processes would (File.AutoOpenClosePerWrite), both logging at 23:59 UTC
     using namespace std::chrono_literals;
@@ -1161,7 +1066,7 @@ void TTest_ASWLog_FileLog::Test_DailyRolling_SharedLogRollsOverOnce()
     CheckContains(currentContents, "second_day_two_entry", "Both loggers' entries from the second day should be in the current log");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_FileLog::Test_DeleteOldLogs_AcceptsShortRelativeFolder()
+ASW_TEST(TTest_ASWLog_FileLog, DeleteOldLogs_AcceptsShortRelativeFolder)
 {
     // Arrange: an old file in "lg", a relative folder name as short as a root folder such as "C:\"
     const auto shortFolder = TestTempDir / "lg";
@@ -1185,7 +1090,7 @@ void TTest_ASWLog_FileLog::Test_DeleteOldLogs_AcceptsShortRelativeFolder()
     CheckFalse(std::filesystem::exists(oldFile), "The old file in the relative folder should be removed");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_FileLog::Test_DeleteOldLogs_EmptyPatternDeletesNothing()
+ASW_TEST(TTest_ASWLog_FileLog, DeleteOldLogs_EmptyPatternDeletesNothing)
 {
     // Arrange
     const auto oldFile = TestTempDir / "old_example.log";
@@ -1207,7 +1112,7 @@ void TTest_ASWLog_FileLog::Test_DeleteOldLogs_EmptyPatternDeletesNothing()
     CheckFalse(std::filesystem::exists(oldFile), "The \"*\" pattern should remove the old file");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_FileLog::Test_DeleteOldLogs_KeepsNonMatchingFilesAndSubfolders()
+ASW_TEST(TTest_ASWLog_FileLog, DeleteOldLogs_KeepsNonMatchingFilesAndSubfolders)
 {
     // Arrange: an empty subfolder whose name matches the pattern, besides a matching and a non-matching file
     const auto matchingFile = TestTempDir / "old_example.log";
@@ -1228,7 +1133,7 @@ void TTest_ASWLog_FileLog::Test_DeleteOldLogs_KeepsNonMatchingFilesAndSubfolders
     CheckTrue(std::filesystem::is_directory(subfolder), "A subfolder should be kept, even if its name matches the pattern");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_FileLog::Test_DeleteOldLogs_MatchesNonASCIIFileNames()
+ASW_TEST(TTest_ASWLog_FileLog, DeleteOldLogs_MatchesNonASCIIFileNames)
 {
     // Arrange: a file name with a character outside the Windows ANSI code page (Greek small lambda, U+03BB, which is
     // CE BB in UTF-8). Written with escapes, and without a u8"" literal: MSVC builds turned both the raw character and
@@ -1259,7 +1164,7 @@ void TTest_ASWLog_FileLog::Test_DeleteOldLogs_MatchesNonASCIIFileNames()
     CheckFalse(std::filesystem::exists(oldFile), "The matching old file should be removed");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_FileLog::Test_DeleteOldLogs_RemovesOldFiles()
+ASW_TEST(TTest_ASWLog_FileLog, DeleteOldLogs_RemovesOldFiles)
 {
     // Arrange
     const auto oldFile = TestTempDir / "old_example.log";
@@ -1287,7 +1192,7 @@ void TTest_ASWLog_FileLog::Test_DeleteOldLogs_RemovesOldFiles()
     CheckTrue(std::filesystem::exists(newFile), "Recent log file should remain");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_FileLog::Test_FailedOpen_TriesOpenRetryCountTimes()
+ASW_TEST(TTest_ASWLog_FileLog, FailedOpen_TriesOpenRetryCountTimes)
 {
     // Arrange: a "folder" that is a file can't hold the log, on any OS and for any user
     using namespace std::chrono_literals;
@@ -1315,7 +1220,7 @@ void TTest_ASWLog_FileLog::Test_FailedOpen_TriesOpenRetryCountTimes()
     CheckEquals(1, reports.size(), "The failed open should be reported once, after the last try");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_FileLog::Test_FailedReopen_RetriesAndResumesLogging()
+ASW_TEST(TTest_ASWLog_FileLog, FailedReopen_RetriesAndResumesLogging)
 {
     // Arrange
     if (!CanBlockFiles())
@@ -1365,7 +1270,7 @@ void TTest_ASWLog_FileLog::Test_FailedReopen_RetriesAndResumesLogging()
     CheckTrue(openAfterRecovery, "The log should report open again after recovering");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_FileLog::Test_FailedReopen_ZeroResetDelayRetriesOnNextWrite()
+ASW_TEST(TTest_ASWLog_FileLog, FailedReopen_ZeroResetDelayRetriesOnNextWrite)
 {
     // Arrange
     if (!CanBlockFiles())
@@ -1396,7 +1301,7 @@ void TTest_ASWLog_FileLog::Test_FailedReopen_ZeroResetDelayRetriesOnNextWrite()
     CheckContains(ReadFileText(logFile), "next_write", "With File.CircuitBreakerResetDelay 0, the next write should reopen the file");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_FileLog::Test_FailedSizeRotation_WaitsBeforeRetrying()
+ASW_TEST(TTest_ASWLog_FileLog, FailedSizeRotation_WaitsBeforeRetrying)
 {
     // Arrange
     if (!CanBlockFiles())
@@ -1452,7 +1357,7 @@ void TTest_ASWLog_FileLog::Test_FailedSizeRotation_WaitsBeforeRetrying()
     CheckNotContains(currentContents, "line_three", "The new log file should only hold entries after the successful rotation");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_FileLog::Test_FileStream_FlushWorksAfterFailedWrite()
+ASW_TEST(TTest_ASWLog_FileLog, FileStream_FlushWorksAfterFailedWrite)
 {
     // Arrange: a stream left in a failed state, as by a failed write (e.g. a full disk that has room again). The
     // standard flush() does nothing in that state, so the data would stay in the buffer until the file is closed.
@@ -1474,7 +1379,7 @@ void TTest_ASWLog_FileLog::Test_FileStream_FlushWorksAfterFailedWrite()
     CheckEquals(std::string("buffered"), contents, "Flush should write the buffered data to the file");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_FileLog::Test_FileStream_InsertionIntoAClosedStreamFails()
+ASW_TEST(TTest_ASWLog_FileLog, FileStream_InsertionIntoAClosedStreamFails)
 {
     // Arrange
     ASWLog::TASWFileStream textStream;
@@ -1490,7 +1395,7 @@ void TTest_ASWLog_FileLog::Test_FileStream_InsertionIntoAClosedStreamFails()
     CheckEquals(0, textStream.GetSize() + characterStream.GetSize(), "Nothing should be counted");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_FileLog::Test_FileStream_InsertionWritesAndCountsTheSize()
+ASW_TEST(TTest_ASWLog_FileLog, FileStream_InsertionWritesAndCountsTheSize)
 {
     // Arrange: a file that already holds 4 bytes
     const auto file = TestTempDir / "insertion.log";
@@ -1513,7 +1418,7 @@ void TTest_ASWLog_FileLog::Test_FileStream_InsertionWritesAndCountsTheSize()
     CheckEquals(13, size, "GetSize() should count the file's bytes and every inserted one");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_FileLog::Test_FlushImmediatelyAtLevel_FlushesEntriesAtOrAboveTheLevel()
+ASW_TEST(TTest_ASWLog_FileLog, FlushImmediatelyAtLevel_FlushesEntriesAtOrAboveTheLevel)
 {
     // Arrange: FlushMode::Manual keeps the entries below the level in the file's buffer
     const auto logFile = TestTempDir / "flush_at_level.log";
@@ -1545,7 +1450,7 @@ void TTest_ASWLog_FileLog::Test_FlushImmediatelyAtLevel_FlushesEntriesAtOrAboveT
     CheckEquals(contentsAfterRaw, contentsAfterForcedTrace, "A forced entry below the level should stay buffered");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_FileLog::Test_FlushImmediatelyAtLevel_OffLeavesFlushingToFlushMode()
+ASW_TEST(TTest_ASWLog_FileLog, FlushImmediatelyAtLevel_OffLeavesFlushingToFlushMode)
 {
     // Arrange
     const auto logFile = TestTempDir / "flush_at_level_off.log";
@@ -1569,7 +1474,7 @@ void TTest_ASWLog_FileLog::Test_FlushImmediatelyAtLevel_OffLeavesFlushingToFlush
     CheckEquals(std::string(": critical_entry\n: forced_critical_entry\n"), contentsAfterFlush, "Flush() should write the buffered entries");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_FileLog::Test_Flush_WritesBufferedManualModeEntries()
+ASW_TEST(TTest_ASWLog_FileLog, Flush_WritesBufferedManualModeEntries)
 {
     // Arrange: FlushMode::Manual keeps each entry in the file's buffer until Flush()
     const auto logFile = TestTempDir / "flush_manual.log";
@@ -1596,7 +1501,7 @@ void TTest_ASWLog_FileLog::Test_Flush_WritesBufferedManualModeEntries()
     CheckFalse(flushedWhileClosed, "Flush() should return false while the file is closed");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_FileLog::Test_GetInstance_ReturnsSameInstance()
+ASW_TEST(TTest_ASWLog_FileLog, GetInstance_ReturnsSameInstance)
 {
     // Act
     auto& first = ASWLog::TASWFileLog::GetInstance();
@@ -1606,7 +1511,7 @@ void TTest_ASWLog_FileLog::Test_GetInstance_ReturnsSameInstance()
     CheckSame(&first, &second, "GetInstance should return the same logger on every call");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_FileLog::Test_InitializeAndLogInfo_WritesText()
+ASW_TEST(TTest_ASWLog_FileLog, InitializeAndLogInfo_WritesText)
 {
     // Arrange
     const auto logFile = TestTempDir / "aswlog_runtime.log";
@@ -1646,7 +1551,7 @@ void TTest_ASWLog_FileLog::Test_InitializeAndLogInfo_WritesText()
     CheckContains(contents, "unit_test_message", "Logged file should contain the test message");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_FileLog::Test_Initialize_SuppressesInfoBannersBelowMinimumLevel()
+ASW_TEST(TTest_ASWLog_FileLog, Initialize_SuppressesInfoBannersBelowMinimumLevel)
 {
     // Arrange
     const auto logFile = TestTempDir / "suppressed_banners.log";
@@ -1681,7 +1586,7 @@ void TTest_ASWLog_FileLog::Test_Initialize_SuppressesInfoBannersBelowMinimumLeve
     CheckContains(contents, "this_error_should_appear", "Messages at or above InitialMinimumLevel should still be written");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_FileLog::Test_LogFormatMethods_FormatsMessage()
+ASW_TEST(TTest_ASWLog_FileLog, LogFormatMethods_FormatsMessage)
 {
     // Arrange
     const auto logFile = TestTempDir / "format_message.log";
@@ -1716,7 +1621,7 @@ void TTest_ASWLog_FileLog::Test_LogFormatMethods_FormatsMessage()
     CheckContains(contents, "forced value", "LogForceFmt should bypass filter and format the message");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_FileLog::Test_LogFormatMethods_WriteCallerSourceLine()
+ASW_TEST(TTest_ASWLog_FileLog, LogFormatMethods_WriteCallerSourceLine)
 {
     // Arrange
     const auto logFile = TestTempDir / "fmt_location.log";
@@ -1743,7 +1648,7 @@ void TTest_ASWLog_FileLog::Test_LogFormatMethods_WriteCallerSourceLine()
     CheckNotContains(contents, "ASWLog_Interface.h", "Line.ShowSourceLine should not show the header that implements the *Fmt methods");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_FileLog::Test_LogLineMetadata_Options()
+ASW_TEST(TTest_ASWLog_FileLog, LogLineMetadata_Options)
 {
     // Arrange
     const auto logFile = TestTempDir / "metadata_line.log";
@@ -1783,7 +1688,7 @@ void TTest_ASWLog_FileLog::Test_LogLineMetadata_Options()
     CheckContains(contents, "metadata_message", "Metadata log line should still contain the message");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_FileLog::Test_LogNewLineAndForceOptions()
+ASW_TEST(TTest_ASWLog_FileLog, LogNewLineAndForceOptions)
 {
     // Arrange
     const auto logFile = TestTempDir / "newline_force.log";
@@ -1819,7 +1724,7 @@ void TTest_ASWLog_FileLog::Test_LogNewLineAndForceOptions()
     CheckNotContains(contents, "ignored_message", "Log should not write a message below the configured minimum level");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_FileLog::Test_LogProcessAndThreadIds_AreOSIds()
+ASW_TEST(TTest_ASWLog_FileLog, LogProcessAndThreadIds_AreOSIds)
 {
     // Arrange
     const auto logFile = TestTempDir / "os_ids.log";
@@ -1852,7 +1757,7 @@ void TTest_ASWLog_FileLog::Test_LogProcessAndThreadIds_AreOSIds()
     CheckContains(contents, processTag + "[T:" + std::to_string(workerThreadId) + "]: worker_thread_entry", "An entry from another thread should show that thread's OS thread id");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_FileLog::Test_LogRawOptions()
+ASW_TEST(TTest_ASWLog_FileLog, LogRawOptions)
 {
     // Arrange
     const auto logFile = TestTempDir / "raw.log";
@@ -1887,7 +1792,7 @@ void TTest_ASWLog_FileLog::Test_LogRawOptions()
     CheckNotContains(contents, "raw_force_message\n", "LogForceRaw should not append a trailing newline");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_FileLog::Test_MultiThreadedStress_WritesAllMessagesToDisk()
+ASW_TEST(TTest_ASWLog_FileLog, MultiThreadedStress_WritesAllMessagesToDisk)
 {
     // Arrange
     const auto logFile = TestTempDir / "stress.log";
@@ -1952,7 +1857,7 @@ void TTest_ASWLog_FileLog::Test_MultiThreadedStress_WritesAllMessagesToDisk()
     }
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_FileLog::Test_MultiThreadedStress_WritesAllMessagesToDisk_OpenClose()
+ASW_TEST(TTest_ASWLog_FileLog, MultiThreadedStress_WritesAllMessagesToDisk_OpenClose)
 {
     // Arrange
     const auto logFile = TestTempDir / "stress.log";
@@ -2019,7 +1924,7 @@ void TTest_ASWLog_FileLog::Test_MultiThreadedStress_WritesAllMessagesToDisk_Open
     }
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_FileLog::Test_NewFile_AsyncWorkerWritesTheStartupLinesBeforeTheEntry()
+ASW_TEST(TTest_ASWLog_FileLog, NewFile_AsyncWorkerWritesTheStartupLinesBeforeTheEntry)
 {
     // Arrange: the first entry reaches the 50-byte limit, so the logger's thread rotates the log for the second one
     using namespace std::chrono_literals;
@@ -2044,7 +1949,7 @@ void TTest_ASWLog_FileLog::Test_NewFile_AsyncWorkerWritesTheStartupLinesBeforeTh
         ReadFileText(logFile), "The logger's thread should write the startup lines at the top of the new file, before the entry");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_FileLog::Test_NewFile_DailyRollingStartsWithTheStartupLines()
+ASW_TEST(TTest_ASWLog_FileLog, NewFile_DailyRollingStartsWithTheStartupLines)
 {
     // Arrange
     using namespace std::chrono_literals;
@@ -2072,7 +1977,7 @@ void TTest_ASWLog_FileLog::Test_NewFile_DailyRollingStartsWithTheStartupLines()
     CheckEquals(1, CountFilesStartingWith("new_daily.daily."), "Writing the startup lines should not roll the log over again");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_FileLog::Test_NewFile_FailedRotationWritesNoStartupLines()
+ASW_TEST(TTest_ASWLog_FileLog, NewFile_FailedRotationWritesNoStartupLines)
 {
     // Arrange
     if (!CanBlockFiles())
@@ -2103,7 +2008,7 @@ void TTest_ASWLog_FileLog::Test_NewFile_FailedRotationWritesNoStartupLines()
         ReadFileText(logFile), "A failed rotation starts no new file, so it should write no startup lines");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_FileLog::Test_NewFile_InitializeWritesItsStartupLinesOnce()
+ASW_TEST(TTest_ASWLog_FileLog, NewFile_InitializeWritesItsStartupLinesOnce)
 {
     // Arrange: a log last written 30 hours before the logger starts, which Initialize() rolls over
     using namespace std::chrono_literals;
@@ -2129,7 +2034,7 @@ void TTest_ASWLog_FileLog::Test_NewFile_InitializeWritesItsStartupLinesOnce()
         "The file Initialize() starts should get its startup lines once, without a continuation line");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_FileLog::Test_NewFile_ManualRotationOpensASharedLogForTheStartupLines()
+ASW_TEST(TTest_ASWLog_FileLog, NewFile_ManualRotationOpensASharedLogForTheStartupLines)
 {
     // Arrange
     using namespace std::chrono_literals;
@@ -2159,7 +2064,7 @@ void TTest_ASWLog_FileLog::Test_NewFile_ManualRotationOpensASharedLogForTheStart
     CheckEquals(std::string(startupLines) + ": after_rotation\n", ReadFileText(logFile), "The next entry should follow the startup lines");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_FileLog::Test_NewFile_MinimumLevelAboveInfoLeavesOutTheStartupLines()
+ASW_TEST(TTest_ASWLog_FileLog, NewFile_MinimumLevelAboveInfoLeavesOutTheStartupLines)
 {
     // Arrange
     const auto logFile = TestTempDir / "new_level.log";
@@ -2182,7 +2087,7 @@ void TTest_ASWLog_FileLog::Test_NewFile_MinimumLevelAboveInfoLeavesOutTheStartup
         "The startup lines are Info lines, so a minimum level above Info should leave them out of a new file too");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_FileLog::Test_NewFile_ReconfigureToANewPathStartsWithTheStartupLines()
+ASW_TEST(TTest_ASWLog_FileLog, NewFile_ReconfigureToANewPathStartsWithTheStartupLines)
 {
     // Arrange
     const auto firstFile = TestTempDir / "new_reconfigure_first.log";
@@ -2212,7 +2117,7 @@ void TTest_ASWLog_FileLog::Test_NewFile_ReconfigureToANewPathStartsWithTheStartu
         ReadFileText(secondFile), "The new file should start with the startup lines, naming the previous file's path, and only once");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_FileLog::Test_NewFile_RotationWaitsUntilTheStartupLinesAreWritten()
+ASW_TEST(TTest_ASWLog_FileLog, NewFile_RotationWaitsUntilTheStartupLinesAreWritten)
 {
     // Arrange: the banner alone reaches the 50-byte limit, so each block of startup lines is longer than the limit
     using namespace std::chrono_literals;
@@ -2241,7 +2146,7 @@ void TTest_ASWLog_FileLog::Test_NewFile_RotationWaitsUntilTheStartupLinesAreWrit
         ReadFileText(logFile), "The new file's startup lines should stay together, followed by the entry");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_FileLog::Test_NewFile_SharedLogGetsTheStartupLinesOnce()
+ASW_TEST(TTest_ASWLog_FileLog, NewFile_SharedLogGetsTheStartupLinesOnce)
 {
     // Arrange: two loggers sharing one log, as two processes would (File.AutoOpenClosePerWrite), both logging at 23:59 UTC
     using namespace std::chrono_literals;
@@ -2278,7 +2183,7 @@ void TTest_ASWLog_FileLog::Test_NewFile_SharedLogGetsTheStartupLinesOnce()
         ReadFileText(logFile), "Only the logger that rolled the shared log over should write the startup lines");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_FileLog::Test_NewFile_SizeRotationStartsWithTheStartupLines()
+ASW_TEST(TTest_ASWLog_FileLog, NewFile_SizeRotationStartsWithTheStartupLines)
 {
     // Arrange: Initialize()'s lines and the first entry reach the 100-byte limit, so the second entry rotates the log
     using namespace std::chrono_literals;
@@ -2306,7 +2211,7 @@ void TTest_ASWLog_FileLog::Test_NewFile_SizeRotationStartsWithTheStartupLines()
         ReadFileText(logFile), "The new file should start with the continuation line and the startup lines, before the entry that rotated the log");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_FileLog::Test_NewFile_UnopenedFileGetsTheStartupLinesWhenItOpens()
+ASW_TEST(TTest_ASWLog_FileLog, NewFile_UnopenedFileGetsTheStartupLinesWhenItOpens)
 {
     // Arrange: a "folder" that is a file can't hold the new log, on any OS and for any user
     using namespace std::chrono_literals;
@@ -2339,7 +2244,7 @@ void TTest_ASWLog_FileLog::Test_NewFile_UnopenedFileGetsTheStartupLinesWhenItOpe
         ReadFileText(laterFolder / "later.log"), "The open that succeeds should write the startup lines, before its entry");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_FileLog::Test_OnBackupCreated_IsNotCalledWhenRotationFails()
+ASW_TEST(TTest_ASWLog_FileLog, OnBackupCreated_IsNotCalledWhenRotationFails)
 {
     // Arrange
     if (!CanBlockFiles())
@@ -2371,7 +2276,7 @@ void TTest_ASWLog_FileLog::Test_OnBackupCreated_IsNotCalledWhenRotationFails()
     CheckEquals(0, callCount, "No backup was made, so OnBackupCreated should not be called");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_FileLog::Test_OnBackupCreated_LeavesARenamedBackupToTheApp()
+ASW_TEST(TTest_ASWLog_FileLog, OnBackupCreated_LeavesARenamedBackupToTheApp)
 {
     // Arrange: the callback "compresses" the backup to a name outside the backup form, and the size limit is too small
     // for any backup
@@ -2400,7 +2305,7 @@ void TTest_ASWLog_FileLog::Test_OnBackupCreated_LeavesARenamedBackupToTheApp()
     CheckTrue(std::filesystem::exists(compressedPath), "The cleanup should leave a file renamed out of the backup form to the application");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_FileLog::Test_OnBackupCreated_ReportsDailyBackupAtInitialize()
+ASW_TEST(TTest_ASWLog_FileLog, OnBackupCreated_ReportsDailyBackupAtInitialize)
 {
     // Arrange: a log last written on 2026-01-14 (30 hours before the logger starts at 10:00 UTC on 2026-01-15)
     using namespace std::chrono_literals;
@@ -2432,7 +2337,7 @@ void TTest_ASWLog_FileLog::Test_OnBackupCreated_ReportsDailyBackupAtInitialize()
     CheckTrue(backups[0].LogPath == config.File.ResolvePath(), "LogPath should be the log file");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_FileLog::Test_OnBackupCreated_ReportsEachBackup()
+ASW_TEST(TTest_ASWLog_FileLog, OnBackupCreated_ReportsEachBackup)
 {
     // Arrange
     const auto logFile = TestTempDir / "event.log";
@@ -2471,7 +2376,7 @@ void TTest_ASWLog_FileLog::Test_OnBackupCreated_ReportsEachBackup()
     CheckContains(ReadFileText(backups[0].BackupPath), "line_one", "The size backup should hold the entries before the rotation");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_FileLog::Test_OnBackupCreated_RunsOutsideTheLockBeforeCleanup()
+ASW_TEST(TTest_ASWLog_FileLog, OnBackupCreated_RunsOutsideTheLockBeforeCleanup)
 {
     // Arrange: a size limit too small for any backup, so the cleanup deletes the new one right after the callback
     const auto logFile = TestTempDir / "before_cleanup.log";
@@ -2504,7 +2409,7 @@ void TTest_ASWLog_FileLog::Test_OnBackupCreated_RunsOutsideTheLockBeforeCleanup(
     CheckContains(ReadFileText(logFile), "logged_from_the_callback", "The callback should be able to log");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_FileLog::Test_OnBackupCreated_ThrowingCallbackStillCleansUp()
+ASW_TEST(TTest_ASWLog_FileLog, OnBackupCreated_ThrowingCallbackStillCleansUp)
 {
     // Arrange
     const auto logFile = TestTempDir / "throwing_event.log";
@@ -2535,7 +2440,7 @@ void TTest_ASWLog_FileLog::Test_OnBackupCreated_ThrowingCallbackStillCleansUp()
     CheckEquals(std::string(": after\n"), ReadFileText(logFile), "Logging should go on");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_FileLog::Test_OnError_ReportsFailedDelete()
+ASW_TEST(TTest_ASWLog_FileLog, OnError_ReportsFailedDelete)
 {
 #if defined(_WIN32)
     // Arrange: an expired backup that another program holds open without delete sharing, so retention can't delete it
@@ -2579,7 +2484,7 @@ void TTest_ASWLog_FileLog::Test_OnError_ReportsFailedDelete()
 #endif
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_FileLog::Test_OnError_ReportsFailedOpen()
+ASW_TEST(TTest_ASWLog_FileLog, OnError_ReportsFailedOpen)
 {
     // Arrange: a "folder" that is a file can't hold the log, on any OS and for any user
     const auto notAFolder = TestTempDir / "not_a_folder";
@@ -2606,7 +2511,7 @@ void TTest_ASWLog_FileLog::Test_OnError_ReportsFailedOpen()
     CheckTrue(static_cast<bool>(reports[0].Code), "The report should carry the operating system's error");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_FileLog::Test_OnError_ReportsFailedRotationAndReopen()
+ASW_TEST(TTest_ASWLog_FileLog, OnError_ReportsFailedRotationAndReopen)
 {
     // Arrange
     if (!CanBlockFiles())
@@ -2655,7 +2560,7 @@ void TTest_ASWLog_FileLog::Test_OnError_ReportsFailedRotationAndReopen()
     CheckEquals(2, reports[2].SuppressedCount, "The report should count the failed opens left out");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_FileLog::Test_OnError_ReportsFailedSync()
+ASW_TEST(TTest_ASWLog_FileLog, OnError_ReportsFailedSync)
 {
     // Arrange: the null device takes every write, but can't be synced to disk (FlushFileBuffers fails with
     // ERROR_INVALID_FUNCTION on Windows, fsync with EINVAL on Linux)
@@ -2694,7 +2599,7 @@ void TTest_ASWLog_FileLog::Test_OnError_ReportsFailedSync()
     }
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_FileLog::Test_OnError_ReportsFullDisk()
+ASW_TEST(TTest_ASWLog_FileLog, OnError_ReportsFullDisk)
 {
 #if defined(__linux__)
     // Arrange: every write to /dev/full fails with "No space left on device"
@@ -2734,7 +2639,7 @@ void TTest_ASWLog_FileLog::Test_OnError_ReportsFullDisk()
 #endif
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_FileLog::Test_OnLogEntry_FiresForQualifyingLevelsOnly()
+ASW_TEST(TTest_ASWLog_FileLog, OnLogEntry_FiresForQualifyingLevelsOnly)
 {
     // Arrange
     const auto logFile = TestTempDir / "callback.log";
@@ -2792,7 +2697,7 @@ void TTest_ASWLog_FileLog::Test_OnLogEntry_FiresForQualifyingLevelsOnly()
     }
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_FileLog::Test_OnLogEntry_ReentrantCallbackDoesNotDeadlock()
+ASW_TEST(TTest_ASWLog_FileLog, OnLogEntry_ReentrantCallbackDoesNotDeadlock)
 {
     // Arrange
     const auto logFile = TestTempDir / "reentrant.log";
@@ -2836,7 +2741,7 @@ void TTest_ASWLog_FileLog::Test_OnLogEntry_ReentrantCallbackDoesNotDeadlock()
     CheckContains(contents, "reentrant_message", "Re-entrant Log call from the callback should complete and be written");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_FileLog::Test_Open_KeepsAnOpenFile()
+ASW_TEST(TTest_ASWLog_FileLog, Open_KeepsAnOpenFile)
 {
     // Arrange
     const auto logFile = TestTempDir / "open_again.log";
@@ -2859,7 +2764,7 @@ void TTest_ASWLog_FileLog::Test_Open_KeepsAnOpenFile()
     CheckEquals(std::string(": before_open\n: after_open\n"), ReadFileText(logFile), "The logger should go on writing to its file");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_FileLog::Test_Periodic_CloseStopsAndOpenRestartsTheThread()
+ASW_TEST(TTest_ASWLog_FileLog, Periodic_CloseStopsAndOpenRestartsTheThread)
 {
     // Arrange
     const auto logFile = TestTempDir / "periodic_reopen.log";
@@ -2887,7 +2792,7 @@ void TTest_ASWLog_FileLog::Test_Periodic_CloseStopsAndOpenRestartsTheThread()
     CheckEquals(std::string(": entry_after_reopen\n"), contents, "Open should start the flush thread again");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_FileLog::Test_Periodic_CloseStopsTheThreadWithoutWaitingForTheInterval()
+ASW_TEST(TTest_ASWLog_FileLog, Periodic_CloseStopsTheThreadWithoutWaitingForTheInterval)
 {
     // Arrange: an interval the test would never live to see
     const auto logFile = TestTempDir / "periodic_close.log";
@@ -2915,7 +2820,7 @@ void TTest_ASWLog_FileLog::Test_Periodic_CloseStopsTheThreadWithoutWaitingForThe
     CheckEquals(std::string(": buffered_entry\n"), contentsAfterClose, "Close should flush the buffered entry");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_FileLog::Test_Periodic_ConcurrentLoggingAndReconfigure()
+ASW_TEST(TTest_ASWLog_FileLog, Periodic_ConcurrentLoggingAndReconfigure)
 {
     // Arrange: a short interval, so the flush thread runs often while the other threads log and reconfigure
     const auto logFile = TestTempDir / "periodic_concurrent.log";
@@ -2971,7 +2876,7 @@ void TTest_ASWLog_FileLog::Test_Periodic_ConcurrentLoggingAndReconfigure()
     CheckEquals(entryCount, std::count(contents.begin(), contents.end(), '\n'), "Every entry should be written once");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_FileLog::Test_Periodic_DestructorStopsTheThreadWithoutWaitingForTheInterval()
+ASW_TEST(TTest_ASWLog_FileLog, Periodic_DestructorStopsTheThreadWithoutWaitingForTheInterval)
 {
     // Arrange
     const auto logFile = TestTempDir / "periodic_destructor.log";
@@ -2998,7 +2903,7 @@ void TTest_ASWLog_FileLog::Test_Periodic_DestructorStopsTheThreadWithoutWaitingF
     CheckEquals(std::string(": buffered_entry\n"), contents, "The destructor should flush the buffered entry");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_FileLog::Test_Periodic_ErrorHandlerCanCloseAndReopenOnTheThread()
+ASW_TEST(TTest_ASWLog_FileLog, Periodic_ErrorHandlerCanCloseAndReopenOnTheThread)
 {
     // Arrange: the flush thread's first flush fails, and its OnError call, on that thread, closes and reopens the
     // logger, which stops and then keeps that same thread
@@ -3045,7 +2950,7 @@ void TTest_ASWLog_FileLog::Test_Periodic_ErrorHandlerCanCloseAndReopenOnTheThrea
     CheckContains(contents, "entry_after_reopen", "After the reopen, the flush thread should flush again");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_FileLog::Test_Periodic_FlushesAfterTheLastEntry()
+ASW_TEST(TTest_ASWLog_FileLog, Periodic_FlushesAfterTheLastEntry)
 {
     // Arrange
     const auto logFile = TestTempDir / "periodic_last_entry.log";
@@ -3065,7 +2970,7 @@ void TTest_ASWLog_FileLog::Test_Periodic_FlushesAfterTheLastEntry()
     CheckEquals(std::string(": last_entry\n"), contents, "The flush thread should flush the last entry within the interval");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_FileLog::Test_Periodic_ReconfigureAppliesANewInterval()
+ASW_TEST(TTest_ASWLog_FileLog, Periodic_ReconfigureAppliesANewInterval)
 {
     // Arrange: the thread starts out waiting for an interval the test would never live to see
     const auto logFile = TestTempDir / "periodic_new_interval.log";
@@ -3089,7 +2994,7 @@ void TTest_ASWLog_FileLog::Test_Periodic_ReconfigureAppliesANewInterval()
     CheckEquals(std::string(": entry\n"), contents, "The flush thread should use the new interval at once");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_FileLog::Test_Periodic_ReconfigureStartsAndStopsTheThread()
+ASW_TEST(TTest_ASWLog_FileLog, Periodic_ReconfigureStartsAndStopsTheThread)
 {
     // Arrange
     const auto logFile = TestTempDir / "periodic_reconfigure.log";
@@ -3121,7 +3026,7 @@ void TTest_ASWLog_FileLog::Test_Periodic_ReconfigureStartsAndStopsTheThread()
     CheckEquals(std::string(": periodic_entry\n"), contentsInManual, "Reconfigure to Manual should stop the flush thread");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_FileLog::Test_Periodic_ZeroIntervalFlushesEveryEntry()
+ASW_TEST(TTest_ASWLog_FileLog, Periodic_ZeroIntervalFlushesEveryEntry)
 {
     // Arrange
     const auto logFile = TestTempDir / "periodic_zero_interval.log";
@@ -3141,7 +3046,7 @@ void TTest_ASWLog_FileLog::Test_Periodic_ZeroIntervalFlushesEveryEntry()
     CheckEquals(std::string(": entry\n"), contents, "With no interval, each entry should be flushed as it is written");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_FileLog::Test_Reconfigure_FlushesEntriesBufferedByPreviousMode()
+ASW_TEST(TTest_ASWLog_FileLog, Reconfigure_FlushesEntriesBufferedByPreviousMode)
 {
     // Arrange: FlushMode::Manual keeps each entry in the file's buffer until it is flushed
     const auto logFile = TestTempDir / "reconfigure_flush.log";
@@ -3170,7 +3075,7 @@ void TTest_ASWLog_FileLog::Test_Reconfigure_FlushesEntriesBufferedByPreviousMode
         "The new flush mode should apply to the next entry");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_FileLog::Test_Reconfigure_MovesOutputToNewFile()
+ASW_TEST(TTest_ASWLog_FileLog, Reconfigure_MovesOutputToNewFile)
 {
     // Arrange
     const auto firstFile = TestTempDir / "reconfigure_first.log";
@@ -3206,7 +3111,7 @@ void TTest_ASWLog_FileLog::Test_Reconfigure_MovesOutputToNewFile()
         "Entries after Reconfigure() should go to the new file, in either open mode");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_FileLog::Test_Reconfigure_UnopenableFileFailsButLoggerStaysInitialized()
+ASW_TEST(TTest_ASWLog_FileLog, Reconfigure_UnopenableFileFailsButLoggerStaysInitialized)
 {
     // Arrange: a "folder" that is a file can't hold the new log, on any OS and for any user
     using namespace std::chrono_literals;
@@ -3239,7 +3144,7 @@ void TTest_ASWLog_FileLog::Test_Reconfigure_UnopenableFileFailsButLoggerStaysIni
         "Logging should resume in the file of the last Reconfigure()");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_FileLog::Test_RetentionMaxAge_DefaultDisabledPreservesOldBackups()
+ASW_TEST(TTest_ASWLog_FileLog, RetentionMaxAge_DefaultDisabledPreservesOldBackups)
 {
     // Arrange
     const auto logFile = TestTempDir / "retention_disabled.log";
@@ -3280,7 +3185,7 @@ void TTest_ASWLog_FileLog::Test_RetentionMaxAge_DefaultDisabledPreservesOldBacku
     CheckTrue(std::filesystem::exists(staleBackup), "File.RetentionMaxAge left at its default (disabled) should not delete old backups after rotation");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_FileLog::Test_RetentionMaxAge_DeletesExpiredBackupsAfterRotation()
+ASW_TEST(TTest_ASWLog_FileLog, RetentionMaxAge_DeletesExpiredBackupsAfterRotation)
 {
     // Arrange
     const auto logFile = TestTempDir / "retention.log";
@@ -3322,7 +3227,7 @@ void TTest_ASWLog_FileLog::Test_RetentionMaxAge_DeletesExpiredBackupsAfterRotati
     CheckTrue(std::filesystem::exists(logFile), "Log file should be recreated after rotation");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_FileLog::Test_RotateLogFiles_FailsWhenEveryBackupNameIsTaken()
+ASW_TEST(TTest_ASWLog_FileLog, RotateLogFiles_FailsWhenEveryBackupNameIsTaken)
 {
     // Arrange: every name the rotation could use (the plain one, then "_1" to "_1000") is taken
     using namespace std::chrono_literals;
@@ -3363,7 +3268,7 @@ void TTest_ASWLog_FileLog::Test_RotateLogFiles_FailsWhenEveryBackupNameIsTaken()
     CheckEquals(std::string("kept"), ReadFileText(TestTempDir / (backupName + "_1000.bak")), "The last backup name should not be replaced");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_FileLog::Test_RotateLogFiles_KeepsEveryBackup()
+ASW_TEST(TTest_ASWLog_FileLog, RotateLogFiles_KeepsEveryBackup)
 {
     // Arrange: a fixed clock makes both rotations want the same backup name
     using namespace std::chrono_literals;
@@ -3394,7 +3299,7 @@ void TTest_ASWLog_FileLog::Test_RotateLogFiles_KeepsEveryBackup()
     CheckContains(ReadFileText(logFile), "third_segment", "Entries after the last rotation should go to the reopened log file");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_FileLog::Test_RotateLogFiles_NamesBackupInLocalTime()
+ASW_TEST(TTest_ASWLog_FileLog, RotateLogFiles_NamesBackupInLocalTime)
 {
     // Arrange: 04:59:30.250 UTC on the 16th is 23:59:30.250 on the 15th in US Eastern time
     using namespace std::chrono_literals;
@@ -3418,7 +3323,7 @@ void TTest_ASWLog_FileLog::Test_RotateLogFiles_NamesBackupInLocalTime()
     CheckContains(ReadFileText(TestTempDir / "rotate_local.manual.2026-01-15_235930_250.bak"), "rotated_entry", "The backup should be named for the local time");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_FileLog::Test_SetEnabled_FalseStopsAutoOpenCloseLogging()
+ASW_TEST(TTest_ASWLog_FileLog, SetEnabled_FalseStopsAutoOpenCloseLogging)
 {
     // Arrange: with File.AutoOpenClosePerWrite the file is only open while an entry is written
     const auto logFile = TestTempDir / "disabled.log";
@@ -3448,7 +3353,7 @@ void TTest_ASWLog_FileLog::Test_SetEnabled_FalseStopsAutoOpenCloseLogging()
     CheckEquals(std::string(": enabled_again\n"), ReadFileText(logFile), "Logging should resume once enabled again");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_FileLog::Test_ShutdownLine_TimeFollowsTimestampZone()
+ASW_TEST(TTest_ASWLog_FileLog, ShutdownLine_TimeFollowsTimestampZone)
 {
     // Arrange: 04:59:30.250 UTC on the 16th is 23:59:30.250 on the 15th in US Eastern time
     using namespace std::chrono_literals;
@@ -3472,7 +3377,7 @@ void TTest_ASWLog_FileLog::Test_ShutdownLine_TimeFollowsTimestampZone()
     CheckContains(ReadFileText(logFile), ": Logger shutdown: 2026-01-15T23:59:30.250000-05:00\n", "The shutdown line's time should use the line's zone and precision");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_FileLog::Test_SizeRotation_AutoOpenCloseCountsOtherWriters()
+ASW_TEST(TTest_ASWLog_FileLog, SizeRotation_AutoOpenCloseCountsOtherWriters)
 {
     // Arrange: in File.AutoOpenClosePerWrite mode the log is closed between writes, so other processes can append to it
     const auto logFile = TestTempDir / "sized_shared.log";
@@ -3517,7 +3422,7 @@ void TTest_ASWLog_FileLog::Test_SizeRotation_AutoOpenCloseCountsOtherWriters()
     CheckNotContains(currentContents, "x", "The new log file should not contain the other writer's earlier entry");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_FileLog::Test_SizeRotation_CountsExistingFileSize()
+ASW_TEST(TTest_ASWLog_FileLog, SizeRotation_CountsExistingFileSize)
 {
     // Arrange: a log left over from an earlier run is already over the limit
     const auto logFile = TestTempDir / "sized_existing.log";
@@ -3559,7 +3464,7 @@ void TTest_ASWLog_FileLog::Test_SizeRotation_CountsExistingFileSize()
     CheckNotContains(currentContents, "x", "The reopened log file should not contain the earlier run's contents");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_FileLog::Test_SizeRotation_RotatesWhenLimitReached()
+ASW_TEST(TTest_ASWLog_FileLog, SizeRotation_RotatesWhenLimitReached)
 {
     // Arrange: ten lines of about 18 bytes each against a 50-byte limit need several rotations
     const auto logFile = TestTempDir / "sized.log";
@@ -3605,7 +3510,7 @@ void TTest_ASWLog_FileLog::Test_SizeRotation_RotatesWhenLimitReached()
     }
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_FileLog::Test_SyncToDiskAtLevel_FlushesAndSyncsEntriesAtOrAboveTheLevel()
+ASW_TEST(TTest_ASWLog_FileLog, SyncToDiskAtLevel_FlushesAndSyncsEntriesAtOrAboveTheLevel)
 {
     // Arrange: only SyncToDiskAtLevel makes the logger flush (whether the data reached the disk itself can't be seen
     // from here, but a failed sync would be reported)
@@ -3637,7 +3542,7 @@ void TTest_ASWLog_FileLog::Test_SyncToDiskAtLevel_FlushesAndSyncsEntriesAtOrAbov
     CheckEquals(0, reports.size(), "Syncing a log file should succeed");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_FileLog::Test_Write_EarlierRecordDoesNotRollLogBack()
+ASW_TEST(TTest_ASWLog_FileLog, Write_EarlierRecordDoesNotRollLogBack)
 {
     // Arrange: the logger's clock is just past UTC midnight, so the log already belongs to the new day, and an entry
     // stamped just before midnight arrives late (e.g. its thread got the lock after another thread's entry)

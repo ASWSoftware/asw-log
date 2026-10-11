@@ -32,12 +32,12 @@ namespace ASWUnitTests
 ///////////////////////////////////////////////////////////////////////////
 // TTest_ASWLog_WindowsEventLog
 ///////////////////////////////////////////////////////////////////////////
-class TTest_ASWLog_WindowsEventLog : public TTestGroupBase
+class TTest_ASWLog_WindowsEventLog : public TAutoTestGroup<TTest_ASWLog_WindowsEventLog>
 {
 private:
-    typedef TTestGroupBase inherited;
+    typedef TAutoTestGroup<TTest_ASWLog_WindowsEventLog> inherited;
 
-private: // Test methods
+public: // Test methods, each defined with ASW_TEST
     void Test_GetInstance_ReturnsTheSameLogger();
     void Test_HandleCrash_ReportsTheFormattedCrashLineOnly();
     void Test_Open_OpensTheConfiguredSource();

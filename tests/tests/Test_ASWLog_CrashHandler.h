@@ -34,12 +34,12 @@ namespace ASWUnitTests
 // tests start this test executable again, which then runs a crash scenario before main() (see
 // RunCrashHelperIfRequested() in the .cpp) and crashes; the test checks its log files.
 ///////////////////////////////////////////////////////////////////////////
-class TTest_ASWLog_CrashHandler : public TTestGroupBase
+class TTest_ASWLog_CrashHandler : public TAutoTestGroup<TTest_ASWLog_CrashHandler>
 {
 private:
-    typedef TTestGroupBase inherited;
+    typedef TAutoTestGroup<TTest_ASWLog_CrashHandler> inherited;
 
-private: // Test methods
+public: // Test methods, each defined with ASW_TEST
     void Test_AppendCrashJSONLine_CutsALongTextButStaysValid();
     void Test_AppendCrashJSONLine_ShowsTheFields();
     void Test_AppendCrashJSONLine_UsesTheFixedLayout();

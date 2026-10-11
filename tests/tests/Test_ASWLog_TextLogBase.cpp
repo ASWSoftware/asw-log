@@ -402,49 +402,6 @@ bool WaitUntil(const std::function<bool()>& condition)
 TTest_ASWLog_TextLogBase::TTest_ASWLog_TextLogBase()
     : inherited("ASWLog_TextLogBase_Tests")
 {
-    RegisterTest(&TTest_ASWLog_TextLogBase::Test_ApplicationInfo_WritesTheCommandLineWhenAsked, "ApplicationInfo_WritesTheCommandLineWhenAsked");
-    RegisterTest(&TTest_ASWLog_TextLogBase::Test_ApplicationInfo_WritesTheConfiguredVersion, "ApplicationInfo_WritesTheConfiguredVersion");
-    RegisterTest(&TTest_ASWLog_TextLogBase::Test_ApplicationInfo_WritesTheExecutablesFileVersionByDefault, "ApplicationInfo_WritesTheExecutablesFileVersionByDefault");
-    RegisterTest(&TTest_ASWLog_TextLogBase::Test_Async_BacktraceIsTakenWhenTheTriggerIsLogged, "Async_BacktraceIsTakenWhenTheTriggerIsLogged");
-    RegisterTest(&TTest_ASWLog_TextLogBase::Test_Async_BlockWaitsForRoomInTheQueue, "Async_BlockWaitsForRoomInTheQueue");
-    RegisterTest(&TTest_ASWLog_TextLogBase::Test_Async_CallReturnsBeforeTheEntryIsWritten, "Async_CallReturnsBeforeTheEntryIsWritten");
-    RegisterTest(&TTest_ASWLog_TextLogBase::Test_Async_DestructorWritesQueuedEntriesBeforeTheShutdownLine, "Async_DestructorWritesQueuedEntriesBeforeTheShutdownLine");
-    RegisterTest(&TTest_ASWLog_TextLogBase::Test_Async_DropNewestReportsAndMarksDroppedEntries, "Async_DropNewestReportsAndMarksDroppedEntries");
-    RegisterTest(&TTest_ASWLog_TextLogBase::Test_Async_EntriesKeepTheirOrderPerThread, "Async_EntriesKeepTheirOrderPerThread");
-    RegisterTest(&TTest_ASWLog_TextLogBase::Test_Async_EntryAtWaitAtLevelIsNeverDropped, "Async_EntryAtWaitAtLevelIsNeverDropped");
-    RegisterTest(&TTest_ASWLog_TextLogBase::Test_Async_EntryAtWaitAtLevelReturnsOnceWrittenAndFlushed, "Async_EntryAtWaitAtLevelReturnsOnceWrittenAndFlushed");
-    RegisterTest(&TTest_ASWLog_TextLogBase::Test_Async_FlushWaitsForQueuedEntries, "Async_FlushWaitsForQueuedEntries");
-    RegisterTest(&TTest_ASWLog_TextLogBase::Test_Async_LoggingFromOnLogEntryDoesNotWait, "Async_LoggingFromOnLogEntryDoesNotWait");
-    RegisterTest(&TTest_ASWLog_TextLogBase::Test_Async_OnLogEntryRunsOnTheWorkerWithItsOwnCopy, "Async_OnLogEntryRunsOnTheWorkerWithItsOwnCopy");
-    RegisterTest(&TTest_ASWLog_TextLogBase::Test_Async_ReconfigureToSyncWritesQueuedEntriesFirst, "Async_ReconfigureToSyncWritesQueuedEntriesFirst");
-    RegisterTest(&TTest_ASWLog_TextLogBase::Test_Async_SwitchingOnAndOffKeepsEachThreadsOrder, "Async_SwitchingOnAndOffKeepsEachThreadsOrder");
-    RegisterTest(&TTest_ASWLog_TextLogBase::Test_Backtrace_IsFormattedAndWrittenBeforeTheTrigger, "Backtrace_IsFormattedAndWrittenBeforeTheTrigger");
-    RegisterTest(&TTest_ASWLog_TextLogBase::Test_Finalize_WritesShutdownLineFromDestructor, "Finalize_WritesShutdownLineFromDestructor");
-    RegisterTest(&TTest_ASWLog_TextLogBase::Test_Flush_CallsHookAndReturnsItsResult, "Flush_CallsHookAndReturnsItsResult");
-    RegisterTest(&TTest_ASWLog_TextLogBase::Test_Flush_ThrowingHookDoesNotEscape, "Flush_ThrowingHookDoesNotEscape");
-    RegisterTest(&TTest_ASWLog_TextLogBase::Test_Formatter_FormatsEveryFileLine, "Formatter_FormatsEveryFileLine");
-    RegisterTest(&TTest_ASWLog_TextLogBase::Test_Initialize_ThrowingFormatterStillInitializes, "Initialize_ThrowingFormatterStillInitializes");
-    RegisterTest(&TTest_ASWLog_TextLogBase::Test_Initialize_WritesLoggerVersionAfterTheBanner, "Initialize_WritesLoggerVersionAfterTheBanner");
-    RegisterTest(&TTest_ASWLog_TextLogBase::Test_Initialize_WritesStartupLinesThenCallsAfterEntry, "Initialize_WritesStartupLinesThenCallsAfterEntry");
-    RegisterTest(&TTest_ASWLog_TextLogBase::Test_Log_AtLevelOffIsNeverWritten, "Log_AtLevelOffIsNeverWritten");
-    RegisterTest(&TTest_ASWLog_TextLogBase::Test_Log_DroppedWhenNotReadyOrNotPrepared, "Log_DroppedWhenNotReadyOrNotPrepared");
-    RegisterTest(&TTest_ASWLog_TextLogBase::Test_Log_FormatsFiltersAndCallsAfterEntry, "Log_FormatsFiltersAndCallsAfterEntry");
-    RegisterTest(&TTest_ASWLog_TextLogBase::Test_Log_MinimumLevelOffAllowsOnlyForcedEntries, "Log_MinimumLevelOffAllowsOnlyForcedEntries");
-    RegisterTest(&TTest_ASWLog_TextLogBase::Test_Log_ThrowingWriteDoesNotEscape, "Log_ThrowingWriteDoesNotEscape");
-    RegisterTest(&TTest_ASWLog_TextLogBase::Test_LogRaw_FormatterCanFormatRawEntries, "LogRaw_FormatterCanFormatRawEntries");
-    RegisterTest(&TTest_ASWLog_TextLogBase::Test_LogRaw_WritesMessageAsIs, "LogRaw_WritesMessageAsIs");
-    RegisterTest(&TTest_ASWLog_TextLogBase::Test_Multiline_AppliesToEveryFormattersLine, "Multiline_AppliesToEveryFormattersLine");
-    RegisterTest(&TTest_ASWLog_TextLogBase::Test_Multiline_EscapeKeepsEachEntryOnOneLine, "Multiline_EscapeKeepsEachEntryOnOneLine");
-    RegisterTest(&TTest_ASWLog_TextLogBase::Test_Multiline_LogRawStaysAsIs, "Multiline_LogRawStaysAsIs");
-    RegisterTest(&TTest_ASWLog_TextLogBase::Test_Multiline_PreserveWritesLineBreaksAsTheyAre, "Multiline_PreserveWritesLineBreaksAsTheyAre");
-    RegisterTest(&TTest_ASWLog_TextLogBase::Test_OnBeforeWrite_RunsOnEveryLoggingThread, "OnBeforeWrite_RunsOnEveryLoggingThread");
-    RegisterTest(&TTest_ASWLog_TextLogBase::Test_OnBeforeWrite_RunsOutsideTheLockBeforeQueuing, "OnBeforeWrite_RunsOutsideTheLockBeforeQueuing");
-    RegisterTest(&TTest_ASWLog_TextLogBase::Test_OnBeforeWrite_SkipsTheLoggersOwnLines, "OnBeforeWrite_SkipsTheLoggersOwnLines");
-    RegisterTest(&TTest_ASWLog_TextLogBase::Test_OnLogEntry_CallbackCanReconfigureTheLogger, "OnLogEntry_CallbackCanReconfigureTheLogger");
-    RegisterTest(&TTest_ASWLog_TextLogBase::Test_Reconfigure_AppliesNewConfigButKeepsLevel, "Reconfigure_AppliesNewConfigButKeepsLevel");
-    RegisterTest(&TTest_ASWLog_TextLogBase::Test_Reconfigure_IsSafeWhileOtherThreadsLog, "Reconfigure_IsSafeWhileOtherThreadsLog");
-    RegisterTest(&TTest_ASWLog_TextLogBase::Test_ReportErrorUnlocked_ReportsAfterTheLockIsReleased, "ReportErrorUnlocked_ReportsAfterTheLockIsReleased");
-    RegisterTest(&TTest_ASWLog_TextLogBase::Test_SetEnabled_FalseWritesNothing, "SetEnabled_FalseWritesNothing");
 }
 //---------------------------------------------------------------------------
 TTest_ASWLog_TextLogBase::~TTest_ASWLog_TextLogBase()
@@ -479,7 +436,7 @@ void TTest_ASWLog_TextLogBase::TearDown_Test(ITestCase& testCase)
 // /////// Begin tests after this line ///////////////////////
 
 //---------------------------------------------------------------------------
-void TTest_ASWLog_TextLogBase::Test_ApplicationInfo_WritesTheCommandLineWhenAsked()
+ASW_TEST(TTest_ASWLog_TextLogBase, ApplicationInfo_WritesTheCommandLineWhenAsked)
 {
     // Arrange
     TMemoryOutput defaultOutput;
@@ -507,7 +464,7 @@ void TTest_ASWLog_TextLogBase::Test_ApplicationInfo_WritesTheCommandLineWhenAske
     }
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_TextLogBase::Test_ApplicationInfo_WritesTheConfiguredVersion()
+ASW_TEST(TTest_ASWLog_TextLogBase, ApplicationInfo_WritesTheConfiguredVersion)
 {
     // Arrange
     TMemoryOutput output;
@@ -530,7 +487,7 @@ void TTest_ASWLog_TextLogBase::Test_ApplicationInfo_WritesTheConfiguredVersion()
     }
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_TextLogBase::Test_ApplicationInfo_WritesTheExecutablesFileVersionByDefault()
+ASW_TEST(TTest_ASWLog_TextLogBase, ApplicationInfo_WritesTheExecutablesFileVersionByDefault)
 {
     // Arrange: no configured version. The test executable has a version resource in some builds (e.g. the VCL GUI
     // runner's 1.0.0.0) and none in others (e.g. MinGW's), where no version is written.
@@ -560,7 +517,7 @@ void TTest_ASWLog_TextLogBase::Test_ApplicationInfo_WritesTheExecutablesFileVers
     }
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_TextLogBase::Test_Async_BlockWaitsForRoomInTheQueue()
+ASW_TEST(TTest_ASWLog_TextLogBase, Async_BlockWaitsForRoomInTheQueue)
 {
     // Arrange: a queue of one entry
     TMemoryOutput output;
@@ -596,7 +553,7 @@ void TTest_ASWLog_TextLogBase::Test_Async_BlockWaitsForRoomInTheQueue()
     CheckTrue(output.Lines == expected, "Every entry should be written, in order");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_TextLogBase::Test_Async_BacktraceIsTakenWhenTheTriggerIsLogged()
+ASW_TEST(TTest_ASWLog_TextLogBase, Async_BacktraceIsTakenWhenTheTriggerIsLogged)
 {
     // Arrange: the error doesn't wait, so the test can log on while the worker is held
     TMemoryOutput output;
@@ -632,7 +589,7 @@ void TTest_ASWLog_TextLogBase::Test_Async_BacktraceIsTakenWhenTheTriggerIsLogged
         CheckEquals(std::string("[DEBUG]: debug_2\n"), output.Lines[6], "DumpBacktrace() should write it");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_TextLogBase::Test_Async_CallReturnsBeforeTheEntryIsWritten()
+ASW_TEST(TTest_ASWLog_TextLogBase, Async_CallReturnsBeforeTheEntryIsWritten)
 {
     // Arrange
     TMemoryOutput output;
@@ -661,7 +618,7 @@ void TTest_ASWLog_TextLogBase::Test_Async_CallReturnsBeforeTheEntryIsWritten()
     }
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_TextLogBase::Test_Async_DestructorWritesQueuedEntriesBeforeTheShutdownLine()
+ASW_TEST(TTest_ASWLog_TextLogBase, Async_DestructorWritesQueuedEntriesBeforeTheShutdownLine)
 {
     // Arrange
     TMemoryOutput output;
@@ -689,7 +646,7 @@ void TTest_ASWLog_TextLogBase::Test_Async_DestructorWritesQueuedEntriesBeforeThe
     }
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_TextLogBase::Test_Async_DropNewestReportsAndMarksDroppedEntries()
+ASW_TEST(TTest_ASWLog_TextLogBase, Async_DropNewestReportsAndMarksDroppedEntries)
 {
     // Arrange: a queue of two entries
     TMemoryOutput output;
@@ -733,7 +690,7 @@ void TTest_ASWLog_TextLogBase::Test_Async_DropNewestReportsAndMarksDroppedEntrie
     }
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_TextLogBase::Test_Async_EntriesKeepTheirOrderPerThread()
+ASW_TEST(TTest_ASWLog_TextLogBase, Async_EntriesKeepTheirOrderPerThread)
 {
     // Arrange
     TMemoryOutput output;
@@ -763,7 +720,7 @@ void TTest_ASWLog_TextLogBase::Test_Async_EntriesKeepTheirOrderPerThread()
     CheckEquals(0, CountOutOfOrderEntries(output.Lines, ThreadCount), "Each thread's entries should keep their order");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_TextLogBase::Test_Async_EntryAtWaitAtLevelIsNeverDropped()
+ASW_TEST(TTest_ASWLog_TextLogBase, Async_EntryAtWaitAtLevelIsNeverDropped)
 {
     // Arrange: a queue of one entry that drops entries below the wait level
     TMemoryOutput output;
@@ -803,7 +760,7 @@ void TTest_ASWLog_TextLogBase::Test_Async_EntryAtWaitAtLevelIsNeverDropped()
     CheckTrue(output.Lines == expected, "Only the Info entry should be dropped, and the Error entry written");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_TextLogBase::Test_Async_EntryAtWaitAtLevelReturnsOnceWrittenAndFlushed()
+ASW_TEST(TTest_ASWLog_TextLogBase, Async_EntryAtWaitAtLevelReturnsOnceWrittenAndFlushed)
 {
     // Arrange
     TMemoryOutput output;
@@ -834,7 +791,7 @@ void TTest_ASWLog_TextLogBase::Test_Async_EntryAtWaitAtLevelReturnsOnceWrittenAn
     CheckGreaterThanOrEqual(output.FlushCount, 1, "The Error entry should be flushed before its call returns");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_TextLogBase::Test_Async_FlushWaitsForQueuedEntries()
+ASW_TEST(TTest_ASWLog_TextLogBase, Async_FlushWaitsForQueuedEntries)
 {
     // Arrange: after writing entry_1, the worker pauses outside the lock (see PauseAfterFirstEntry())
     TMemoryOutput output;
@@ -868,7 +825,7 @@ void TTest_ASWLog_TextLogBase::Test_Async_FlushWaitsForQueuedEntries()
     CheckEquals(2, output.LineCountAtLastFlush, "Flush should flush after both queued entries are written");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_TextLogBase::Test_Async_LoggingFromOnLogEntryDoesNotWait()
+ASW_TEST(TTest_ASWLog_TextLogBase, Async_LoggingFromOnLogEntryDoesNotWait)
 {
     // Arrange: OnLogEntry, on the worker, logs an Error entry (which a caller waits for) into a full queue
     TMemoryOutput output;
@@ -902,7 +859,7 @@ void TTest_ASWLog_TextLogBase::Test_Async_LoggingFromOnLogEntryDoesNotWait()
     CheckTrue(output.Lines == expected, "The entries logged from the callback should be written after it");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_TextLogBase::Test_Async_OnLogEntryRunsOnTheWorkerWithItsOwnCopy()
+ASW_TEST(TTest_ASWLog_TextLogBase, Async_OnLogEntryRunsOnTheWorkerWithItsOwnCopy)
 {
     // Arrange
     TMemoryOutput output;
@@ -946,7 +903,7 @@ void TTest_ASWLog_TextLogBase::Test_Async_OnLogEntryRunsOnTheWorkerWithItsOwnCop
     }
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_TextLogBase::Test_Async_ReconfigureToSyncWritesQueuedEntriesFirst()
+ASW_TEST(TTest_ASWLog_TextLogBase, Async_ReconfigureToSyncWritesQueuedEntriesFirst)
 {
     // Arrange: after writing entry_1, the worker pauses outside the lock (see PauseAfterFirstEntry())
     TMemoryOutput output;
@@ -982,7 +939,7 @@ void TTest_ASWLog_TextLogBase::Test_Async_ReconfigureToSyncWritesQueuedEntriesFi
         CheckTrue(output.WriteThreadIds[2] == std::this_thread::get_id(), "After the switch, the caller should write its entry");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_TextLogBase::Test_Async_SwitchingOnAndOffKeepsEachThreadsOrder()
+ASW_TEST(TTest_ASWLog_TextLogBase, Async_SwitchingOnAndOffKeepsEachThreadsOrder)
 {
     // Arrange
     TMemoryOutput output;
@@ -1025,7 +982,7 @@ void TTest_ASWLog_TextLogBase::Test_Async_SwitchingOnAndOffKeepsEachThreadsOrder
         "Each thread's entries should keep their order, with none missing, across the switches");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_TextLogBase::Test_Backtrace_IsFormattedAndWrittenBeforeTheTrigger()
+ASW_TEST(TTest_ASWLog_TextLogBase, Backtrace_IsFormattedAndWrittenBeforeTheTrigger)
 {
     // Arrange
     TMemoryOutput output;
@@ -1048,7 +1005,7 @@ void TTest_ASWLog_TextLogBase::Test_Backtrace_IsFormattedAndWrittenBeforeTheTrig
     CheckTrue(output.Lines == expected, "The kept entries should be formatted and written just before the error");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_TextLogBase::Test_Finalize_WritesShutdownLineFromDestructor()
+ASW_TEST(TTest_ASWLog_TextLogBase, Finalize_WritesShutdownLineFromDestructor)
 {
     // Arrange
     TMemoryOutput output;
@@ -1072,7 +1029,7 @@ void TTest_ASWLog_TextLogBase::Test_Finalize_WritesShutdownLineFromDestructor()
     }
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_TextLogBase::Test_Flush_CallsHookAndReturnsItsResult()
+ASW_TEST(TTest_ASWLog_TextLogBase, Flush_CallsHookAndReturnsItsResult)
 {
     // Arrange: called through the interface, as generic code would
     TMemoryOutput output;
@@ -1097,7 +1054,7 @@ void TTest_ASWLog_TextLogBase::Test_Flush_CallsHookAndReturnsItsResult()
     CheckEquals(3, output.FlushCount, "Each Flush() should call FlushUnlocked() once");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_TextLogBase::Test_Flush_ThrowingHookDoesNotEscape()
+ASW_TEST(TTest_ASWLog_TextLogBase, Flush_ThrowingHookDoesNotEscape)
 {
     // Arrange
     TMemoryOutput output;
@@ -1116,7 +1073,7 @@ void TTest_ASWLog_TextLogBase::Test_Flush_ThrowingHookDoesNotEscape()
     CheckEquals(1, output.Lines.size(), "Logging should continue after a failed flush (the lock is released)");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_TextLogBase::Test_Formatter_FormatsEveryFileLine()
+ASW_TEST(TTest_ASWLog_TextLogBase, Formatter_FormatsEveryFileLine)
 {
     // Arrange
     const auto logPath = TestTempDir / "textlogbase.log";
@@ -1152,7 +1109,7 @@ void TTest_ASWLog_TextLogBase::Test_Formatter_FormatsEveryFileLine()
         CheckEquals(std::string("INFO|hello\n"), callbackLines[0], "OnLogEntry should get the line in the formatter's layout");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_TextLogBase::Test_Initialize_ThrowingFormatterStillInitializes()
+ASW_TEST(TTest_ASWLog_TextLogBase, Initialize_ThrowingFormatterStillInitializes)
 {
     // Arrange: a startup line goes through a formatter that throws
     TMemoryOutput output;
@@ -1184,7 +1141,7 @@ void TTest_ASWLog_TextLogBase::Test_Initialize_ThrowingFormatterStillInitializes
         "The skipped startup lines and the dropped entry should be reported");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_TextLogBase::Test_Initialize_WritesLoggerVersionAfterTheBanner()
+ASW_TEST(TTest_ASWLog_TextLogBase, Initialize_WritesLoggerVersionAfterTheBanner)
 {
     // Arrange
     TMemoryOutput output;
@@ -1209,7 +1166,7 @@ void TTest_ASWLog_TextLogBase::Test_Initialize_WritesLoggerVersionAfterTheBanner
     }
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_TextLogBase::Test_Initialize_WritesStartupLinesThenCallsAfterEntry()
+ASW_TEST(TTest_ASWLog_TextLogBase, Initialize_WritesStartupLinesThenCallsAfterEntry)
 {
     // Arrange
     TMemoryOutput output;
@@ -1235,7 +1192,7 @@ void TTest_ASWLog_TextLogBase::Test_Initialize_WritesStartupLinesThenCallsAfterE
     CheckEquals(1, output.AfterEntryCount, "Initialize should call AfterEntryUnlocked once, after the startup lines");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_TextLogBase::Test_Log_AtLevelOffIsNeverWritten()
+ASW_TEST(TTest_ASWLog_TextLogBase, Log_AtLevelOffIsNeverWritten)
 {
     // Arrange
     TMemoryOutput output;
@@ -1266,7 +1223,7 @@ void TTest_ASWLog_TextLogBase::Test_Log_AtLevelOffIsNeverWritten()
         "An entry at Off should be dropped before reaching the logger's output");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_TextLogBase::Test_Log_DroppedWhenNotReadyOrNotPrepared()
+ASW_TEST(TTest_ASWLog_TextLogBase, Log_DroppedWhenNotReadyOrNotPrepared)
 {
     // Arrange
     TMemoryOutput output;
@@ -1302,7 +1259,7 @@ void TTest_ASWLog_TextLogBase::Test_Log_DroppedWhenNotReadyOrNotPrepared()
         "AfterEntryUnlocked should be skipped when EnsureReadyUnlocked fails, but called when only PrepareWriteUnlocked drops the line");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_TextLogBase::Test_Log_FormatsFiltersAndCallsAfterEntry()
+ASW_TEST(TTest_ASWLog_TextLogBase, Log_FormatsFiltersAndCallsAfterEntry)
 {
     // Arrange
     TMemoryOutput output;
@@ -1331,7 +1288,7 @@ void TTest_ASWLog_TextLogBase::Test_Log_FormatsFiltersAndCallsAfterEntry()
     CheckEquals(afterEntryCountAtStart + 2, output.AfterEntryCount, "AfterEntryUnlocked should be called once per entry that reached the logger");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_TextLogBase::Test_Log_MinimumLevelOffAllowsOnlyForcedEntries()
+ASW_TEST(TTest_ASWLog_TextLogBase, Log_MinimumLevelOffAllowsOnlyForcedEntries)
 {
     // Arrange
     TMemoryOutput output;
@@ -1366,7 +1323,7 @@ void TTest_ASWLog_TextLogBase::Test_Log_MinimumLevelOffAllowsOnlyForcedEntries()
     CheckEquals(0, callbackCount, "With OnLogEntryMinimumLevel at Off, OnLogEntry should never fire");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_TextLogBase::Test_Log_ThrowingWriteDoesNotEscape()
+ASW_TEST(TTest_ASWLog_TextLogBase, Log_ThrowingWriteDoesNotEscape)
 {
     // Arrange
     TMemoryOutput output;
@@ -1394,7 +1351,7 @@ void TTest_ASWLog_TextLogBase::Test_Log_ThrowingWriteDoesNotEscape()
         "Each dropped entry should be reported");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_TextLogBase::Test_LogRaw_FormatterCanFormatRawEntries()
+ASW_TEST(TTest_ASWLog_TextLogBase, LogRaw_FormatterCanFormatRawEntries)
 {
     // Arrange: a synchronous and an asynchronous logger whose formatter formats raw entries too
     TMemoryOutput syncOutput;
@@ -1428,7 +1385,7 @@ void TTest_ASWLog_TextLogBase::Test_LogRaw_FormatterCanFormatRawEntries()
     CheckTrue(asyncOutput.EndsLine == std::vector<bool>{ true, true, true }, "A queued formatted raw entry should end its line");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_TextLogBase::Test_LogRaw_WritesMessageAsIs()
+ASW_TEST(TTest_ASWLog_TextLogBase, LogRaw_WritesMessageAsIs)
 {
     // Arrange
     TMemoryOutput output;
@@ -1445,7 +1402,7 @@ void TTest_ASWLog_TextLogBase::Test_LogRaw_WritesMessageAsIs()
     CheckTrue(output.EndsLine == std::vector<bool>{ false, false }, "A raw entry doesn't end its line");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_TextLogBase::Test_Multiline_AppliesToEveryFormattersLine()
+ASW_TEST(TTest_ASWLog_TextLogBase, Multiline_AppliesToEveryFormattersLine)
 {
     // Arrange: Indent with CRLF endings, for the built-in layout, a pattern, a user's own formatter and JSON
     auto config = MakeQuietConfig();
@@ -1477,7 +1434,7 @@ void TTest_ASWLog_TextLogBase::Test_Multiline_AppliesToEveryFormattersLine()
         "A JSON line has no line break to indent");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_TextLogBase::Test_Multiline_EscapeKeepsEachEntryOnOneLine()
+ASW_TEST(TTest_ASWLog_TextLogBase, Multiline_EscapeKeepsEachEntryOnOneLine)
 {
     // Arrange: a logger that starts with Preserve and is reconfigured to Escape, and an asynchronous one
     TMemoryOutput output;
@@ -1512,7 +1469,7 @@ void TTest_ASWLog_TextLogBase::Test_Multiline_EscapeKeepsEachEntryOnOneLine()
     CheckTrue(asyncOutput.Lines == std::vector<std::string>{ expected[1] }, "A queued line's line breaks should be escaped");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_TextLogBase::Test_Multiline_LogRawStaysAsIs()
+ASW_TEST(TTest_ASWLog_TextLogBase, Multiline_LogRawStaysAsIs)
 {
     // Arrange: Indent, without and with a formatter that formats raw entries
     TMemoryOutput output;
@@ -1537,7 +1494,7 @@ void TTest_ASWLog_TextLogBase::Test_Multiline_LogRawStaysAsIs()
         "A raw entry the formatter formats should be indented like any formatted line");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_TextLogBase::Test_Multiline_PreserveWritesLineBreaksAsTheyAre()
+ASW_TEST(TTest_ASWLog_TextLogBase, Multiline_PreserveWritesLineBreaksAsTheyAre)
 {
     // Arrange: the default mode, with CRLF endings
     TMemoryOutput output;
@@ -1553,7 +1510,7 @@ void TTest_ASWLog_TextLogBase::Test_Multiline_PreserveWritesLineBreaksAsTheyAre(
     CheckTrue(output.Lines == std::vector<std::string>{ "[INFO]: a\r\nb\nc\rd\n\r\n" }, "The message should be written as it is");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_TextLogBase::Test_OnBeforeWrite_RunsOnEveryLoggingThread()
+ASW_TEST(TTest_ASWLog_TextLogBase, OnBeforeWrite_RunsOnEveryLoggingThread)
 {
     // Arrange: a synchronous and an asynchronous logger whose hook changes the message and a field of each entry, and
     // drops every fourth, while several threads log (for ThreadSanitizer)
@@ -1608,7 +1565,7 @@ void TTest_ASWLog_TextLogBase::Test_OnBeforeWrite_RunsOnEveryLoggingThread()
     CheckTrue(asyncOutput.Lines == expected, "Every kept queued entry should be written as the hook changed it");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_TextLogBase::Test_OnBeforeWrite_RunsOutsideTheLockBeforeQueuing()
+ASW_TEST(TTest_ASWLog_TextLogBase, OnBeforeWrite_RunsOutsideTheLockBeforeQueuing)
 {
     // Arrange: a hook that redacts a token in the message and the user field, for a synchronous and an asynchronous
     // logger, both with OnLogEntry
@@ -1682,7 +1639,7 @@ void TTest_ASWLog_TextLogBase::Test_OnBeforeWrite_RunsOutsideTheLockBeforeQueuin
     CheckEquals(expected, asyncSeenLine, "The asynchronous OnLogEntry should get the changed line");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_TextLogBase::Test_OnBeforeWrite_SkipsTheLoggersOwnLines()
+ASW_TEST(TTest_ASWLog_TextLogBase, OnBeforeWrite_SkipsTheLoggersOwnLines)
 {
     // Arrange: a hook that drops every entry, with a startup banner and the shutdown line
     TMemoryOutput output;
@@ -1709,7 +1666,7 @@ void TTest_ASWLog_TextLogBase::Test_OnBeforeWrite_SkipsTheLoggersOwnLines()
     CheckContains(output.Lines[1], "Logger shutdown", "The shutdown line should be written");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_TextLogBase::Test_OnLogEntry_CallbackCanReconfigureTheLogger()
+ASW_TEST(TTest_ASWLog_TextLogBase, OnLogEntry_CallbackCanReconfigureTheLogger)
 {
     // Arrange: a callback that replaces the config it belongs to, e.g. to turn itself off after the first error. The
     // running callback (and the state it captured) must stay alive until it returns, and calling back into the logger
@@ -1738,7 +1695,7 @@ void TTest_ASWLog_TextLogBase::Test_OnLogEntry_CallbackCanReconfigureTheLogger()
         "Both entries should be written");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_TextLogBase::Test_Reconfigure_AppliesNewConfigButKeepsLevel()
+ASW_TEST(TTest_ASWLog_TextLogBase, Reconfigure_AppliesNewConfigButKeepsLevel)
 {
     // Arrange
     TMemoryOutput output;
@@ -1780,7 +1737,7 @@ void TTest_ASWLog_TextLogBase::Test_Reconfigure_AppliesNewConfigButKeepsLevel()
         "The new config should be kept when ReconfigureUnlocked() fails");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_TextLogBase::Test_Reconfigure_IsSafeWhileOtherThreadsLog()
+ASW_TEST(TTest_ASWLog_TextLogBase, Reconfigure_IsSafeWhileOtherThreadsLog)
 {
     // Arrange: one thread keeps switching between configs that differ in the line layout, the formatter and the
     // callback, while others log. Run under ThreadSanitizer (CI) to find data races.
@@ -1853,7 +1810,7 @@ void TTest_ASWLog_TextLogBase::Test_Reconfigure_IsSafeWhileOtherThreadsLog()
         "OnLogEntry should be called at most once per entry");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_TextLogBase::Test_ReportErrorUnlocked_ReportsAfterTheLockIsReleased()
+ASW_TEST(TTest_ASWLog_TextLogBase, ReportErrorUnlocked_ReportsAfterTheLockIsReleased)
 {
     // Arrange: WriteLineUnlocked() reports a failure while m_Mutex is held
     TMemoryOutput output;
@@ -1881,7 +1838,7 @@ void TTest_ASWLog_TextLogBase::Test_ReportErrorUnlocked_ReportsAfterTheLockIsRel
     CheckTrue(output.Lines == std::vector<std::string>{ "[INFO]: first\n", "second" }, "The entries should still be written");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_TextLogBase::Test_SetEnabled_FalseWritesNothing()
+ASW_TEST(TTest_ASWLog_TextLogBase, SetEnabled_FalseWritesNothing)
 {
     // Arrange
     TMemoryOutput output;

@@ -566,38 +566,6 @@ std::string TCrashingFormatter::Format(const ASWLog::TASWLogRecord& record, cons
 TTest_ASWLog_CrashHandler::TTest_ASWLog_CrashHandler()
     : inherited("ASWLog_CrashHandler_Tests")
 {
-    RegisterTest(&TTest_ASWLog_CrashHandler::Test_AppendCrashJSONLine_CutsALongTextButStaysValid, "AppendCrashJSONLine_CutsALongTextButStaysValid");
-    RegisterTest(&TTest_ASWLog_CrashHandler::Test_AppendCrashJSONLine_ShowsTheFields, "AppendCrashJSONLine_ShowsTheFields");
-    RegisterTest(&TTest_ASWLog_CrashHandler::Test_AppendCrashJSONLine_UsesTheFixedLayout, "AppendCrashJSONLine_UsesTheFixedLayout");
-    RegisterTest(&TTest_ASWLog_CrashHandler::Test_AppendCrashLine_CutsALongMessageButKeepsTheEnding, "AppendCrashLine_CutsALongMessageButKeepsTheEnding");
-    RegisterTest(&TTest_ASWLog_CrashHandler::Test_AppendCrashLine_FieldsThatDontFitAreLeftOut, "AppendCrashLine_FieldsThatDontFitAreLeftOut");
-    RegisterTest(&TTest_ASWLog_CrashHandler::Test_AppendCrashLine_FollowsTheMultilineMode, "AppendCrashLine_FollowsTheMultilineMode");
-    RegisterTest(&TTest_ASWLog_CrashHandler::Test_AppendCrashLine_NeverCutsARewrittenLineBreak, "AppendCrashLine_NeverCutsARewrittenLineBreak");
-    RegisterTest(&TTest_ASWLog_CrashHandler::Test_AppendCrashLine_ShowsTheFields, "AppendCrashLine_ShowsTheFields");
-    RegisterTest(&TTest_ASWLog_CrashHandler::Test_AppendCrashLine_ShowsTheCategory, "AppendCrashLine_ShowsTheCategory");
-    RegisterTest(&TTest_ASWLog_CrashHandler::Test_AppendCrashLine_UsesTheFixedLayout, "AppendCrashLine_UsesTheFixedLayout");
-    RegisterTest(&TTest_ASWLog_CrashHandler::Test_CrashProcess_AbortWritesTheCrashLine, "CrashProcess_AbortWritesTheCrashLine");
-    RegisterTest(&TTest_ASWLog_CrashHandler::Test_CrashProcess_AsyncQueueIsWrittenBeforeTheCrashLine, "CrashProcess_AsyncQueueIsWrittenBeforeTheCrashLine");
-    RegisterTest(&TTest_ASWLog_CrashHandler::Test_CrashProcess_FaultWritesTheBacktrace, "CrashProcess_FaultWritesTheBacktrace");
-    RegisterTest(&TTest_ASWLog_CrashHandler::Test_CrashProcess_FaultWritesTheCrashLine, "CrashProcess_FaultWritesTheCrashLine");
-    RegisterTest(&TTest_ASWLog_CrashHandler::Test_CrashProcess_LockHeldByTheCrashingThreadWritesTheLineDirectly, "CrashProcess_LockHeldByTheCrashingThreadWritesTheLineDirectly");
-    RegisterTest(&TTest_ASWLog_CrashHandler::Test_CrashProcess_StackOverflowWritesTheCrashLine, "CrashProcess_StackOverflowWritesTheCrashLine");
-    RegisterTest(&TTest_ASWLog_CrashHandler::Test_CrashProcess_TerminateThenAbortWritesOneCrashLine, "CrashProcess_TerminateThenAbortWritesOneCrashLine");
-    RegisterTest(&TTest_ASWLog_CrashHandler::Test_CrashProcess_TerminateWritesTheExceptionAndFlushes, "CrashProcess_TerminateWritesTheExceptionAndFlushes");
-    RegisterTest(&TTest_ASWLog_CrashHandler::Test_HandleCrash_ConsoleLogWritesTheLineToStdErr, "HandleCrash_ConsoleLogWritesTheLineToStdErr");
-    RegisterTest(&TTest_ASWLog_CrashHandler::Test_HandleCrash_DisabledLoggerIsOnlyFlushed, "HandleCrash_DisabledLoggerIsOnlyFlushed");
-    RegisterTest(&TTest_ASWLog_CrashHandler::Test_HandleCrash_CrashLineHasTheThreadsScopeFields, "HandleCrash_CrashLineHasTheThreadsScopeFields");
-    RegisterTest(&TTest_ASWLog_CrashHandler::Test_HandleCrash_FixedLayoutLineFollowsTheMultilineMode, "HandleCrash_FixedLayoutLineFollowsTheMultilineMode");
-    RegisterTest(&TTest_ASWLog_CrashHandler::Test_HandleCrash_FlushesAndWritesTheCrashLine, "HandleCrash_FlushesAndWritesTheCrashLine");
-    RegisterTest(&TTest_ASWLog_CrashHandler::Test_HandleCrash_JSONLoggerGetsJSONLinesWhenTheLockStaysBusy, "HandleCrash_JSONLoggerGetsJSONLinesWhenTheLockStaysBusy");
-    RegisterTest(&TTest_ASWLog_CrashHandler::Test_HandleCrash_SkipsClosedAndDestroyedLoggers, "HandleCrash_SkipsClosedAndDestroyedLoggers");
-    RegisterTest(&TTest_ASWLog_CrashHandler::Test_HandleCrash_SyncsTheLineAtSyncToDiskAtLevel, "HandleCrash_SyncsTheLineAtSyncToDiskAtLevel");
-    RegisterTest(&TTest_ASWLog_CrashHandler::Test_HandleCrash_ThrowingFormatterGetsTheFixedLayoutLine, "HandleCrash_ThrowingFormatterGetsTheFixedLayoutLine");
-    RegisterTest(&TTest_ASWLog_CrashHandler::Test_HandleCrash_WaitsForQueuedEntries, "HandleCrash_WaitsForQueuedEntries");
-    RegisterTest(&TTest_ASWLog_CrashHandler::Test_HandleCrash_WriteCrashLineFalseOnlyFlushes, "HandleCrash_WriteCrashLineFalseOnlyFlushes");
-    RegisterTest(&TTest_ASWLog_CrashHandler::Test_HandleCrash_WritesTheBacktraceBeforeTheCrashLine, "HandleCrash_WritesTheBacktraceBeforeTheCrashLine");
-    RegisterTest(&TTest_ASWLog_CrashHandler::Test_HandleCrash_WritesTheLineDirectlyWhenTheLockStaysBusy, "HandleCrash_WritesTheLineDirectlyWhenTheLockStaysBusy");
-    RegisterTest(&TTest_ASWLog_CrashHandler::Test_InstallCrashHandlers_ChainsAndUninstallRestores, "InstallCrashHandlers_ChainsAndUninstallRestores");
 }
 //---------------------------------------------------------------------------
 TTest_ASWLog_CrashHandler::~TTest_ASWLog_CrashHandler()
@@ -630,7 +598,7 @@ void TTest_ASWLog_CrashHandler::TearDown_Test(ITestCase& /*testCase*/)
 // /////// Begin tests after this line ///////////////////////
 
 //---------------------------------------------------------------------------
-void TTest_ASWLog_CrashHandler::Test_AppendCrashJSONLine_CutsALongTextButStaysValid()
+ASW_TEST(TTest_ASWLog_CrashHandler, AppendCrashJSONLine_CutsALongTextButStaysValid)
 {
     // Arrange: a category that alone would fill the buffer, and messages of two-byte characters and quotes, each
     // escaped as two characters, too long for the buffer; 0 to 3 leading characters move the cut through every
@@ -682,7 +650,7 @@ void TTest_ASWLog_CrashHandler::Test_AppendCrashJSONLine_CutsALongTextButStaysVa
     }
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_CrashHandler::Test_AppendCrashJSONLine_ShowsTheFields()
+ASW_TEST(TTest_ASWLog_CrashHandler, AppendCrashJSONLine_ShowsTheFields)
 {
     // Arrange: a kept entry with fields of each kind
     using namespace std::chrono;
@@ -711,7 +679,7 @@ void TTest_ASWLog_CrashHandler::Test_AppendCrashJSONLine_ShowsTheFields()
         "The fixed layout should match the JSON formatter's default fields");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_CrashHandler::Test_AppendCrashJSONLine_UsesTheFixedLayout()
+ASW_TEST(TTest_ASWLog_CrashHandler, AppendCrashJSONLine_UsesTheFixedLayout)
 {
     // Arrange: a crash line, and a raw backtrace entry from a category
     using namespace std::chrono;
@@ -749,7 +717,7 @@ void TTest_ASWLog_CrashHandler::Test_AppendCrashJSONLine_UsesTheFixedLayout()
         "The fixed layout should match the JSON formatter's default fields");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_CrashHandler::Test_AppendCrashLine_CutsALongMessageButKeepsTheEnding()
+ASW_TEST(TTest_ASWLog_CrashHandler, AppendCrashLine_CutsALongMessageButKeepsTheEnding)
 {
     // Arrange
     const std::string message(3000, 'x');
@@ -767,7 +735,7 @@ void TTest_ASWLog_CrashHandler::Test_AppendCrashLine_CutsALongMessageButKeepsThe
     CheckEndsWith(text, "x\r\n", "The cut line should still end with the line ending");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_CrashHandler::Test_AppendCrashLine_FieldsThatDontFitAreLeftOut()
+ASW_TEST(TTest_ASWLog_CrashHandler, AppendCrashLine_FieldsThatDontFitAreLeftOut)
 {
     // Arrange: a text field longer than the buffer, then one that no longer fits after it; and a field whose key alone
     // is too long, between two that fit
@@ -812,7 +780,7 @@ void TTest_ASWLog_CrashHandler::Test_AppendCrashLine_FieldsThatDontFitAreLeftOut
     CheckTrue(IsJSONObjectLine(json.substr(0, json.size() - 2)), "The JSON line should be one JSON object");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_CrashHandler::Test_AppendCrashLine_FollowsTheMultilineMode()
+ASW_TEST(TTest_ASWLog_CrashHandler, AppendCrashLine_FollowsTheMultilineMode)
 {
     // Arrange: a message with each kind of line break, a lone CR, and a line break at its end
     ASWLog::TASWLogRecord record;
@@ -839,7 +807,7 @@ void TTest_ASWLog_CrashHandler::Test_AppendCrashLine_FollowsTheMultilineMode()
     CheckEndsWith(escaped, "][P:0][T:0]: a\\r\\nb\\n\\rc\\n\r\n", "Escape should keep the entry on one line");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_CrashHandler::Test_AppendCrashLine_NeverCutsARewrittenLineBreak()
+ASW_TEST(TTest_ASWLog_CrashHandler, AppendCrashLine_NeverCutsARewrittenLineBreak)
 {
     // Arrange: messages whose line break falls at each place around the end of the buffer
     struct TCase
@@ -890,7 +858,7 @@ void TTest_ASWLog_CrashHandler::Test_AppendCrashLine_NeverCutsARewrittenLineBrea
     }
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_CrashHandler::Test_AppendCrashLine_ShowsTheFields()
+ASW_TEST(TTest_ASWLog_CrashHandler, AppendCrashLine_ShowsTheFields)
 {
     // Arrange: a kept entry with its own fields
     using namespace std::chrono;
@@ -914,7 +882,7 @@ void TTest_ASWLog_CrashHandler::Test_AppendCrashLine_ShowsTheFields()
         "The fields should follow the thread id, as in the built-in layout");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_CrashHandler::Test_AppendCrashLine_UsesTheFixedLayout()
+ASW_TEST(TTest_ASWLog_CrashHandler, AppendCrashLine_UsesTheFixedLayout)
 {
     // Arrange
     using namespace std::chrono;
@@ -940,7 +908,7 @@ void TTest_ASWLog_CrashHandler::Test_AppendCrashLine_UsesTheFixedLayout()
         "The time should be written like the formatter writes it");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_CrashHandler::Test_AppendCrashLine_ShowsTheCategory()
+ASW_TEST(TTest_ASWLog_CrashHandler, AppendCrashLine_ShowsTheCategory)
 {
     // Arrange: a backtrace entry from a category, as a crash handler writes it in the fixed layout
     using namespace std::chrono;
@@ -961,7 +929,7 @@ void TTest_ASWLog_CrashHandler::Test_AppendCrashLine_ShowsTheCategory()
         "The category should follow the level, as in the built-in layout");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_CrashHandler::Test_CrashProcess_AbortWritesTheCrashLine()
+ASW_TEST(TTest_ASWLog_CrashHandler, CrashProcess_AbortWritesTheCrashLine)
 {
     // Act
     const int exitCode = RunCrashHelper("abort", TestTempDir / "abort_output.txt");
@@ -979,7 +947,7 @@ void TTest_ASWLog_CrashHandler::Test_CrashProcess_AbortWritesTheCrashLine()
     CheckNotContains(ReadFileText(TestTempDir / "abort_output.txt"), "Sanitizer", "No sanitizer report");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_CrashHandler::Test_CrashProcess_AsyncQueueIsWrittenBeforeTheCrashLine()
+ASW_TEST(TTest_ASWLog_CrashHandler, CrashProcess_AsyncQueueIsWrittenBeforeTheCrashLine)
 {
     // Act
     const int exitCode = RunCrashHelper("async", TestTempDir / "async_output.txt");
@@ -993,7 +961,7 @@ void TTest_ASWLog_CrashHandler::Test_CrashProcess_AsyncQueueIsWrittenBeforeTheCr
     CheckNotContains(ReadFileText(TestTempDir / "async_output.txt"), "Sanitizer", "No sanitizer report");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_CrashHandler::Test_CrashProcess_FaultWritesTheBacktrace()
+ASW_TEST(TTest_ASWLog_CrashHandler, CrashProcess_FaultWritesTheBacktrace)
 {
     // Act
     const int exitCode = RunCrashHelper("fault_backtrace", TestTempDir / "fault_backtrace_output.txt");
@@ -1018,7 +986,7 @@ void TTest_ASWLog_CrashHandler::Test_CrashProcess_FaultWritesTheBacktrace()
     CheckNotContains(ReadFileText(TestTempDir / "fault_backtrace_output.txt"), "Sanitizer", "No sanitizer report");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_CrashHandler::Test_CrashProcess_FaultWritesTheCrashLine()
+ASW_TEST(TTest_ASWLog_CrashHandler, CrashProcess_FaultWritesTheCrashLine)
 {
     // Act
     const int exitCode = RunCrashHelper("fault", TestTempDir / "fault_output.txt");
@@ -1041,7 +1009,7 @@ void TTest_ASWLog_CrashHandler::Test_CrashProcess_FaultWritesTheCrashLine()
     CheckNotContains(ReadFileText(TestTempDir / "fault_output.txt"), "Sanitizer", "No sanitizer report");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_CrashHandler::Test_CrashProcess_LockHeldByTheCrashingThreadWritesTheLineDirectly()
+ASW_TEST(TTest_ASWLog_CrashHandler, CrashProcess_LockHeldByTheCrashingThreadWritesTheLineDirectly)
 {
 #if defined(ASWLOG_TEST_DELPHI_RTL)
     Skip("With the Delphi RTL, a fault in a formatter ends the process before any crash handler runs");
@@ -1066,7 +1034,7 @@ void TTest_ASWLog_CrashHandler::Test_CrashProcess_LockHeldByTheCrashingThreadWri
     CheckNotContains(ReadFileText(TestTempDir / "lock_held_output.txt"), "Sanitizer", "No sanitizer report");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_CrashHandler::Test_CrashProcess_StackOverflowWritesTheCrashLine()
+ASW_TEST(TTest_ASWLog_CrashHandler, CrashProcess_StackOverflowWritesTheCrashLine)
 {
 #if defined(ASWLOG_TEST_SANITIZED)
     Skip("A sanitizer handles the stack itself");
@@ -1089,7 +1057,7 @@ void TTest_ASWLog_CrashHandler::Test_CrashProcess_StackOverflowWritesTheCrashLin
 #endif
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_CrashHandler::Test_CrashProcess_TerminateThenAbortWritesOneCrashLine()
+ASW_TEST(TTest_ASWLog_CrashHandler, CrashProcess_TerminateThenAbortWritesOneCrashLine)
 {
     // Act
     const int exitCode = RunCrashHelper("terminate_then_abort", TestTempDir / "terminate_then_abort_output.txt");
@@ -1101,7 +1069,7 @@ void TTest_ASWLog_CrashHandler::Test_CrashProcess_TerminateThenAbortWritesOneCra
         "The crash should get one line, from the terminate handler");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_CrashHandler::Test_CrashProcess_TerminateWritesTheExceptionAndFlushes()
+ASW_TEST(TTest_ASWLog_CrashHandler, CrashProcess_TerminateWritesTheExceptionAndFlushes)
 {
     // Act
     const int exitCode = RunCrashHelper("terminate", TestTempDir / "terminate_output.txt");
@@ -1115,7 +1083,7 @@ void TTest_ASWLog_CrashHandler::Test_CrashProcess_TerminateWritesTheExceptionAnd
     CheckNotContains(ReadFileText(TestTempDir / "terminate_output.txt"), "Sanitizer", "No sanitizer report");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_CrashHandler::Test_HandleCrash_ConsoleLogWritesTheLineToStdErr()
+ASW_TEST(TTest_ASWLog_CrashHandler, HandleCrash_ConsoleLogWritesTheLineToStdErr)
 {
     // Arrange
     ASWLog::TASWConsoleLog log;
@@ -1136,7 +1104,7 @@ void TTest_ASWLog_CrashHandler::Test_HandleCrash_ConsoleLogWritesTheLineToStdErr
     CheckEquals(std::string(), capturedOut.str(), "Nothing should go to stdout");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_CrashHandler::Test_HandleCrash_DisabledLoggerIsOnlyFlushed()
+ASW_TEST(TTest_ASWLog_CrashHandler, HandleCrash_DisabledLoggerIsOnlyFlushed)
 {
     // Arrange
     ASWLog::TASWFileLog log;
@@ -1152,7 +1120,7 @@ void TTest_ASWLog_CrashHandler::Test_HandleCrash_DisabledLoggerIsOnlyFlushed()
         "A disabled logger should be flushed, without the crash line");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_CrashHandler::Test_HandleCrash_CrashLineHasTheThreadsScopeFields()
+ASW_TEST(TTest_ASWLog_CrashHandler, HandleCrash_CrashLineHasTheThreadsScopeFields)
 {
     // Arrange: two loggers, one whose lock another thread holds
     ASWLog::TASWFileLog log;
@@ -1173,7 +1141,7 @@ void TTest_ASWLog_CrashHandler::Test_HandleCrash_CrashLineHasTheThreadsScopeFiel
         ASWLog::GetCurrentOSThreadId()), "The fixed-layout crash line should have them too");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_CrashHandler::Test_HandleCrash_FixedLayoutLineFollowsTheMultilineMode()
+ASW_TEST(TTest_ASWLog_CrashHandler, HandleCrash_FixedLayoutLineFollowsTheMultilineMode)
 {
     // Arrange: an Indent logger with a multi-line backtrace entry (HandleCrashWhileLocked() holds its lock on another
     // thread meanwhile), reconfigured to CRLF endings
@@ -1197,7 +1165,7 @@ void TTest_ASWLog_CrashHandler::Test_HandleCrash_FixedLayoutLineFollowsTheMultil
     CheckEndsWith(contents, "][CRITICAL]" + ids + "Crash: busy\r\n    | reason\r\n", "The crash line should be indented");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_CrashHandler::Test_HandleCrash_FlushesAndWritesTheCrashLine()
+ASW_TEST(TTest_ASWLog_CrashHandler, HandleCrash_FlushesAndWritesTheCrashLine)
 {
     // Arrange
     ASWLog::TASWFileLog log;
@@ -1214,7 +1182,7 @@ void TTest_ASWLog_CrashHandler::Test_HandleCrash_FlushesAndWritesTheCrashLine()
         "The buffered entry should be flushed, then the formatted crash line written and flushed");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_CrashHandler::Test_HandleCrash_JSONLoggerGetsJSONLinesWhenTheLockStaysBusy()
+ASW_TEST(TTest_ASWLog_CrashHandler, HandleCrash_JSONLoggerGetsJSONLinesWhenTheLockStaysBusy)
 {
     // Arrange: a JSON logger with a backtrace entry (HandleCrashWhileLocked() holds its lock on another thread meanwhile)
     auto config = MakeCrashTestConfig("busy.json");
@@ -1254,7 +1222,7 @@ void TTest_ASWLog_CrashHandler::Test_HandleCrash_JSONLoggerGetsJSONLinesWhenTheL
     CheckEndsWith(lines[3], R"("level":"CRITICAL",)" + ids + R"("message":"Crash: busy \"json\""})", "Then the crash line, escaped");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_CrashHandler::Test_HandleCrash_SkipsClosedAndDestroyedLoggers()
+ASW_TEST(TTest_ASWLog_CrashHandler, HandleCrash_SkipsClosedAndDestroyedLoggers)
 {
     // Arrange: one logger closed, one destroyed (a crash handler must not touch it)
     ASWLog::TASWFileLog closedLog;
@@ -1276,7 +1244,7 @@ void TTest_ASWLog_CrashHandler::Test_HandleCrash_SkipsClosedAndDestroyedLoggers(
     CheckEquals(std::string("[INFO]: entry_1\n"), ReadFileText(TestTempDir / "destroyed.log"), "A destroyed logger should get no crash line");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_CrashHandler::Test_HandleCrash_SyncsTheLineAtSyncToDiskAtLevel()
+ASW_TEST(TTest_ASWLog_CrashHandler, HandleCrash_SyncsTheLineAtSyncToDiskAtLevel)
 {
     // Arrange: the null device takes every write, but can't be synced to disk (see the FileLog OnError tests), so a
     // sync shows as a SyncFailed report. A crash reports nothing itself; Close() passes on what it found.
@@ -1315,7 +1283,7 @@ void TTest_ASWLog_CrashHandler::Test_HandleCrash_SyncsTheLineAtSyncToDiskAtLevel
         CheckEquals(ASWLog::ErrorKind::SyncFailed, reports[0], "The report should be SyncFailed");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_CrashHandler::Test_HandleCrash_ThrowingFormatterGetsTheFixedLayoutLine()
+ASW_TEST(TTest_ASWLog_CrashHandler, HandleCrash_ThrowingFormatterGetsTheFixedLayoutLine)
 {
     // Arrange
     auto config = MakeCrashTestConfig("throwing.log");
@@ -1334,7 +1302,7 @@ void TTest_ASWLog_CrashHandler::Test_HandleCrash_ThrowingFormatterGetsTheFixedLa
         ASWLog::GetCurrentOSThreadId()), "The fixed-layout line should replace the line the formatter failed to make");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_CrashHandler::Test_HandleCrash_WaitsForQueuedEntries()
+ASW_TEST(TTest_ASWLog_CrashHandler, HandleCrash_WaitsForQueuedEntries)
 {
     // Arrange: the worker pauses after writing entry_1, and entry_2 and entry_3 are queued meanwhile
     std::mutex mutex;
@@ -1378,7 +1346,7 @@ void TTest_ASWLog_CrashHandler::Test_HandleCrash_WaitsForQueuedEntries()
         ReadFileText(TestTempDir / "async.log"), "The queued entries should be written before the crash line");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_CrashHandler::Test_HandleCrash_WriteCrashLineFalseOnlyFlushes()
+ASW_TEST(TTest_ASWLog_CrashHandler, HandleCrash_WriteCrashLineFalseOnlyFlushes)
 {
     // Arrange
     auto config = MakeCrashTestConfig("no_line.log");
@@ -1395,7 +1363,7 @@ void TTest_ASWLog_CrashHandler::Test_HandleCrash_WriteCrashLineFalseOnlyFlushes(
         "The logger should be flushed, without the crash line");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_CrashHandler::Test_HandleCrash_WritesTheBacktraceBeforeTheCrashLine()
+ASW_TEST(TTest_ASWLog_CrashHandler, HandleCrash_WritesTheBacktraceBeforeTheCrashLine)
 {
     // Arrange
     auto config = MakeCrashTestConfig("backtrace.log");
@@ -1420,7 +1388,7 @@ void TTest_ASWLog_CrashHandler::Test_HandleCrash_WritesTheBacktraceBeforeTheCras
         "The written backtrace should be forgotten");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_CrashHandler::Test_HandleCrash_WritesTheLineDirectlyWhenTheLockStaysBusy()
+ASW_TEST(TTest_ASWLog_CrashHandler, HandleCrash_WritesTheLineDirectlyWhenTheLockStaysBusy)
 {
     // Arrange: a backtrace entry (HandleCrashWhileLocked() holds the logger's lock on another thread meanwhile)
     auto config = MakeCrashTestConfig("busy.log");
@@ -1448,7 +1416,7 @@ void TTest_ASWLog_CrashHandler::Test_HandleCrash_WritesTheLineDirectlyWhenTheLoc
         "The backtrace should be written straight to the file too, in the fixed layout, before the crash line");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_CrashHandler::Test_InstallCrashHandlers_ChainsAndUninstallRestores()
+ASW_TEST(TTest_ASWLog_CrashHandler, InstallCrashHandlers_ChainsAndUninstallRestores)
 {
     // Arrange: the handlers in place before
     const auto previousTerminate = std::set_terminate(ExitAsPassedOn);

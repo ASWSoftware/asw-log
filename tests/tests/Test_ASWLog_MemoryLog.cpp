@@ -84,16 +84,6 @@ ASWLog::TASWLogConfig MakeMemoryConfig(std::size_t maxLines = 1000, std::size_t 
 TTest_ASWLog_MemoryLog::TTest_ASWLog_MemoryLog()
     : inherited("ASWLog_MemoryLog_Tests")
 {
-    RegisterTest(&TTest_ASWLog_MemoryLog::Test_Async_KeepsTheQueuedLines, "Async_KeepsTheQueuedLines");
-    RegisterTest(&TTest_ASWLog_MemoryLog::Test_Clear_ForgetsTheLinesButNotTheSequence, "Clear_ForgetsTheLinesButNotTheSequence");
-    RegisterTest(&TTest_ASWLog_MemoryLog::Test_Close_KeepsTheLines, "Close_KeepsTheLines");
-    RegisterTest(&TTest_ASWLog_MemoryLog::Test_GetLinesSince_ReturnsNewLinesAndCountsMissedOnes, "GetLinesSince_ReturnsNewLinesAndCountsMissedOnes");
-    RegisterTest(&TTest_ASWLog_MemoryLog::Test_KeepsLinesWithoutTheirEnding, "KeepsLinesWithoutTheirEnding");
-    RegisterTest(&TTest_ASWLog_MemoryLog::Test_MaxBytes_CutsALineThatAloneIsTooLong, "MaxBytes_CutsALineThatAloneIsTooLong");
-    RegisterTest(&TTest_ASWLog_MemoryLog::Test_MaxBytes_DropsTheOldestLines, "MaxBytes_DropsTheOldestLines");
-    RegisterTest(&TTest_ASWLog_MemoryLog::Test_MaxLines_KeepsTheNewest, "MaxLines_KeepsTheNewest");
-    RegisterTest(&TTest_ASWLog_MemoryLog::Test_Reconfigure_AppliesTheNewLimits, "Reconfigure_AppliesTheNewLimits");
-    RegisterTest(&TTest_ASWLog_MemoryLog::Test_Threads_ReaderGetsEveryLineOnce, "Threads_ReaderGetsEveryLineOnce");
 }
 //---------------------------------------------------------------------------
 TTest_ASWLog_MemoryLog::~TTest_ASWLog_MemoryLog()
@@ -120,7 +110,7 @@ void TTest_ASWLog_MemoryLog::TearDown_Test(ITestCase& /*testCase*/)
 // /////// Begin tests after this line ///////////////////////
 
 //---------------------------------------------------------------------------
-void TTest_ASWLog_MemoryLog::Test_Async_KeepsTheQueuedLines()
+ASW_TEST(TTest_ASWLog_MemoryLog, Async_KeepsTheQueuedLines)
 {
     // Arrange
     auto config = MakeMemoryConfig();
@@ -137,7 +127,7 @@ void TTest_ASWLog_MemoryLog::Test_Async_KeepsTheQueuedLines()
     CheckTrue(log.GetLines() == std::vector<std::string>{ "[INFO]: one", "[WARN]: two" }, "The queued lines should be kept in order");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_MemoryLog::Test_Clear_ForgetsTheLinesButNotTheSequence()
+ASW_TEST(TTest_ASWLog_MemoryLog, Clear_ForgetsTheLinesButNotTheSequence)
 {
     // Arrange
     ASWLog::TASWMemoryLog log;
@@ -161,7 +151,7 @@ void TTest_ASWLog_MemoryLog::Test_Clear_ForgetsTheLinesButNotTheSequence()
     CheckEquals(0, afterNewLine.MissedCount, "Nothing should be missed after the cleared lines");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_MemoryLog::Test_Close_KeepsTheLines()
+ASW_TEST(TTest_ASWLog_MemoryLog, Close_KeepsTheLines)
 {
     // Arrange
     ASWLog::TASWMemoryLog log;
@@ -179,7 +169,7 @@ void TTest_ASWLog_MemoryLog::Test_Close_KeepsTheLines()
     CheckTrue(log.GetLines() == std::vector<std::string>{ "[INFO]: kept" }, "The lines should be kept after Close(), and no more added");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_MemoryLog::Test_GetLinesSince_ReturnsNewLinesAndCountsMissedOnes()
+ASW_TEST(TTest_ASWLog_MemoryLog, GetLinesSince_ReturnsNewLinesAndCountsMissedOnes)
 {
     // Arrange: lines 1 to 3 kept, then 4 and 5, which push 1 and 2 out
     ASWLog::TASWMemoryLog log;
@@ -215,7 +205,7 @@ void TTest_ASWLog_MemoryLog::Test_GetLinesSince_ReturnsNewLinesAndCountsMissedOn
     CheckEquals(0, ahead.MissedCount, "A number past the last line should miss nothing");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_MemoryLog::Test_KeepsLinesWithoutTheirEnding()
+ASW_TEST(TTest_ASWLog_MemoryLog, KeepsLinesWithoutTheirEnding)
 {
     // Arrange: LF, and CRLF with indented continuation lines
     ASWLog::TASWMemoryLog log;
@@ -241,7 +231,7 @@ void TTest_ASWLog_MemoryLog::Test_KeepsLinesWithoutTheirEnding()
         "A CRLF ending should be left off, and the line breaks inside the line kept");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_MemoryLog::Test_MaxBytes_CutsALineThatAloneIsTooLong()
+ASW_TEST(TTest_ASWLog_MemoryLog, MaxBytes_CutsALineThatAloneIsTooLong)
 {
     // Arrange: 20 bytes, so the line "[INFO]: abcde" + a 2-byte UTF-8 character + more is cut inside that character;
     // and 4 bytes, too few for the marker
@@ -261,7 +251,7 @@ void TTest_ASWLog_MemoryLog::Test_MaxBytes_CutsALineThatAloneIsTooLong()
     CheckTrue(tinyLog.GetLines() == std::vector<std::string>{ "[INF" }, "Without room for the marker, the line should only be cut");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_MemoryLog::Test_MaxBytes_DropsTheOldestLines()
+ASW_TEST(TTest_ASWLog_MemoryLog, MaxBytes_DropsTheOldestLines)
 {
     // Arrange: 30 bytes, two 15-byte lines
     ASWLog::TASWMemoryLog log;
@@ -278,7 +268,7 @@ void TTest_ASWLog_MemoryLog::Test_MaxBytes_DropsTheOldestLines()
     CheckTrue(log.GetLines() == std::vector<std::string>{ "[INFO]: 2222222", "[INFO]: 3333333" }, "The oldest line should go to make room");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_MemoryLog::Test_MaxLines_KeepsTheNewest()
+ASW_TEST(TTest_ASWLog_MemoryLog, MaxLines_KeepsTheNewest)
 {
     // Arrange
     ASWLog::TASWMemoryLog log;
@@ -294,7 +284,7 @@ void TTest_ASWLog_MemoryLog::Test_MaxLines_KeepsTheNewest()
         "The newest lines should be kept, oldest first");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_MemoryLog::Test_Reconfigure_AppliesTheNewLimits()
+ASW_TEST(TTest_ASWLog_MemoryLog, Reconfigure_AppliesTheNewLimits)
 {
     // Arrange
     ASWLog::TASWMemoryLog log;
@@ -319,7 +309,7 @@ void TTest_ASWLog_MemoryLog::Test_Reconfigure_AppliesTheNewLimits()
     CheckEquals(6, log.GetLineCount(), "With no limits, every new line should be kept");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_MemoryLog::Test_Threads_ReaderGetsEveryLineOnce()
+ASW_TEST(TTest_ASWLog_MemoryLog, Threads_ReaderGetsEveryLineOnce)
 {
     // Arrange: four threads log while another reads the new lines as they come (for ThreadSanitizer)
     constexpr int ThreadCount = 4;

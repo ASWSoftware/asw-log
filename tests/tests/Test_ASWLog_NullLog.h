@@ -32,12 +32,12 @@ namespace ASWUnitTests
 ///////////////////////////////////////////////////////////////////////////
 // TTest_ASWLog_NullLog
 ///////////////////////////////////////////////////////////////////////////
-class TTest_ASWLog_NullLog : public TTestGroupBase
+class TTest_ASWLog_NullLog : public TAutoTestGroup<TTest_ASWLog_NullLog>
 {
 private:
-    typedef TTestGroupBase inherited;
+    typedef TAutoTestGroup<TTest_ASWLog_NullLog> inherited;
 
-private: // Test methods
+public: // Test methods, each defined with ASW_TEST
     void Test_Fmt_NeverFormats();
     void Test_GetConfig_IsSafeWhileReconfiguring();
     void Test_GetInstance_ReturnsTheSameLogger();

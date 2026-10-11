@@ -198,10 +198,6 @@ public:
 TTest_ASWLog_DebuggerLog::TTest_ASWLog_DebuggerLog()
     : inherited("ASWLog_DebuggerLog_Tests")
 {
-    RegisterTest(&TTest_ASWLog_DebuggerLog::Test_GetInstance_ReturnsTheSameLogger, "GetInstance_ReturnsTheSameLogger");
-    RegisterTest(&TTest_ASWLog_DebuggerLog::Test_ShouldLog_FollowsThePlatform, "ShouldLog_FollowsThePlatform");
-    RegisterTest(&TTest_ASWLog_DebuggerLog::Test_Windows_SendsEachLineToTheDebugOutput, "Windows_SendsEachLineToTheDebugOutput");
-    RegisterTest(&TTest_ASWLog_DebuggerLog::Test_Windows_WritesTheCrashLineDirectly, "Windows_WritesTheCrashLineDirectly");
 }
 //---------------------------------------------------------------------------
 TTest_ASWLog_DebuggerLog::~TTest_ASWLog_DebuggerLog()
@@ -229,7 +225,7 @@ void TTest_ASWLog_DebuggerLog::TearDown_Test(ITestCase& /*testCase*/)
 // /////// Begin tests after this line ///////////////////////
 
 //---------------------------------------------------------------------------
-void TTest_ASWLog_DebuggerLog::Test_GetInstance_ReturnsTheSameLogger()
+ASW_TEST(TTest_ASWLog_DebuggerLog, GetInstance_ReturnsTheSameLogger)
 {
     // Act
     auto& first = ASWLog::TASWDebuggerLog::GetInstance();
@@ -239,7 +235,7 @@ void TTest_ASWLog_DebuggerLog::Test_GetInstance_ReturnsTheSameLogger()
     CheckSame(&first, &second, "GetInstance() should always return the same logger");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_DebuggerLog::Test_ShouldLog_FollowsThePlatform()
+ASW_TEST(TTest_ASWLog_DebuggerLog, ShouldLog_FollowsThePlatform)
 {
     // Arrange
     ASWLog::TASWDebuggerLog log;
@@ -264,7 +260,7 @@ void TTest_ASWLog_DebuggerLog::Test_ShouldLog_FollowsThePlatform()
 #endif
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_DebuggerLog::Test_Windows_SendsEachLineToTheDebugOutput()
+ASW_TEST(TTest_ASWLog_DebuggerLog, Windows_SendsEachLineToTheDebugOutput)
 {
 #if defined(_WIN32)
     // Arrange: listen like DebugView, which needs no debugger attached and no other listener
@@ -302,7 +298,7 @@ void TTest_ASWLog_DebuggerLog::Test_Windows_SendsEachLineToTheDebugOutput()
 #endif
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_DebuggerLog::Test_Windows_WritesTheCrashLineDirectly()
+ASW_TEST(TTest_ASWLog_DebuggerLog, Windows_WritesTheCrashLineDirectly)
 {
 #if defined(_WIN32)
     // Arrange

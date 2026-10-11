@@ -213,28 +213,6 @@ ASWLog::TASWLogConfig MakeQuietConfig()
 TTest_ASWLog_ConsoleLog::TTest_ASWLog_ConsoleLog()
     : inherited("ASWLog_ConsoleLog_Tests")
 {
-    RegisterTest(&TTest_ASWLog_ConsoleLog::Test_ColorModeAlways_WrapsOutputWithAnsiCodes, "ColorModeAlways_WrapsOutputWithAnsiCodes");
-    RegisterTest(&TTest_ASWLog_ConsoleLog::Test_ColorModeAuto_ColorsOnlyStreamsThatSupportIt, "ColorModeAuto_ColorsOnlyStreamsThatSupportIt");
-    RegisterTest(&TTest_ASWLog_ConsoleLog::Test_ColorModeAuto_HonorsNoColor, "ColorModeAuto_HonorsNoColor");
-    RegisterTest(&TTest_ASWLog_ConsoleLog::Test_ColorModeNever_SuppressesAnsiCodes, "ColorModeNever_SuppressesAnsiCodes");
-    RegisterTest(&TTest_ASWLog_ConsoleLog::Test_Flush_FlushesStdOutAndStdErrWhileOpen, "Flush_FlushesStdOutAndStdErrWhileOpen");
-    RegisterTest(&TTest_ASWLog_ConsoleLog::Test_GetColorMode_ReflectsSetColorMode, "GetColorMode_ReflectsSetColorMode");
-    RegisterTest(&TTest_ASWLog_ConsoleLog::Test_GetInstance_ReturnsSameInstance, "GetInstance_ReturnsSameInstance");
-    RegisterTest(&TTest_ASWLog_ConsoleLog::Test_GetLevelColor_OffHasNoColor, "GetLevelColor_OffHasNoColor");
-    RegisterTest(&TTest_ASWLog_ConsoleLog::Test_Initialize_SuppressesInfoBannersBelowMinimumLevel, "Initialize_SuppressesInfoBannersBelowMinimumLevel");
-    RegisterTest(&TTest_ASWLog_ConsoleLog::Test_Initialize_WritesDriveInfoWhenEnabled, "Initialize_WritesDriveInfoWhenEnabled");
-    RegisterTest(&TTest_ASWLog_ConsoleLog::Test_IsColorSupported_ReflectsDetectedStreams, "IsColorSupported_ReflectsDetectedStreams");
-    RegisterTest(&TTest_ASWLog_ConsoleLog::Test_LogLineMetadata_Options, "LogLineMetadata_Options");
-    RegisterTest(&TTest_ASWLog_ConsoleLog::Test_LogProcessAndThreadIds_AreOSIds, "LogProcessAndThreadIds_AreOSIds");
-    RegisterTest(&TTest_ASWLog_ConsoleLog::Test_LogRawAndForceOptions, "LogRawAndForceOptions");
-    RegisterTest(&TTest_ASWLog_ConsoleLog::Test_LogRespectsMinimumLevel, "LogRespectsMinimumLevel");
-    RegisterTest(&TTest_ASWLog_ConsoleLog::Test_OnError_ReportsOnlyTheWriteThatFailedTheStream, "OnError_ReportsOnlyTheWriteThatFailedTheStream");
-    RegisterTest(&TTest_ASWLog_ConsoleLog::Test_OnLogEntry_FiresForQualifyingLevelsOnly, "OnLogEntry_FiresForQualifyingLevelsOnly");
-    RegisterTest(&TTest_ASWLog_ConsoleLog::Test_ResetLevelColor_RestoresDefault, "ResetLevelColor_RestoresDefault");
-    RegisterTest(&TTest_ASWLog_ConsoleLog::Test_ResetLevelColors_RestoresAllDefaults, "ResetLevelColors_RestoresAllDefaults");
-    RegisterTest(&TTest_ASWLog_ConsoleLog::Test_SetLevelColor_EmptyStringDisablesColorForLevel, "SetLevelColor_EmptyStringDisablesColorForLevel");
-    RegisterTest(&TTest_ASWLog_ConsoleLog::Test_SetLevelColor_OverridesDefaultColor, "SetLevelColor_OverridesDefaultColor");
-    RegisterTest(&TTest_ASWLog_ConsoleLog::Test_WarnAndAboveWriteToStdErr, "WarnAndAboveWriteToStdErr");
 }
 //---------------------------------------------------------------------------
 TTest_ASWLog_ConsoleLog::~TTest_ASWLog_ConsoleLog()
@@ -261,7 +239,7 @@ void TTest_ASWLog_ConsoleLog::TearDown_Test(ITestCase& /*testCase*/)
 // /////// Begin tests after this line ///////////////////////
 
 //---------------------------------------------------------------------------
-void TTest_ASWLog_ConsoleLog::Test_ColorModeAlways_WrapsOutputWithAnsiCodes()
+ASW_TEST(TTest_ASWLog_ConsoleLog, ColorModeAlways_WrapsOutputWithAnsiCodes)
 {
     // Arrange: the real stdout isn't a terminal under a test runner, so only Always colors it
     auto config = MakeQuietConfig();
@@ -280,7 +258,7 @@ void TTest_ASWLog_ConsoleLog::Test_ColorModeAlways_WrapsOutputWithAnsiCodes()
     CheckContains(outCapture.Str(), "\x1b[", "ColorMode::Always should wrap output with ANSI escape codes");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_ConsoleLog::Test_ColorModeAuto_ColorsOnlyStreamsThatSupportIt()
+ASW_TEST(TTest_ASWLog_ConsoleLog, ColorModeAuto_ColorsOnlyStreamsThatSupportIt)
 {
     // Arrange: stdout shows colors and stderr doesn't (e.g. stderr redirected to a file)
     TScopedEnvironmentVariable noColor("NO_COLOR", std::nullopt);
@@ -309,7 +287,7 @@ void TTest_ASWLog_ConsoleLog::Test_ColorModeAuto_ColorsOnlyStreamsThatSupportIt(
     CheckContains(errContents, "stderr_message", "The uncolored message should still be written");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_ConsoleLog::Test_ColorModeAuto_HonorsNoColor()
+ASW_TEST(TTest_ASWLog_ConsoleLog, ColorModeAuto_HonorsNoColor)
 {
     // Arrange: both streams show colors, but NO_COLOR asks for none
     TScopedEnvironmentVariable noColor("NO_COLOR", "1");
@@ -368,7 +346,7 @@ void TTest_ASWLog_ConsoleLog::Test_ColorModeAuto_HonorsNoColor()
     CheckContains(emptyContents, "\x1b[", "Auto should still color when NO_COLOR is set but empty");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_ConsoleLog::Test_ColorModeNever_SuppressesAnsiCodes()
+ASW_TEST(TTest_ASWLog_ConsoleLog, ColorModeNever_SuppressesAnsiCodes)
 {
     // Arrange: a stream that shows colors, so only Never can suppress them
     auto config = MakeQuietConfig();
@@ -391,7 +369,7 @@ void TTest_ASWLog_ConsoleLog::Test_ColorModeNever_SuppressesAnsiCodes()
     CheckContains(contents, "plain_message", "The message should still be written");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_ConsoleLog::Test_Flush_FlushesStdOutAndStdErrWhileOpen()
+ASW_TEST(TTest_ASWLog_ConsoleLog, Flush_FlushesStdOutAndStdErrWhileOpen)
 {
     // Arrange
     ASWLog::TASWConsoleLog consoleLog;
@@ -428,7 +406,7 @@ void TTest_ASWLog_ConsoleLog::Test_Flush_FlushesStdOutAndStdErrWhileOpen()
     CheckFalse(flushedWhileClosed, "Flush() should return false while the logger is closed");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_ConsoleLog::Test_GetColorMode_ReflectsSetColorMode()
+ASW_TEST(TTest_ASWLog_ConsoleLog, GetColorMode_ReflectsSetColorMode)
 {
     // Arrange
     ASWLog::TASWConsoleLog logger;
@@ -447,7 +425,7 @@ void TTest_ASWLog_ConsoleLog::Test_GetColorMode_ReflectsSetColorMode()
     CheckEquals(ASWLog::ColorMode::Auto, logger.GetColorMode(), "SetColorMode(Auto) should be reflected by GetColorMode()");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_ConsoleLog::Test_GetInstance_ReturnsSameInstance()
+ASW_TEST(TTest_ASWLog_ConsoleLog, GetInstance_ReturnsSameInstance)
 {
     // Act
     auto& first = ASWLog::TASWConsoleLog::GetInstance();
@@ -457,7 +435,7 @@ void TTest_ASWLog_ConsoleLog::Test_GetInstance_ReturnsSameInstance()
     CheckSame(&first, &second, "GetInstance should return the same logger on every call");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_ConsoleLog::Test_GetLevelColor_OffHasNoColor()
+ASW_TEST(TTest_ASWLog_ConsoleLog, GetLevelColor_OffHasNoColor)
 {
     // Arrange
     ASWLog::TASWConsoleLog logger;
@@ -474,7 +452,7 @@ void TTest_ASWLog_ConsoleLog::Test_GetLevelColor_OffHasNoColor()
         "Setting or resetting Off's color should not change another level's color");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_ConsoleLog::Test_Initialize_SuppressesInfoBannersBelowMinimumLevel()
+ASW_TEST(TTest_ASWLog_ConsoleLog, Initialize_SuppressesInfoBannersBelowMinimumLevel)
 {
     // Arrange
     ASWLog::TASWLogConfig config;
@@ -509,7 +487,7 @@ void TTest_ASWLog_ConsoleLog::Test_Initialize_SuppressesInfoBannersBelowMinimumL
     CheckContains(errContents, "this_error_should_appear", "Messages at or above InitialMinimumLevel should still be written");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_ConsoleLog::Test_Initialize_WritesDriveInfoWhenEnabled()
+ASW_TEST(TTest_ASWLog_ConsoleLog, Initialize_WritesDriveInfoWhenEnabled)
 {
     // Arrange
     auto config = MakeQuietConfig();
@@ -528,7 +506,7 @@ void TTest_ASWLog_ConsoleLog::Test_Initialize_WritesDriveInfoWhenEnabled()
     CheckContains(outCapture.Str(), "Drive:", "Startup.WriteDriveInfo should write disk space diagnostics to the console when enabled");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_ConsoleLog::Test_IsColorSupported_ReflectsDetectedStreams()
+ASW_TEST(TTest_ASWLog_ConsoleLog, IsColorSupported_ReflectsDetectedStreams)
 {
     // Arrange
     auto config = MakeQuietConfig();
@@ -553,7 +531,7 @@ void TTest_ASWLog_ConsoleLog::Test_IsColorSupported_ReflectsDetectedStreams()
     CheckTrue(stdErrOnlyLogger.IsColorSupported(), "IsColorSupported should be true when either stream shows colors");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_ConsoleLog::Test_LogLineMetadata_Options()
+ASW_TEST(TTest_ASWLog_ConsoleLog, LogLineMetadata_Options)
 {
     // Arrange
     auto config = MakeQuietConfig();
@@ -585,7 +563,7 @@ void TTest_ASWLog_ConsoleLog::Test_LogLineMetadata_Options()
     CheckContains(contents, "metadata_message", "Metadata log line should still contain the message");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_ConsoleLog::Test_LogProcessAndThreadIds_AreOSIds()
+ASW_TEST(TTest_ASWLog_ConsoleLog, LogProcessAndThreadIds_AreOSIds)
 {
     // Arrange
     auto config = MakeQuietConfig();
@@ -622,7 +600,7 @@ void TTest_ASWLog_ConsoleLog::Test_LogProcessAndThreadIds_AreOSIds()
     CheckContains(contents, processTag + "[T:" + std::to_string(workerThreadId) + "]: worker_thread_entry", "An entry from another thread should show that thread's OS thread id");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_ConsoleLog::Test_LogRawAndForceOptions()
+ASW_TEST(TTest_ASWLog_ConsoleLog, LogRawAndForceOptions)
 {
     // Arrange
     auto config = MakeQuietConfig();
@@ -649,7 +627,7 @@ void TTest_ASWLog_ConsoleLog::Test_LogRawAndForceOptions()
     CheckNotContains(errContents, "raw_force_message\n", "LogForceRaw should not append a trailing newline");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_ConsoleLog::Test_LogRespectsMinimumLevel()
+ASW_TEST(TTest_ASWLog_ConsoleLog, LogRespectsMinimumLevel)
 {
     // Arrange
     auto config = MakeQuietConfig();
@@ -674,7 +652,7 @@ void TTest_ASWLog_ConsoleLog::Test_LogRespectsMinimumLevel()
     CheckContains(errCapture.Str(), "allowed_message", "Log should write a message at or above the minimum level");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_ConsoleLog::Test_OnError_ReportsOnlyTheWriteThatFailedTheStream()
+ASW_TEST(TTest_ASWLog_ConsoleLog, OnError_ReportsOnlyTheWriteThatFailedTheStream)
 {
     // Arrange
     auto config = MakeQuietConfig();
@@ -708,7 +686,7 @@ void TTest_ASWLog_ConsoleLog::Test_OnError_ReportsOnlyTheWriteThatFailedTheStrea
     CheckEquals(std::string("Couldn't write to stdout"), reports[0].Message, "The report should name the stream");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_ConsoleLog::Test_OnLogEntry_FiresForQualifyingLevelsOnly()
+ASW_TEST(TTest_ASWLog_ConsoleLog, OnLogEntry_FiresForQualifyingLevelsOnly)
 {
     // Arrange
     auto config = MakeQuietConfig();
@@ -738,7 +716,7 @@ void TTest_ASWLog_ConsoleLog::Test_OnLogEntry_FiresForQualifyingLevelsOnly()
         CheckContains(callbackMessages[0], "above_threshold", "Callback should receive the same formatted line written to the console");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_ConsoleLog::Test_ResetLevelColor_RestoresDefault()
+ASW_TEST(TTest_ASWLog_ConsoleLog, ResetLevelColor_RestoresDefault)
 {
     // Arrange
     ASWLog::TASWConsoleLog logger;
@@ -754,7 +732,7 @@ void TTest_ASWLog_ConsoleLog::Test_ResetLevelColor_RestoresDefault()
     CheckEquals(defaultInfoColor, restoredColor, "ResetLevelColor should restore the level's built-in default color");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_ConsoleLog::Test_ResetLevelColors_RestoresAllDefaults()
+ASW_TEST(TTest_ASWLog_ConsoleLog, ResetLevelColors_RestoresAllDefaults)
 {
     // Arrange
     ASWLog::TASWConsoleLog logger;
@@ -772,7 +750,7 @@ void TTest_ASWLog_ConsoleLog::Test_ResetLevelColors_RestoresAllDefaults()
     CheckEquals(defaultErrorColor, logger.GetLevelColor(ASWLog::Level::Error), "ResetLevelColors should restore Error's default color");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_ConsoleLog::Test_SetLevelColor_EmptyStringDisablesColorForLevel()
+ASW_TEST(TTest_ASWLog_ConsoleLog, SetLevelColor_EmptyStringDisablesColorForLevel)
 {
     // Arrange
     auto config = MakeQuietConfig();
@@ -795,7 +773,7 @@ void TTest_ASWLog_ConsoleLog::Test_SetLevelColor_EmptyStringDisablesColorForLeve
     CheckContains(contents, "uncolored_message", "The message should still be written");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_ConsoleLog::Test_SetLevelColor_OverridesDefaultColor()
+ASW_TEST(TTest_ASWLog_ConsoleLog, SetLevelColor_OverridesDefaultColor)
 {
     // Arrange
     auto config = MakeQuietConfig();
@@ -825,7 +803,7 @@ void TTest_ASWLog_ConsoleLog::Test_SetLevelColor_OverridesDefaultColor()
     CheckNotContains(contents, defaultInfoColor, "The default color should no longer appear for Info once overridden");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_ConsoleLog::Test_WarnAndAboveWriteToStdErr()
+ASW_TEST(TTest_ASWLog_ConsoleLog, WarnAndAboveWriteToStdErr)
 {
     // Arrange
     auto config = MakeQuietConfig();

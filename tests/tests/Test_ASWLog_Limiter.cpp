@@ -122,16 +122,6 @@ void LogRetry(ASWLog::IASWLog& log, int attempt)
 TTest_ASWLog_Limiter::TTest_ASWLog_Limiter()
     : inherited("ASWLog_Limiter_Tests")
 {
-    RegisterTest(&TTest_ASWLog_Limiter::Test_EveryInterval_AllowsOneCallPerInterval, "EveryInterval_AllowsOneCallPerInterval");
-    RegisterTest(&TTest_ASWLog_Limiter::Test_EveryInterval_HandlesTheLongestInterval, "EveryInterval_HandlesTheLongestInterval");
-    RegisterTest(&TTest_ASWLog_Limiter::Test_EveryInterval_ZeroAllowsEveryCall, "EveryInterval_ZeroAllowsEveryCall");
-    RegisterTest(&TTest_ASWLog_Limiter::Test_EveryN_AllowsEveryNthCall, "EveryN_AllowsEveryNthCall");
-    RegisterTest(&TTest_ASWLog_Limiter::Test_Macros_EveryIntervalAddsTheSuppressedField, "Macros_EveryIntervalAddsTheSuppressedField");
-    RegisterTest(&TTest_ASWLog_Limiter::Test_Macros_EveryNCountsOnlyEntriesThatWouldBeWritten, "Macros_EveryNCountsOnlyEntriesThatWouldBeWritten");
-    RegisterTest(&TTest_ASWLog_Limiter::Test_Macros_KeepTheCallersSourceLocation, "Macros_KeepTheCallersSourceLocation");
-    RegisterTest(&TTest_ASWLog_Limiter::Test_Macros_OnceLogsTheFirstEntryThatWouldBeWritten, "Macros_OnceLogsTheFirstEntryThatWouldBeWritten");
-    RegisterTest(&TTest_ASWLog_Limiter::Test_Once_AllowsOnlyTheFirstCall, "Once_AllowsOnlyTheFirstCall");
-    RegisterTest(&TTest_ASWLog_Limiter::Test_Threads_AllowExactlyTheLimitedCalls, "Threads_AllowExactlyTheLimitedCalls");
 }
 //---------------------------------------------------------------------------
 TTest_ASWLog_Limiter::~TTest_ASWLog_Limiter()
@@ -159,7 +149,7 @@ void TTest_ASWLog_Limiter::TearDown_Test(ITestCase& /*testCase*/)
 // /////// Begin tests after this line ///////////////////////
 
 //---------------------------------------------------------------------------
-void TTest_ASWLog_Limiter::Test_EveryInterval_AllowsOneCallPerInterval()
+ASW_TEST(TTest_ASWLog_Limiter, EveryInterval_AllowsOneCallPerInterval)
 {
     // Arrange
     auto limiter = ASWLog::TASWLogLimiter::EveryInterval(5s);
@@ -187,7 +177,7 @@ void TTest_ASWLog_Limiter::Test_EveryInterval_AllowsOneCallPerInterval()
     CheckEquals(1, refused[6], "The count should start again after each allowed call");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_Limiter::Test_EveryInterval_HandlesTheLongestInterval()
+ASW_TEST(TTest_ASWLog_Limiter, EveryInterval_HandlesTheLongestInterval)
 {
     // Arrange: the time after the allowed call would overflow the clock's ticks
     auto limiter = ASWLog::TASWLogLimiter::EveryInterval(std::chrono::steady_clock::duration::max());
@@ -203,7 +193,7 @@ void TTest_ASWLog_Limiter::Test_EveryInterval_HandlesTheLongestInterval()
     CheckFalse(later, "A call within the (longest) interval should be refused, not allowed by a wrapped time");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_Limiter::Test_EveryInterval_ZeroAllowsEveryCall()
+ASW_TEST(TTest_ASWLog_Limiter, EveryInterval_ZeroAllowsEveryCall)
 {
     // Arrange
     auto zero = ASWLog::TASWLogLimiter::EveryInterval(0s);
@@ -220,7 +210,7 @@ void TTest_ASWLog_Limiter::Test_EveryInterval_ZeroAllowsEveryCall()
     CheckEquals(6, allowed, "An interval of 0 or less should allow every call");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_Limiter::Test_EveryN_AllowsEveryNthCall()
+ASW_TEST(TTest_ASWLog_Limiter, EveryN_AllowsEveryNthCall)
 {
     // Arrange
     auto everyThird = ASWLog::TASWLogLimiter::EveryN(3);
@@ -249,7 +239,7 @@ void TTest_ASWLog_Limiter::Test_EveryN_AllowsEveryNthCall()
     CheckEquals(8, zerothAllowed, "An n of 0 should allow every call");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_Limiter::Test_Macros_EveryIntervalAddsTheSuppressedField()
+ASW_TEST(TTest_ASWLog_Limiter, Macros_EveryIntervalAddsTheSuppressedField)
 {
     // The call site's limiter lasts for the process
     static int runCount = 0;
@@ -275,7 +265,7 @@ void TTest_ASWLog_Limiter::Test_Macros_EveryIntervalAddsTheSuppressedField()
         "The next entry should say how many calls were skipped, with the call's own fields");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_Limiter::Test_Macros_EveryNCountsOnlyEntriesThatWouldBeWritten()
+ASW_TEST(TTest_ASWLog_Limiter, Macros_EveryNCountsOnlyEntriesThatWouldBeWritten)
 {
     static int runCount = 0;
     if (runCount++ > 0)
@@ -300,7 +290,7 @@ void TTest_ASWLog_Limiter::Test_Macros_EveryNCountsOnlyEntriesThatWouldBeWritten
     CheckEquals(std::string("[INFO]: Item 9"), lines[2], "Then the 9th");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_Limiter::Test_Macros_KeepTheCallersSourceLocation()
+ASW_TEST(TTest_ASWLog_Limiter, Macros_KeepTheCallersSourceLocation)
 {
     // Arrange
     ASWLog::TASWMemoryLog log;
@@ -323,7 +313,7 @@ void TTest_ASWLog_Limiter::Test_Macros_KeepTheCallersSourceLocation()
     CheckEndsWith(std::string(location->file_name()), "Test_ASWLog_Limiter.cpp", "The entry should have the calling file");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_Limiter::Test_Macros_OnceLogsTheFirstEntryThatWouldBeWritten()
+ASW_TEST(TTest_ASWLog_Limiter, Macros_OnceLogsTheFirstEntryThatWouldBeWritten)
 {
     static int runCount = 0;
     if (runCount++ > 0)
@@ -349,7 +339,7 @@ void TTest_ASWLog_Limiter::Test_Macros_OnceLogsTheFirstEntryThatWouldBeWritten()
     CheckEquals(1, LimiterFormatCount, "Only the written entry's arguments should be formatted");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_Limiter::Test_Once_AllowsOnlyTheFirstCall()
+ASW_TEST(TTest_ASWLog_Limiter, Once_AllowsOnlyTheFirstCall)
 {
     // Arrange
     auto limiter = ASWLog::TASWLogLimiter::Once();
@@ -368,7 +358,7 @@ void TTest_ASWLog_Limiter::Test_Once_AllowsOnlyTheFirstCall()
     CheckEquals(0, refused, "A refused call should get a count of 0");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_Limiter::Test_Threads_AllowExactlyTheLimitedCalls()
+ASW_TEST(TTest_ASWLog_Limiter, Threads_AllowExactlyTheLimitedCalls)
 {
     // Arrange: threads sharing each kind of limiter (also for ThreadSanitizer), EveryInterval at one fixed time
     constexpr int ThreadCount = 8;

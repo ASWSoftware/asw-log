@@ -307,18 +307,6 @@ std::wstring ToWideString(char32_t value)
 TTest_ASWLog_Unicode::TTest_ASWLog_Unicode()
     : inherited("ASWLog_Unicode_Tests")
 {
-    RegisterTest(&TTest_ASWLog_Unicode::Test_Formatters_ConvertTheWrappedText, "Formatters_ConvertTheWrappedText");
-    RegisterTest(&TTest_ASWLog_Unicode::Test_LogFmt_NarrowFormatTakesWideArguments, "LogFmt_NarrowFormatTakesWideArguments");
-    RegisterTest(&TTest_ASWLog_Unicode::Test_LogFmt_WideFormatSkipsFilteredEntries, "LogFmt_WideFormatSkipsFilteredEntries");
-    RegisterTest(&TTest_ASWLog_Unicode::Test_LogFmt_WideFormatWritesUTF8, "LogFmt_WideFormatWritesUTF8");
-    RegisterTest(&TTest_ASWLog_Unicode::Test_LogWide_ConvertsOnlyEntriesThatAreUsed, "LogWide_ConvertsOnlyEntriesThatAreUsed");
-    RegisterTest(&TTest_ASWLog_Unicode::Test_LogWide_EachMethodWritesUTF8, "LogWide_EachMethodWritesUTF8");
-    RegisterTest(&TTest_ASWLog_Unicode::Test_LogWide_WritesThroughARealLogger, "LogWide_WritesThroughARealLogger");
-    RegisterTest(&TTest_ASWLog_Unicode::Test_RoundTrip_KeepsEveryCharacter, "RoundTrip_KeepsEveryCharacter");
-    RegisterTest(&TTest_ASWLog_Unicode::Test_UTF8ToUTF16_ReplacesInvalidSequences, "UTF8ToUTF16_ReplacesInvalidSequences");
-    RegisterTest(&TTest_ASWLog_Unicode::Test_UTF8ToWide_FollowsTheWidthOfWchar, "UTF8ToWide_FollowsTheWidthOfWchar");
-    RegisterTest(&TTest_ASWLog_Unicode::Test_WideText_TakesEachKindOfText, "WideText_TakesEachKindOfText");
-    RegisterTest(&TTest_ASWLog_Unicode::Test_WideToUTF8_ReplacesWhatIsNotACharacter, "WideToUTF8_ReplacesWhatIsNotACharacter");
 }
 //---------------------------------------------------------------------------
 TTest_ASWLog_Unicode::~TTest_ASWLog_Unicode()
@@ -345,7 +333,7 @@ void TTest_ASWLog_Unicode::TearDown_Test(ITestCase& /*testCase*/)
 // /////// Begin tests after this line ///////////////////////
 
 //---------------------------------------------------------------------------
-void TTest_ASWLog_Unicode::Test_Formatters_ConvertTheWrappedText()
+ASW_TEST(TTest_ASWLog_Unicode, Formatters_ConvertTheWrappedText)
 {
     // Arrange
     const std::wstring wideEmoji = ToWideString(0x1F600);
@@ -369,7 +357,7 @@ void TTest_ASWLog_Unicode::Test_Formatters_ConvertTheWrappedText()
     CheckTrue(wideWide == L"[x]", "Wide() should format wchar_t text as it is in a wide format");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_Unicode::Test_LogFmt_NarrowFormatTakesWideArguments()
+ASW_TEST(TTest_ASWLog_Unicode, LogFmt_NarrowFormatTakesWideArguments)
 {
     // Arrange
     TCountingLog log;
@@ -385,7 +373,7 @@ void TTest_ASWLog_Unicode::Test_LogFmt_NarrowFormatTakesWideArguments()
         }), "Each call should pass on one entry with its level, flags, fields and UTF-8 message");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_Unicode::Test_LogFmt_WideFormatSkipsFilteredEntries()
+ASW_TEST(TTest_ASWLog_Unicode, LogFmt_WideFormatSkipsFilteredEntries)
 {
     // Arrange
     TCountingLog log;
@@ -416,7 +404,7 @@ void TTest_ASWLog_Unicode::Test_LogFmt_WideFormatSkipsFilteredEntries()
     CheckEquals(3, log.Entries.size(), "Only the used entries should be kept");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_Unicode::Test_LogFmt_WideFormatWritesUTF8()
+ASW_TEST(TTest_ASWLog_Unicode, LogFmt_WideFormatWritesUTF8)
 {
     // Arrange
     const std::wstring runtimeFormat = L"{} {}";
@@ -489,7 +477,7 @@ void TTest_ASWLog_Unicode::Test_LogFmt_WideFormatWritesUTF8()
     }
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_Unicode::Test_LogWide_ConvertsOnlyEntriesThatAreUsed()
+ASW_TEST(TTest_ASWLog_Unicode, LogWide_ConvertsOnlyEntriesThatAreUsed)
 {
     // Arrange
     TCountingLog log;
@@ -518,7 +506,7 @@ void TTest_ASWLog_Unicode::Test_LogWide_ConvertsOnlyEntriesThatAreUsed()
     CheckEquals(2, log.Entries.size(), "The used entries should be kept");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_Unicode::Test_LogWide_EachMethodWritesUTF8()
+ASW_TEST(TTest_ASWLog_Unicode, LogWide_EachMethodWritesUTF8)
 {
     // Arrange
     TCountingLog log;
@@ -580,7 +568,7 @@ void TTest_ASWLog_Unicode::Test_LogWide_EachMethodWritesUTF8()
     }
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_Unicode::Test_LogWide_WritesThroughARealLogger()
+ASW_TEST(TTest_ASWLog_Unicode, LogWide_WritesThroughARealLogger)
 {
     // Arrange
     ASWLog::TASWMemoryLog log;
@@ -600,7 +588,7 @@ void TTest_ASWLog_Unicode::Test_LogWide_WritesThroughARealLogger()
         CheckEquals(expected[index], lines[index], "The line should hold the message in UTF-8");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_Unicode::Test_RoundTrip_KeepsEveryCharacter()
+ASW_TEST(TTest_ASWLog_Unicode, RoundTrip_KeepsEveryCharacter)
 {
     // Arrange: the first and last characters of each UTF-8 length, around the surrogates, and the largest
     const std::vector<TCodePoint> codePoints{
@@ -629,7 +617,7 @@ void TTest_ASWLog_Unicode::Test_RoundTrip_KeepsEveryCharacter()
     }
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_Unicode::Test_UTF8ToUTF16_ReplacesInvalidSequences()
+ASW_TEST(TTest_ASWLog_Unicode, UTF8ToUTF16_ReplacesInvalidSequences)
 {
     // Arrange: valid text, then invalid sequences, each replaced by one U+FFFD per longest start of a valid sequence
     struct TCase
@@ -661,7 +649,7 @@ void TTest_ASWLog_Unicode::Test_UTF8ToUTF16_ReplacesInvalidSequences()
     }
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_Unicode::Test_UTF8ToWide_FollowsTheWidthOfWchar()
+ASW_TEST(TTest_ASWLog_Unicode, UTF8ToWide_FollowsTheWidthOfWchar)
 {
     // Arrange
     const std::wstring expected = std::wstring(L"a") + ToWideString(0x1F600) + ToWideString(0xFFFD);
@@ -675,7 +663,7 @@ void TTest_ASWLog_Unicode::Test_UTF8ToWide_FollowsTheWidthOfWchar()
         "wchar_t where it has 16 bits, else one");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_Unicode::Test_WideText_TakesEachKindOfText()
+ASW_TEST(TTest_ASWLog_Unicode, WideText_TakesEachKindOfText)
 {
     // Arrange
     const auto toUTF8 = [](ASWLog::TASWWideText text)
@@ -706,7 +694,7 @@ void TTest_ASWLog_Unicode::Test_WideText_TakesEachKindOfText()
         "An unpaired surrogate should stay where wchar_t has 16 bits, and become U+FFFD where it has 32");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_Unicode::Test_WideToUTF8_ReplacesWhatIsNotACharacter()
+ASW_TEST(TTest_ASWLog_Unicode, WideToUTF8_ReplacesWhatIsNotACharacter)
 {
     // Arrange: UTF-16 with unpaired surrogates
     struct TCase

@@ -81,21 +81,6 @@ std::string TestVariable(std::string_view key)
 TTest_ASWLog_Config::TTest_ASWLog_Config()
     : inherited("ASWLog_Config_Tests")
 {
-    RegisterTest(&TTest_ASWLog_Config::Test_ApplyEnvironment_AppliesPatternAfterFormat, "ApplyEnvironment_AppliesPatternAfterFormat");
-    RegisterTest(&TTest_ASWLog_Config::Test_ApplyEnvironment_AppliesTheCategoryLevels, "ApplyEnvironment_AppliesTheCategoryLevels");
-    RegisterTest(&TTest_ASWLog_Config::Test_ApplyEnvironment_IgnoresUnsetAndEmptyVariables, "ApplyEnvironment_IgnoresUnsetAndEmptyVariables");
-    RegisterTest(&TTest_ASWLog_Config::Test_ApplyEnvironment_ReadsTheDefaultPrefix, "ApplyEnvironment_ReadsTheDefaultPrefix");
-    RegisterTest(&TTest_ASWLog_Config::Test_ApplyEnvironment_ReadsUTF8Values, "ApplyEnvironment_ReadsUTF8Values");
-    RegisterTest(&TTest_ASWLog_Config::Test_ApplyEnvironment_ReportsInvalidValues, "ApplyEnvironment_ReportsInvalidValues");
-    RegisterTest(&TTest_ASWLog_Config::Test_ApplyEnvironment_SeedsTheLevelAtInitialize, "ApplyEnvironment_SeedsTheLevelAtInitialize");
-    RegisterTest(&TTest_ASWLog_Config::Test_ApplyEnvironment_SetsEachKey, "ApplyEnvironment_SetsEachKey");
-    RegisterTest(&TTest_ASWLog_Config::Test_ApplySetting_ReportsAnUnknownKey, "ApplySetting_ReportsAnUnknownKey");
-    RegisterTest(&TTest_ASWLog_Config::Test_ApplySetting_SetsOneSetting, "ApplySetting_SetsOneSetting");
-    RegisterTest(&TTest_ASWLog_Config::Test_ApplySetting_WritesToStdErrWithoutHandler, "ApplySetting_WritesToStdErrWithoutHandler");
-    RegisterTest(&TTest_ASWLog_Config::Test_Defaults_MatchDocumentedValues, "Defaults_MatchDocumentedValues");
-    RegisterTest(&TTest_ASWLog_Config::Test_ResolveFolder_CustomFolder, "ResolveFolder_CustomFolder");
-    RegisterTest(&TTest_ASWLog_Config::Test_ResolvePath_AbsolutePath, "ResolvePath_AbsolutePath");
-    RegisterTest(&TTest_ASWLog_Config::Test_ResolvePath_Defaults, "ResolvePath_Defaults");
 }
 //---------------------------------------------------------------------------
 TTest_ASWLog_Config::~TTest_ASWLog_Config()
@@ -122,7 +107,7 @@ void TTest_ASWLog_Config::TearDown_Test(ITestCase& /*testCase*/)
 // /////// Begin tests after this line ///////////////////////
 
 //---------------------------------------------------------------------------
-void TTest_ASWLog_Config::Test_ApplyEnvironment_AppliesPatternAfterFormat()
+ASW_TEST(TTest_ASWLog_Config, ApplyEnvironment_AppliesPatternAfterFormat)
 {
     // Arrange
     TScopedEnvironmentVariable format(TestVariable("FORMAT"), "JSON");
@@ -151,7 +136,7 @@ void TTest_ASWLog_Config::Test_ApplyEnvironment_AppliesPatternAfterFormat()
     CheckNull(config.Line.Formatter, "FORMAT=Text should clear the formatter (the built-in layout)");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_Config::Test_ApplyEnvironment_AppliesTheCategoryLevels()
+ASW_TEST(TTest_ASWLog_Config, ApplyEnvironment_AppliesTheCategoryLevels)
 {
     // Arrange
     TCategoryLevelsReset resetLevels;
@@ -188,7 +173,7 @@ void TTest_ASWLog_Config::Test_ApplyEnvironment_AppliesTheCategoryLevels()
     }
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_Config::Test_ApplyEnvironment_IgnoresUnsetAndEmptyVariables()
+ASW_TEST(TTest_ASWLog_Config, ApplyEnvironment_IgnoresUnsetAndEmptyVariables)
 {
     // Arrange: LEVEL empty, FLUSH only spaces, the rest unset
     TScopedEnvironmentVariable level(TestVariable("LEVEL"), "");
@@ -218,7 +203,7 @@ void TTest_ASWLog_Config::Test_ApplyEnvironment_IgnoresUnsetAndEmptyVariables()
     CheckSame(formatter.get(), config.Line.Formatter.get(), "Unset FORMAT and PATTERN should leave the formatter");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_Config::Test_ApplyEnvironment_ReadsTheDefaultPrefix()
+ASW_TEST(TTest_ASWLog_Config, ApplyEnvironment_ReadsTheDefaultPrefix)
 {
     // Arrange: a developer's own ASWLOG_CATEGORIES must not change the process's category levels
     TScopedEnvironmentVariable categories("ASWLOG_CATEGORIES", std::nullopt);
@@ -240,7 +225,7 @@ void TTest_ASWLog_Config::Test_ApplyEnvironment_ReadsTheDefaultPrefix()
         "Another prefix should not read the ASWLOG_ variables");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_Config::Test_ApplyEnvironment_ReadsUTF8Values()
+ASW_TEST(TTest_ASWLog_Config, ApplyEnvironment_ReadsUTF8Values)
 {
     // Arrange: a lambda and a CJK character, in UTF-8
     TScopedEnvironmentVariable folder(TestVariable("FOLDER"), "logs\xCE\xBB");
@@ -260,7 +245,7 @@ void TTest_ASWLog_Config::Test_ApplyEnvironment_ReadsUTF8Values()
 #endif
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_Config::Test_ApplyEnvironment_ReportsInvalidValues()
+ASW_TEST(TTest_ASWLog_Config, ApplyEnvironment_ReportsInvalidValues)
 {
     // Arrange: every key but FOLDER invalid
     TScopedEnvironmentVariable level(TestVariable("LEVEL"), "Verbose");
@@ -330,7 +315,7 @@ void TTest_ASWLog_Config::Test_ApplyEnvironment_ReportsInvalidValues()
         CheckContains(errors.back().Message, "nope", "The PATTERN report should give the pattern's problem");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_Config::Test_ApplyEnvironment_SeedsTheLevelAtInitialize()
+ASW_TEST(TTest_ASWLog_Config, ApplyEnvironment_SeedsTheLevelAtInitialize)
 {
     // Arrange
     TScopedEnvironmentVariable level(TestVariable("LEVEL"), "Debug");
@@ -360,7 +345,7 @@ void TTest_ASWLog_Config::Test_ApplyEnvironment_SeedsTheLevelAtInitialize()
         CheckContains(lines[0], "debug entry", "The Debug entry should be written");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_Config::Test_ApplyEnvironment_SetsEachKey()
+ASW_TEST(TTest_ASWLog_Config, ApplyEnvironment_SetsEachKey)
 {
     // Arrange: mixed case and spaces around the values
     TScopedEnvironmentVariable level(TestVariable("LEVEL"), " debug ");
@@ -405,7 +390,7 @@ void TTest_ASWLog_Config::Test_ApplyEnvironment_SetsEachKey()
     CheckNotNull(dynamic_cast<const ASWLog::TASWJSONFormatter*>(config.Line.Formatter.get()), "FORMAT=json should set a JSON formatter");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_Config::Test_ApplySetting_ReportsAnUnknownKey()
+ASW_TEST(TTest_ASWLog_Config, ApplySetting_ReportsAnUnknownKey)
 {
     // Arrange
     std::vector<ASWLog::TASWLogError> errors;
@@ -434,7 +419,7 @@ void TTest_ASWLog_Config::Test_ApplySetting_ReportsAnUnknownKey()
     }
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_Config::Test_ApplySetting_SetsOneSetting()
+ASW_TEST(TTest_ASWLog_Config, ApplySetting_SetsOneSetting)
 {
     // Arrange
     std::vector<ASWLog::TASWLogError> errors;
@@ -478,7 +463,7 @@ void TTest_ASWLog_Config::Test_ApplySetting_SetsOneSetting()
     CheckEquals(6, errors.size(), "Only the invalid BACKTRACE values should be reported");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_Config::Test_ApplySetting_WritesToStdErrWithoutHandler()
+ASW_TEST(TTest_ASWLog_Config, ApplySetting_WritesToStdErrWithoutHandler)
 {
     // Arrange
     const auto stdErrFile = std::filesystem::temp_directory_path() / "aswlog_config_stderr.txt";
@@ -516,7 +501,7 @@ void TTest_ASWLog_Config::Test_ApplySetting_WritesToStdErrWithoutHandler()
         written, "Without OnError, an invalid value should be written to stderr as one line");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_Config::Test_Defaults_MatchDocumentedValues()
+ASW_TEST(TTest_ASWLog_Config, Defaults_MatchDocumentedValues)
 {
     // Arrange / Act
     const ASWLog::TASWLogConfig config;
@@ -597,7 +582,7 @@ void TTest_ASWLog_Config::Test_Defaults_MatchDocumentedValues()
     CheckEquals(0, config.File.MaxBackupTotalBytes, "File.MaxBackupTotalBytes should default to 0 (unlimited)");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_Config::Test_ResolveFolder_CustomFolder()
+ASW_TEST(TTest_ASWLog_Config, ResolveFolder_CustomFolder)
 {
     // Arrange
     const auto expectedDir = std::filesystem::path("custom") / "logs";
@@ -620,7 +605,7 @@ void TTest_ASWLog_Config::Test_ResolveFolder_CustomFolder()
 #endif
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_Config::Test_ResolvePath_AbsolutePath()
+ASW_TEST(TTest_ASWLog_Config, ResolvePath_AbsolutePath)
 {
     // Arrange
     const auto absolutePath = std::filesystem::absolute(std::filesystem::path("custom.log")).lexically_normal();
@@ -636,7 +621,7 @@ void TTest_ASWLog_Config::Test_ResolvePath_AbsolutePath()
     CheckTrue(resolvedPath == absolutePath, "Absolute log file paths should be preserved");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_Config::Test_ResolvePath_Defaults()
+ASW_TEST(TTest_ASWLog_Config, ResolvePath_Defaults)
 {
     // Arrange
     const auto expectedPath = (std::filesystem::path("logs") / std::filesystem::path("aswlog.txt")).lexically_normal();

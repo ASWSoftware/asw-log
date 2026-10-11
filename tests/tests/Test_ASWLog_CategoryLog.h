@@ -32,12 +32,12 @@ namespace ASWUnitTests
 ///////////////////////////////////////////////////////////////////////////
 // TTest_ASWLog_CategoryLog
 ///////////////////////////////////////////////////////////////////////////
-class TTest_ASWLog_CategoryLog : public TTestGroupBase
+class TTest_ASWLog_CategoryLog : public TAutoTestGroup<TTest_ASWLog_CategoryLog>
 {
 private:
-    typedef TTestGroupBase inherited;
+    typedef TAutoTestGroup<TTest_ASWLog_CategoryLog> inherited;
 
-private: // Test methods
+public: // Test methods, each defined with ASW_TEST
     void Test_ApplyLevels_AppliesToCategoriesMadeLater();
     void Test_ApplyLevels_GivesTheLongestCoveringNamesLevel();
     void Test_ApplyLevels_IsSafeWhileCategoriesComeAndGo();

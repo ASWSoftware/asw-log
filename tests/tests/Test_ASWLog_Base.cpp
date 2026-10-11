@@ -223,39 +223,6 @@ ASWLog::TASWLogConfig MakeBacktraceConfig(std::size_t capacity, ASWLog::Level lo
 TTest_ASWLog_Base::TTest_ASWLog_Base()
     : inherited("ASWLog_Base_Tests")
 {
-    RegisterTest(&TTest_ASWLog_Base::Test_Backtrace_CapacityKeepsTheNewest, "Backtrace_CapacityKeepsTheNewest");
-    RegisterTest(&TTest_ASWLog_Base::Test_Backtrace_DisabledLoggerKeepsAndWritesNothing, "Backtrace_DisabledLoggerKeepsAndWritesNothing");
-    RegisterTest(&TTest_ASWLog_Base::Test_Backtrace_DumpAtLevelOffWritesOnlyOnRequest, "Backtrace_DumpAtLevelOffWritesOnlyOnRequest");
-    RegisterTest(&TTest_ASWLog_Base::Test_Backtrace_KeptEntriesAreWrittenBeforeTheTrigger, "Backtrace_KeptEntriesAreWrittenBeforeTheTrigger");
-    RegisterTest(&TTest_ASWLog_Base::Test_Backtrace_MinimumLevelChangesKeepTheBacktrace, "Backtrace_MinimumLevelChangesKeepTheBacktrace");
-    RegisterTest(&TTest_ASWLog_Base::Test_Backtrace_OffKeepsNothing, "Backtrace_OffKeepsNothing");
-    RegisterTest(&TTest_ASWLog_Base::Test_Backtrace_ReconfigureResizesKeepingTheNewest, "Backtrace_ReconfigureResizesKeepingTheNewest");
-    RegisterTest(&TTest_ASWLog_Base::Test_Backtrace_ShouldLogAndFmtIncludeKeptLevels, "Backtrace_ShouldLogAndFmtIncludeKeptLevels");
-    RegisterTest(&TTest_ASWLog_Base::Test_GetConfig_ReturnsUnchangingSnapshot, "GetConfig_ReturnsUnchangingSnapshot");
-    RegisterTest(&TTest_ASWLog_Base::Test_GetFullVersionStr_ContainsVersion, "GetFullVersionStr_ContainsVersion");
-    RegisterTest(&TTest_ASWLog_Base::Test_Interface_MethodsAreNoexcept, "Interface_MethodsAreNoexcept");
-    RegisterTest(&TTest_ASWLog_Base::Test_LogFormatMethods_AcceptEveryArgumentKind, "LogFormatMethods_AcceptEveryArgumentKind");
-    RegisterTest(&TTest_ASWLog_Base::Test_LogFormatMethods_LogErrorInsteadOfThrowing, "LogFormatMethods_LogErrorInsteadOfThrowing");
-    RegisterTest(&TTest_ASWLog_Base::Test_LogFormatMethods_PassCallerLocation, "LogFormatMethods_PassCallerLocation");
-    RegisterTest(&TTest_ASWLog_Base::Test_LogFormatMethods_SkipFormattingWhenNotWritten, "LogFormatMethods_SkipFormattingWhenNotWritten");
-    RegisterTest(&TTest_ASWLog_Base::Test_LogLevelConvenienceMethods, "LogLevelConvenienceMethods");
-    RegisterTest(&TTest_ASWLog_Base::Test_LogMethods_PassRecordsToWrite, "LogMethods_PassRecordsToWrite");
-    RegisterTest(&TTest_ASWLog_Base::Test_OnBeforeWrite_DropsOrChangesEntries, "OnBeforeWrite_DropsOrChangesEntries");
-    RegisterTest(&TTest_ASWLog_Base::Test_OnBeforeWrite_EntriesLoggedInsideTheHookAreWrittenAsIs, "OnBeforeWrite_EntriesLoggedInsideTheHookAreWrittenAsIs");
-    RegisterTest(&TTest_ASWLog_Base::Test_OnBeforeWrite_ReconfigureSetsAndClearsTheHook, "OnBeforeWrite_ReconfigureSetsAndClearsTheHook");
-    RegisterTest(&TTest_ASWLog_Base::Test_OnBeforeWrite_SeesEntriesThatPassTheLevelChecks, "OnBeforeWrite_SeesEntriesThatPassTheLevelChecks");
-    RegisterTest(&TTest_ASWLog_Base::Test_OnBeforeWrite_ThrowingHookDropsTheEntryAndReports, "OnBeforeWrite_ThrowingHookDropsTheEntryAndReports");
-    RegisterTest(&TTest_ASWLog_Base::Test_ReportError_FailureInHandlerIsNotReportedAgain, "ReportError_FailureInHandlerIsNotReportedAgain");
-    RegisterTest(&TTest_ASWLog_Base::Test_ReportError_ThrottlesEachKindSeparately, "ReportError_ThrottlesEachKindSeparately");
-    RegisterTest(&TTest_ASWLog_Base::Test_ReportError_ThrowingHandlerDoesNotEscape, "ReportError_ThrowingHandlerDoesNotEscape");
-    RegisterTest(&TTest_ASWLog_Base::Test_ReportError_WritesToStdErrWithoutHandler, "ReportError_WritesToStdErrWithoutHandler");
-    RegisterTest(&TTest_ASWLog_Base::Test_SetGetMinimumLevel_RoundTrips, "SetGetMinimumLevel_RoundTrips");
-    RegisterTest(&TTest_ASWLog_Base::Test_ShouldLog_RecordFollowsWritesChecks, "ShouldLog_RecordFollowsWritesChecks");
-    RegisterTest(&TTest_ASWLog_Base::Test_ShouldLog_ReflectsEnabledAndLevel, "ShouldLog_ReflectsEnabledAndLevel");
-    RegisterTest(&TTest_ASWLog_Base::Test_Write_AppliesEnabledOffAndLevelChecks, "Write_AppliesEnabledOffAndLevelChecks");
-    RegisterTest(&TTest_ASWLog_Base::Test_Write_KeepsFieldsAlreadyStamped, "Write_KeepsFieldsAlreadyStamped");
-    RegisterTest(&TTest_ASWLog_Base::Test_Write_StampsOnlyWrittenEntries, "Write_StampsOnlyWrittenEntries");
-    RegisterTest(&TTest_ASWLog_Base::Test_Write_ThrowingWriteRecordDropsEntry, "Write_ThrowingWriteRecordDropsEntry");
 }
 //---------------------------------------------------------------------------
 TTest_ASWLog_Base::~TTest_ASWLog_Base()
@@ -282,7 +249,7 @@ void TTest_ASWLog_Base::TearDown_Test(ITestCase& /*testCase*/)
 // /////// Begin tests after this line ///////////////////////
 
 //---------------------------------------------------------------------------
-void TTest_ASWLog_Base::Test_Backtrace_CapacityKeepsTheNewest()
+ASW_TEST(TTest_ASWLog_Base, Backtrace_CapacityKeepsTheNewest)
 {
     // Arrange
     TTestLogger logger;
@@ -300,7 +267,7 @@ void TTest_ASWLog_Base::Test_Backtrace_CapacityKeepsTheNewest()
     CheckTrue(logger.Written == expected, "Only the newest entries should be kept, oldest first");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_Base::Test_Backtrace_DisabledLoggerKeepsAndWritesNothing()
+ASW_TEST(TTest_ASWLog_Base, Backtrace_DisabledLoggerKeepsAndWritesNothing)
 {
     // Arrange
     TTestLogger logger;
@@ -323,7 +290,7 @@ void TTest_ASWLog_Base::Test_Backtrace_DisabledLoggerKeepsAndWritesNothing()
     CheckTrue(logger.Written == expected, "Only the entry kept while enabled should be written");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_Base::Test_Backtrace_DumpAtLevelOffWritesOnlyOnRequest()
+ASW_TEST(TTest_ASWLog_Base, Backtrace_DumpAtLevelOffWritesOnlyOnRequest)
 {
     // Arrange
     TTestLogger logger;
@@ -343,7 +310,7 @@ void TTest_ASWLog_Base::Test_Backtrace_DumpAtLevelOffWritesOnlyOnRequest()
     CheckTrue(logger.Written == expected, "DumpBacktrace() should write it once, then forget it");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_Base::Test_Backtrace_KeptEntriesAreWrittenBeforeTheTrigger()
+ASW_TEST(TTest_ASWLog_Base, Backtrace_KeptEntriesAreWrittenBeforeTheTrigger)
 {
     // Arrange: each entry gets its own time
     using namespace std::chrono_literals;
@@ -375,7 +342,7 @@ void TTest_ASWLog_Base::Test_Backtrace_KeptEntriesAreWrittenBeforeTheTrigger()
     }
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_Base::Test_Backtrace_MinimumLevelChangesKeepTheBacktrace()
+ASW_TEST(TTest_ASWLog_Base, Backtrace_MinimumLevelChangesKeepTheBacktrace)
 {
     // Arrange
     TTestLogger logger;
@@ -401,7 +368,7 @@ void TTest_ASWLog_Base::Test_Backtrace_MinimumLevelChangesKeepTheBacktrace()
     CheckTrue(logger.Written == expected, "Only the entry kept below Warn should be in the backtrace");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_Base::Test_Backtrace_OffKeepsNothing()
+ASW_TEST(TTest_ASWLog_Base, Backtrace_OffKeepsNothing)
 {
     // Arrange: no capacity (the default), and a capacity with LowestLevel Off
     TTestLogger defaultLogger;
@@ -424,7 +391,7 @@ void TTest_ASWLog_Base::Test_Backtrace_OffKeepsNothing()
     CheckTrue(offLogger.Written == std::vector<std::string>{ "ERROR|error_1" }, "Nothing should be kept with LowestLevel Off");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_Base::Test_Backtrace_ReconfigureResizesKeepingTheNewest()
+ASW_TEST(TTest_ASWLog_Base, Backtrace_ReconfigureResizesKeepingTheNewest)
 {
     // Arrange: a full backtrace that has wrapped around (debug_1 was replaced)
     TTestLogger shrinking;
@@ -455,7 +422,7 @@ void TTest_ASWLog_Base::Test_Backtrace_ReconfigureResizesKeepingTheNewest()
     CheckTrue(growing.Written == expectedGrown, "A larger capacity should keep the order, with new entries after the newest");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_Base::Test_Backtrace_ShouldLogAndFmtIncludeKeptLevels()
+ASW_TEST(TTest_ASWLog_Base, Backtrace_ShouldLogAndFmtIncludeKeptLevels)
 {
     // Arrange
     TTestLogger logger;
@@ -474,7 +441,7 @@ void TTest_ASWLog_Base::Test_Backtrace_ShouldLogAndFmtIncludeKeptLevels()
     CheckEquals(3, logger.Written.size(), "The kept entry should be written between the markers");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_Base::Test_GetConfig_ReturnsUnchangingSnapshot()
+ASW_TEST(TTest_ASWLog_Base, GetConfig_ReturnsUnchangingSnapshot)
 {
     // Arrange: the snapshot is read-only, so it can't be changed behind the logger's back
     static_assert(std::is_same_v<decltype(std::declval<const ASWLog::IASWLog&>().GetConfig()),
@@ -506,7 +473,7 @@ void TTest_ASWLog_Base::Test_GetConfig_ReturnsUnchangingSnapshot()
         "The config passed to Initialize() should be copied, not kept");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_Base::Test_GetFullVersionStr_ContainsVersion()
+ASW_TEST(TTest_ASWLog_Base, GetFullVersionStr_ContainsVersion)
 {
     // Arrange
     TTestLogger logger;
@@ -519,7 +486,7 @@ void TTest_ASWLog_Base::Test_GetFullVersionStr_ContainsVersion()
     CheckEquals(expected, version, "Full version string should combine the logger class name and the version number");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_Base::Test_Interface_MethodsAreNoexcept()
+ASW_TEST(TTest_ASWLog_Base, Interface_MethodsAreNoexcept)
 {
     // Arrange: through the interface, as a caller holding an IASWLog& sees it. String views rather than literals, since
     // the standard doesn't make converting a literal to std::string_view noexcept.
@@ -563,7 +530,7 @@ void TTest_ASWLog_Base::Test_Interface_MethodsAreNoexcept()
     CheckTrue(logger.ShouldLog(ASWLog::Level::Info), "The noexcept checks above are made at compile time");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_Base::Test_LogFormatMethods_AcceptEveryArgumentKind()
+ASW_TEST(TTest_ASWLog_Base, LogFormatMethods_AcceptEveryArgumentKind)
 {
     // Arrange
     // rvalue, lvalue and const lvalue arguments deduce different Args, which the level shortcuts must forward
@@ -590,7 +557,7 @@ void TTest_ASWLog_Base::Test_LogFormatMethods_AcceptEveryArgumentKind()
     CheckEquals(std::string("1 2 three four 5"), logger.LastMessage, "A RuntimeFormat() string that matches its arguments should format like a literal");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_Base::Test_LogFormatMethods_LogErrorInsteadOfThrowing()
+ASW_TEST(TTest_ASWLog_Base, LogFormatMethods_LogErrorInsteadOfThrowing)
 {
     // Arrange
     TTestLogger logger;
@@ -617,7 +584,7 @@ void TTest_ASWLog_Base::Test_LogFormatMethods_LogErrorInsteadOfThrowing()
     CheckEquals(std::string("[ASWLog format error: unknown exception] value {}"), otherExceptionMessage, "Any other exception from a formatter should be logged too");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_Base::Test_LogFormatMethods_PassCallerLocation()
+ASW_TEST(TTest_ASWLog_Base, LogFormatMethods_PassCallerLocation)
 {
     // Arrange
     TTestLogger logger;
@@ -683,7 +650,7 @@ void TTest_ASWLog_Base::Test_LogFormatMethods_PassCallerLocation()
     checkCall(line, "LogInfoFmt with RuntimeFormat()", "runtime 11");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_Base::Test_LogFormatMethods_SkipFormattingWhenNotWritten()
+ASW_TEST(TTest_ASWLog_Base, LogFormatMethods_SkipFormattingWhenNotWritten)
 {
     // Arrange
     TTestLogger logger; // Minimum level Info
@@ -714,7 +681,7 @@ void TTest_ASWLog_Base::Test_LogFormatMethods_SkipFormattingWhenNotWritten()
     CheckEmpty(logger.LastMessage, "Nothing should reach the logger while it is disabled");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_Base::Test_LogLevelConvenienceMethods()
+ASW_TEST(TTest_ASWLog_Base, LogLevelConvenienceMethods)
 {
     // Arrange
     TTestLogger logger;
@@ -763,7 +730,7 @@ void TTest_ASWLog_Base::Test_LogLevelConvenienceMethods()
     CheckEquals(std::string("critical"), logger.LastMessage, "LogCritical should store the message");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_Base::Test_LogMethods_PassRecordsToWrite()
+ASW_TEST(TTest_ASWLog_Base, LogMethods_PassRecordsToWrite)
 {
     // Arrange: a logger that only implements WriteRecord(), as a custom logger would
     TTestLogger logger;
@@ -821,7 +788,7 @@ void TTest_ASWLog_Base::Test_LogMethods_PassRecordsToWrite()
     CheckEquals(9, logger.WriteRecordCount, "Each call should pass exactly one record to WriteRecord()");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_Base::Test_OnBeforeWrite_DropsOrChangesEntries()
+ASW_TEST(TTest_ASWLog_Base, OnBeforeWrite_DropsOrChangesEntries)
 {
     // Arrange: a hook that drops noisy entries and redacts secrets, raw ones included
     TTestLogger logger;
@@ -860,7 +827,7 @@ void TTest_ASWLog_Base::Test_OnBeforeWrite_DropsOrChangesEntries()
     CheckTrue(logger.LastRecord.Raw, "A changed raw entry should stay raw");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_Base::Test_OnBeforeWrite_EntriesLoggedInsideTheHookAreWrittenAsIs()
+ASW_TEST(TTest_ASWLog_Base, OnBeforeWrite_EntriesLoggedInsideTheHookAreWrittenAsIs)
 {
     // Arrange: a hook that logs to its own logger and to another one that has a hook
     TTestLogger logger;
@@ -902,7 +869,7 @@ void TTest_ASWLog_Base::Test_OnBeforeWrite_EntriesLoggedInsideTheHookAreWrittenA
     CheckEquals(1, otherHookCount, "The other hook should run only for the entry logged outside a hook");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_Base::Test_OnBeforeWrite_ReconfigureSetsAndClearsTheHook()
+ASW_TEST(TTest_ASWLog_Base, OnBeforeWrite_ReconfigureSetsAndClearsTheHook)
 {
     // Arrange
     TTestLogger logger;
@@ -926,7 +893,7 @@ void TTest_ASWLog_Base::Test_OnBeforeWrite_ReconfigureSetsAndClearsTheHook()
         "The hook should apply from the Reconfigure() that sets it until the one that clears it");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_Base::Test_OnBeforeWrite_SeesEntriesThatPassTheLevelChecks()
+ASW_TEST(TTest_ASWLog_Base, OnBeforeWrite_SeesEntriesThatPassTheLevelChecks)
 {
     // Arrange: a backtrace of Debug entries; the hook marks what it sees and drops one Debug entry
     TTestLogger logger;
@@ -959,7 +926,7 @@ void TTest_ASWLog_Base::Test_OnBeforeWrite_SeesEntriesThatPassTheLevelChecks()
     CheckTrue(logger.Written == expectedWritten, "The backtrace should keep the entries as the hook changed them");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_Base::Test_OnBeforeWrite_ThrowingHookDropsTheEntryAndReports()
+ASW_TEST(TTest_ASWLog_Base, OnBeforeWrite_ThrowingHookDropsTheEntryAndReports)
 {
     // Arrange
     TTestLogger logger;
@@ -989,7 +956,7 @@ void TTest_ASWLog_Base::Test_OnBeforeWrite_ThrowingHookDropsTheEntryAndReports()
         "The report should name the hook and give the exception's what()");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_Base::Test_ReportError_FailureInHandlerIsNotReportedAgain()
+ASW_TEST(TTest_ASWLog_Base, ReportError_FailureInHandlerIsNotReportedAgain)
 {
     // Arrange: a handler that fails the same way again, like one that logs to the logger whose output failed. Without
     // the guard, each report would start another, until the stack overflowed.
@@ -1013,7 +980,7 @@ void TTest_ASWLog_Base::Test_ReportError_FailureInHandlerIsNotReportedAgain()
         "Only the failures outside the handler should be reported, and the next failure after it should be reported again");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_Base::Test_ReportError_ThrottlesEachKindSeparately()
+ASW_TEST(TTest_ASWLog_Base, ReportError_ThrottlesEachKindSeparately)
 {
     // Arrange
     using namespace std::chrono_literals;
@@ -1059,7 +1026,7 @@ void TTest_ASWLog_Base::Test_ReportError_ThrottlesEachKindSeparately()
     CheckEquals(0, reports[4].SuppressedCount, "With an interval of 0, nothing should be left out");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_Base::Test_ReportError_ThrowingHandlerDoesNotEscape()
+ASW_TEST(TTest_ASWLog_Base, ReportError_ThrowingHandlerDoesNotEscape)
 {
     // Arrange
     TTestLogger logger;
@@ -1083,7 +1050,7 @@ void TTest_ASWLog_Base::Test_ReportError_ThrowingHandlerDoesNotEscape()
     CheckEquals(2, handlerCalls, "A handler that threw should still be called for the next failure");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_Base::Test_ReportError_WritesToStdErrWithoutHandler()
+ASW_TEST(TTest_ASWLog_Base, ReportError_WritesToStdErrWithoutHandler)
 {
     // Arrange
     const auto stdErrFile = std::filesystem::temp_directory_path() / "aswlog_base_stderr.txt";
@@ -1122,7 +1089,7 @@ void TTest_ASWLog_Base::Test_ReportError_WritesToStdErrWithoutHandler()
         "Without OnError, a failure should be written to stderr as one line naming the logger, once per interval");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_Base::Test_SetGetMinimumLevel_RoundTrips()
+ASW_TEST(TTest_ASWLog_Base, SetGetMinimumLevel_RoundTrips)
 {
     // Arrange
     TTestLogger logger;
@@ -1142,7 +1109,7 @@ void TTest_ASWLog_Base::Test_SetGetMinimumLevel_RoundTrips()
     CheckEquals(ASWLog::Level::Trace, logger.GetMinimumLevel(), "SetMinimumLevel should update the value returned by GetMinimumLevel immediately");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_Base::Test_ShouldLog_RecordFollowsWritesChecks()
+ASW_TEST(TTest_ASWLog_Base, ShouldLog_RecordFollowsWritesChecks)
 {
     // Arrange: a logger at Warn keeping a backtrace from Debug, asked through the interface
     TTestLogger testLogger;
@@ -1186,7 +1153,7 @@ void TTest_ASWLog_Base::Test_ShouldLog_RecordFollowsWritesChecks()
     CheckFalse(categoryWhileDisabled, "A disabled logger should use no entry of a category");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_Base::Test_ShouldLog_ReflectsEnabledAndLevel()
+ASW_TEST(TTest_ASWLog_Base, ShouldLog_ReflectsEnabledAndLevel)
 {
     // Arrange: everything through the interface, as code holding only an IASWLog& would use it
     TTestLogger testLogger;
@@ -1218,7 +1185,7 @@ void TTest_ASWLog_Base::Test_ShouldLog_ReflectsEnabledAndLevel()
     CheckFalse(shouldLogCriticalAtMinimumOff, "Nothing should be logged at a minimum level of Off");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_Base::Test_Write_AppliesEnabledOffAndLevelChecks()
+ASW_TEST(TTest_ASWLog_Base, Write_AppliesEnabledOffAndLevelChecks)
 {
     // Arrange
     TTestLogger logger;
@@ -1242,7 +1209,7 @@ void TTest_ASWLog_Base::Test_Write_AppliesEnabledOffAndLevelChecks()
     CheckEquals(2, logger.WriteRecordCount, "A disabled logger should write nothing, even forced");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_Base::Test_Write_KeepsFieldsAlreadyStamped()
+ASW_TEST(TTest_ASWLog_Base, Write_KeepsFieldsAlreadyStamped)
 {
     // Arrange: a record stamped elsewhere, e.g. by a multi-log before passing it on
     TTestLogger logger;
@@ -1266,7 +1233,7 @@ void TTest_ASWLog_Base::Test_Write_KeepsFieldsAlreadyStamped()
     CheckEquals(0, logger.NowUTCCount, "The clock should not be read for a record that already has its Timestamp");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_Base::Test_Write_StampsOnlyWrittenEntries()
+ASW_TEST(TTest_ASWLog_Base, Write_StampsOnlyWrittenEntries)
 {
     // Arrange
     TTestLogger logger;
@@ -1287,7 +1254,7 @@ void TTest_ASWLog_Base::Test_Write_StampsOnlyWrittenEntries()
     CheckEquals(static_cast<int64_t>(ASWLog::GetCurrentOSThreadId()), static_cast<int64_t>(logger.LastRecord.ThreadId), "The ThreadId should be the calling thread's");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_Base::Test_Write_ThrowingWriteRecordDropsEntry()
+ASW_TEST(TTest_ASWLog_Base, Write_ThrowingWriteRecordDropsEntry)
 {
     // Arrange: a custom logger whose WriteRecord() throws. Without the catch in TASWLogBase::Write(), the exception
     // would leave a noexcept function and call std::terminate, ending the test run.

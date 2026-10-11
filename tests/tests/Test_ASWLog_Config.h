@@ -30,12 +30,12 @@ namespace ASWUnitTests
 ///////////////////////////////////////////////////////////////////////////
 // TTest_ASWLog_Config
 ///////////////////////////////////////////////////////////////////////////
-class TTest_ASWLog_Config : public TTestGroupBase
+class TTest_ASWLog_Config : public TAutoTestGroup<TTest_ASWLog_Config>
 {
 private:
-    typedef TTestGroupBase inherited;
+    typedef TAutoTestGroup<TTest_ASWLog_Config> inherited;
 
-private: // Test methods
+public: // Test methods, each defined with ASW_TEST
     void Test_ApplyEnvironment_AppliesPatternAfterFormat();
     void Test_ApplyEnvironment_AppliesTheCategoryLevels();
     void Test_ApplyEnvironment_IgnoresUnsetAndEmptyVariables();

@@ -30,12 +30,12 @@ namespace ASWUnitTests
 ///////////////////////////////////////////////////////////////////////////
 // TTest_ASWLog_ConsoleLog
 ///////////////////////////////////////////////////////////////////////////
-class TTest_ASWLog_ConsoleLog : public TTestGroupBase
+class TTest_ASWLog_ConsoleLog : public TAutoTestGroup<TTest_ASWLog_ConsoleLog>
 {
 private:
-    typedef TTestGroupBase inherited;
+    typedef TAutoTestGroup<TTest_ASWLog_ConsoleLog> inherited;
 
-private: // Test methods
+public: // Test methods, each defined with ASW_TEST
     void Test_ColorModeAlways_WrapsOutputWithAnsiCodes();
     void Test_ColorModeAuto_ColorsOnlyStreamsThatSupportIt();
     void Test_ColorModeAuto_HonorsNoColor();

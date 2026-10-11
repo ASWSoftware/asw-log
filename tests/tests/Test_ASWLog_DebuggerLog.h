@@ -32,12 +32,12 @@ namespace ASWUnitTests
 ///////////////////////////////////////////////////////////////////////////
 // TTest_ASWLog_DebuggerLog
 ///////////////////////////////////////////////////////////////////////////
-class TTest_ASWLog_DebuggerLog : public TTestGroupBase
+class TTest_ASWLog_DebuggerLog : public TAutoTestGroup<TTest_ASWLog_DebuggerLog>
 {
 private:
-    typedef TTestGroupBase inherited;
+    typedef TAutoTestGroup<TTest_ASWLog_DebuggerLog> inherited;
 
-private: // Test methods
+public: // Test methods, each defined with ASW_TEST
     void Test_GetInstance_ReturnsTheSameLogger();
     void Test_ShouldLog_FollowsThePlatform();
     void Test_Windows_SendsEachLineToTheDebugOutput();

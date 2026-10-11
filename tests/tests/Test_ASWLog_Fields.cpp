@@ -199,19 +199,6 @@ public:
 TTest_ASWLog_Fields::TTest_ASWLog_Fields()
     : inherited("ASWLog_Fields_Tests")
 {
-    RegisterTest(&TTest_ASWLog_Fields::Test_Async_OnLogEntryGetsTheFieldsAfterTheScopeEnds, "Async_OnLogEntryGetsTheFieldsAfterTheScopeEnds");
-    RegisterTest(&TTest_ASWLog_Fields::Test_Backtrace_KeepsTheFieldsAfterTheScopeEnds, "Backtrace_KeepsTheFieldsAfterTheScopeEnds");
-    RegisterTest(&TTest_ASWLog_Fields::Test_Capture_TakesTheScopesToAnotherThread, "Capture_TakesTheScopesToAnotherThread");
-    RegisterTest(&TTest_ASWLog_Fields::Test_ForEachLogField_EachKeyOnceInnermostWins, "ForEachLogField_EachKeyOnceInnermostWins");
-    RegisterTest(&TTest_ASWLog_Fields::Test_ForEachLogField_RepeatedKeysInTheEntrysOwnFields, "ForEachLogField_RepeatedKeysInTheEntrysOwnFields");
-    RegisterTest(&TTest_ASWLog_Fields::Test_Log_CategoryAndMultiLogPassTheFieldsOn, "Log_CategoryAndMultiLogPassTheFieldsOn");
-    RegisterTest(&TTest_ASWLog_Fields::Test_Log_EachOverloadPassesItsFields, "Log_EachOverloadPassesItsFields");
-    RegisterTest(&TTest_ASWLog_Fields::Test_Log_ScopeFieldsComeBeforeTheEntrysOwn, "Log_ScopeFieldsComeBeforeTheEntrysOwn");
-    RegisterTest(&TTest_ASWLog_Fields::Test_Scope_CopiesTemporaryTexts, "Scope_CopiesTemporaryTexts");
-    RegisterTest(&TTest_ASWLog_Fields::Test_Scope_IsPerThread, "Scope_IsPerThread");
-    RegisterTest(&TTest_ASWLog_Fields::Test_Scope_NestsAndRestoresTheCurrentScope, "Scope_NestsAndRestoresTheCurrentScope");
-    RegisterTest(&TTest_ASWLog_Fields::Test_Value_KindsFromEachType, "Value_KindsFromEachType");
-    RegisterTest(&TTest_ASWLog_Fields::Test_Value_RejectsCharactersEnumsAndPointers, "Value_RejectsCharactersEnumsAndPointers");
 }
 //---------------------------------------------------------------------------
 TTest_ASWLog_Fields::~TTest_ASWLog_Fields()
@@ -244,7 +231,7 @@ void TTest_ASWLog_Fields::TearDown_Test(ITestCase& /*testCase*/)
 // /////// Begin tests after this line ///////////////////////
 
 //---------------------------------------------------------------------------
-void TTest_ASWLog_Fields::Test_Async_OnLogEntryGetsTheFieldsAfterTheScopeEnds()
+ASW_TEST(TTest_ASWLog_Fields, Async_OnLogEntryGetsTheFieldsAfterTheScopeEnds)
 {
     // Arrange: an asynchronous file logger whose OnLogEntry, on the logger's thread, describes each entry's fields
     std::mutex mutex;
@@ -293,7 +280,7 @@ void TTest_ASWLog_Fields::Test_Async_OnLogEntryGetsTheFieldsAfterTheScopeEnds()
         "OnLogEntry should get copies of the entry's fields and its scope's, made when the entry was queued");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_Fields::Test_Backtrace_KeepsTheFieldsAfterTheScopeEnds()
+ASW_TEST(TTest_ASWLog_Fields, Backtrace_KeepsTheFieldsAfterTheScopeEnds)
 {
     // Arrange
     ASWLog::TASWLogConfig config;
@@ -318,7 +305,7 @@ void TTest_ASWLog_Fields::Test_Backtrace_KeepsTheFieldsAfterTheScopeEnds()
     CheckEquals(std::string("failed|code=i:5"), logger.Written[3], "The error should have its own fields only");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_Fields::Test_Capture_TakesTheScopesToAnotherThread()
+ASW_TEST(TTest_ASWLog_Fields, Capture_TakesTheScopesToAnotherThread)
 {
     // Arrange
     ASWLog::TASWLogContext context;
@@ -368,7 +355,7 @@ void TTest_ASWLog_Fields::Test_Capture_TakesTheScopesToAnotherThread()
     CheckEmpty(afterScopeOnOtherThread, "The other thread should have no scope once it ends");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_Fields::Test_ForEachLogField_EachKeyOnceInnermostWins()
+ASW_TEST(TTest_ASWLog_Fields, ForEachLogField_EachKeyOnceInnermostWins)
 {
     // Arrange: user and req in an outer scope, req again in an inner one, then the entry's own user and x (twice)
     const ASWLog::TASWLogScope outer{ { "user", "amy" }, { "req", 1 } };
@@ -385,7 +372,7 @@ void TTest_ASWLog_Fields::Test_ForEachLogField_EachKeyOnceInnermostWins()
     CheckEquals(std::string("user=t:amy req=i:2 depth=i:1"), scopesOnly, "Without the entry's fields, the inner scope should win");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_Fields::Test_ForEachLogField_RepeatedKeysInTheEntrysOwnFields()
+ASW_TEST(TTest_ASWLog_Fields, ForEachLogField_RepeatedKeysInTheEntrysOwnFields)
 {
     // Arrange
     const ASWLog::TASWLogField own[] = { { "a", 1 }, { "b", 2 }, { "a", 3 }, { "c", 4 }, { "b", 5 } };
@@ -399,7 +386,7 @@ void TTest_ASWLog_Fields::Test_ForEachLogField_RepeatedKeysInTheEntrysOwnFields(
     CheckEmpty(none, "No fields should give nothing");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_Fields::Test_Log_CategoryAndMultiLogPassTheFieldsOn()
+ASW_TEST(TTest_ASWLog_Fields, Log_CategoryAndMultiLogPassTheFieldsOn)
 {
     // Arrange: a category over a multi-log over two loggers
     TFieldsLogger first;
@@ -423,7 +410,7 @@ void TTest_ASWLog_Fields::Test_Log_CategoryAndMultiLogPassTheFieldsOn()
     CheckTrue(second.Written == expected, "The second logger should get them too");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_Fields::Test_Log_EachOverloadPassesItsFields()
+ASW_TEST(TTest_ASWLog_Fields, Log_EachOverloadPassesItsFields)
 {
     // Arrange
     ASWLog::TASWLogConfig config;
@@ -470,7 +457,7 @@ void TTest_ASWLog_Fields::Test_Log_EachOverloadPassesItsFields()
         CheckEquals(expected[index], logger.Written[index], "Each overload should pass its message and fields");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_Fields::Test_Log_ScopeFieldsComeBeforeTheEntrysOwn()
+ASW_TEST(TTest_ASWLog_Fields, Log_ScopeFieldsComeBeforeTheEntrysOwn)
 {
     // Arrange
     TFieldsLogger logger;
@@ -492,7 +479,7 @@ void TTest_ASWLog_Fields::Test_Log_ScopeFieldsComeBeforeTheEntrysOwn()
     CheckTrue(logger.Written == expected, "Entries in the scope should carry its fields, the entry's own after them and winning");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_Fields::Test_Scope_CopiesTemporaryTexts()
+ASW_TEST(TTest_ASWLog_Fields, Scope_CopiesTemporaryTexts)
 {
     // Arrange & Act: keys and texts that are gone once the scope is made
     const ASWLog::TASWLogScope scope{ { std::string("requestId"), std::to_string(12345) },
@@ -505,7 +492,7 @@ void TTest_ASWLog_Fields::Test_Scope_CopiesTemporaryTexts()
     CheckEquals(std::size_t(16), filler.size(), "(keeps the filler alive)");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_Fields::Test_Scope_IsPerThread()
+ASW_TEST(TTest_ASWLog_Fields, Scope_IsPerThread)
 {
     // Arrange
     const ASWLog::TASWLogScope scope{ { "requestId", "r-3" } };
@@ -522,7 +509,7 @@ void TTest_ASWLog_Fields::Test_Scope_IsPerThread()
     CheckNull(onOtherThread, "Another thread should have no scope");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_Fields::Test_Scope_NestsAndRestoresTheCurrentScope()
+ASW_TEST(TTest_ASWLog_Fields, Scope_NestsAndRestoresTheCurrentScope)
 {
     // Arrange
     const ASWLog::TASWLogScope* beforeAll = ASWLog::TASWLogScope::GetCurrent();
@@ -557,7 +544,7 @@ void TTest_ASWLog_Fields::Test_Scope_NestsAndRestoresTheCurrentScope()
     CheckNull(afterAll, "No scope should be current after both end");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_Fields::Test_Value_KindsFromEachType()
+ASW_TEST(TTest_ASWLog_Fields, Value_KindsFromEachType)
 {
     // Arrange
     const std::string text = "from std::string";
@@ -584,7 +571,7 @@ void TTest_ASWLog_Fields::Test_Value_KindsFromEachType()
     CheckSame(text.data(), fields[12].Value.GetText().data(), "Text should be a view of the caller's characters, not a copy");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_Fields::Test_Value_RejectsCharactersEnumsAndPointers()
+ASW_TEST(TTest_ASWLog_Fields, Value_RejectsCharactersEnumsAndPointers)
 {
     // Act & Assert: these would otherwise become a number or a bool without the caller noticing
     CheckFalse(std::is_constructible_v<ASWLog::TASWLogValue, char>, "A char should be rejected");

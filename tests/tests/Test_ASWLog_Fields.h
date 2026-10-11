@@ -30,12 +30,12 @@ namespace ASWUnitTests
 ///////////////////////////////////////////////////////////////////////////
 // TTest_ASWLog_Fields
 ///////////////////////////////////////////////////////////////////////////
-class TTest_ASWLog_Fields : public TTestGroupBase
+class TTest_ASWLog_Fields : public TAutoTestGroup<TTest_ASWLog_Fields>
 {
 private:
-    typedef TTestGroupBase inherited;
+    typedef TAutoTestGroup<TTest_ASWLog_Fields> inherited;
 
-private: // Test methods
+public: // Test methods, each defined with ASW_TEST
     void Test_Async_OnLogEntryGetsTheFieldsAfterTheScopeEnds();
     void Test_Backtrace_KeepsTheFieldsAfterTheScopeEnds();
     void Test_Capture_TakesTheScopesToAnotherThread();

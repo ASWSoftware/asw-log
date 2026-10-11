@@ -292,17 +292,6 @@ std::wstring Widen(std::string_view text)
 TTest_ASWLog_WindowsEventLog::TTest_ASWLog_WindowsEventLog()
     : inherited("ASWLog_WindowsEventLog_Tests")
 {
-    RegisterTest(&TTest_ASWLog_WindowsEventLog::Test_GetInstance_ReturnsTheSameLogger, "GetInstance_ReturnsTheSameLogger");
-    RegisterTest(&TTest_ASWLog_WindowsEventLog::Test_HandleCrash_ReportsTheFormattedCrashLineOnly, "HandleCrash_ReportsTheFormattedCrashLineOnly");
-    RegisterTest(&TTest_ASWLog_WindowsEventLog::Test_Open_OpensTheConfiguredSource, "Open_OpensTheConfiguredSource");
-    RegisterTest(&TTest_ASWLog_WindowsEventLog::Test_RegisterSource_NeedsAdministratorRights, "RegisterSource_NeedsAdministratorRights");
-    RegisterTest(&TTest_ASWLog_WindowsEventLog::Test_Report_CutsTooLongMessages, "Report_CutsTooLongMessages");
-    RegisterTest(&TTest_ASWLog_WindowsEventLog::Test_Report_MapsEachLevelToATypeAndEventId, "Report_MapsEachLevelToATypeAndEventId");
-    RegisterTest(&TTest_ASWLog_WindowsEventLog::Test_Report_StripsOnlyTheLineEnding, "Report_StripsOnlyTheLineEnding");
-    RegisterTest(&TTest_ASWLog_WindowsEventLog::Test_ShouldLog_FollowsThePlatform, "ShouldLog_FollowsThePlatform");
-    RegisterTest(&TTest_ASWLog_WindowsEventLog::Test_Windows_ReportsAFailedOpen, "Windows_ReportsAFailedOpen");
-    RegisterTest(&TTest_ASWLog_WindowsEventLog::Test_Windows_ReportsARealEvent, "Windows_ReportsARealEvent");
-    RegisterTest(&TTest_ASWLog_WindowsEventLog::Test_Windows_ReportsARefusedEvent, "Windows_ReportsARefusedEvent");
 }
 //---------------------------------------------------------------------------
 TTest_ASWLog_WindowsEventLog::~TTest_ASWLog_WindowsEventLog()
@@ -330,7 +319,7 @@ void TTest_ASWLog_WindowsEventLog::TearDown_Test(ITestCase& /*testCase*/)
 // /////// Begin tests after this line ///////////////////////
 
 //---------------------------------------------------------------------------
-void TTest_ASWLog_WindowsEventLog::Test_GetInstance_ReturnsTheSameLogger()
+ASW_TEST(TTest_ASWLog_WindowsEventLog, GetInstance_ReturnsTheSameLogger)
 {
     // Act
     auto& first = ASWLog::TASWWindowsEventLog::GetInstance();
@@ -340,7 +329,7 @@ void TTest_ASWLog_WindowsEventLog::Test_GetInstance_ReturnsTheSameLogger()
     CheckSame(&first, &second, "GetInstance() should always return the same logger");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_WindowsEventLog::Test_HandleCrash_ReportsTheFormattedCrashLineOnly()
+ASW_TEST(TTest_ASWLog_WindowsEventLog, HandleCrash_ReportsTheFormattedCrashLineOnly)
 {
     // Arrange
     TCapturingEventLog log;
@@ -357,7 +346,7 @@ void TTest_ASWLog_WindowsEventLog::Test_HandleCrash_ReportsTheFormattedCrashLine
     CheckEquals(std::string("[CRITICAL]: Crash: test crash"), log.Events[0].Text, "The crash line should be reported without its line ending");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_WindowsEventLog::Test_Open_OpensTheConfiguredSource()
+ASW_TEST(TTest_ASWLog_WindowsEventLog, Open_OpensTheConfiguredSource)
 {
     // Arrange
     TCapturingEventLog log;
@@ -382,7 +371,7 @@ void TTest_ASWLog_WindowsEventLog::Test_Open_OpensTheConfiguredSource()
     CheckEquals(std::string("MyApp"), log.Sources[2], "Open after Close should open the current config's source again");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_WindowsEventLog::Test_RegisterSource_NeedsAdministratorRights()
+ASW_TEST(TTest_ASWLog_WindowsEventLog, RegisterSource_NeedsAdministratorRights)
 {
 #if defined(_WIN32)
     // Arrange: a source of this test's own; elevated (e.g. on a CI runner) it is registered and removed again
@@ -421,7 +410,7 @@ void TTest_ASWLog_WindowsEventLog::Test_RegisterSource_NeedsAdministratorRights(
 #endif
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_WindowsEventLog::Test_Report_CutsTooLongMessages()
+ASW_TEST(TTest_ASWLog_WindowsEventLog, Report_CutsTooLongMessages)
 {
     // Arrange: "[INFO]: " is 8 bytes. The longer line has 2-byte characters from byte MaxSize - 9 on, so the cut, which
     // keeps MaxSize - 6 bytes for the " [cut]" marker, falls inside one and backs off to the character before it.
@@ -447,7 +436,7 @@ void TTest_ASWLog_WindowsEventLog::Test_Report_CutsTooLongMessages()
     CheckEndsWith(log.Events[1].Text, "\xC3\xA9 [cut]", "The cut should end with a whole character and the marker");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_WindowsEventLog::Test_Report_MapsEachLevelToATypeAndEventId()
+ASW_TEST(TTest_ASWLog_WindowsEventLog, Report_MapsEachLevelToATypeAndEventId)
 {
     // Arrange
     TCapturingEventLog log;
@@ -480,7 +469,7 @@ void TTest_ASWLog_WindowsEventLog::Test_Report_MapsEachLevelToATypeAndEventId()
     }
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_WindowsEventLog::Test_Report_StripsOnlyTheLineEnding()
+ASW_TEST(TTest_ASWLog_WindowsEventLog, Report_StripsOnlyTheLineEnding)
 {
     // Arrange
     TCapturingEventLog log;
@@ -505,7 +494,7 @@ void TTest_ASWLog_WindowsEventLog::Test_Report_StripsOnlyTheLineEnding()
     CheckEquals(std::string("[INFO]: ends with LF\n"), log.Events[4].Text, "With CRLF endings, the message's own LF should stay");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_WindowsEventLog::Test_ShouldLog_FollowsThePlatform()
+ASW_TEST(TTest_ASWLog_WindowsEventLog, ShouldLog_FollowsThePlatform)
 {
 #if defined(_WIN32)
     // Arrange: no startup or shutdown lines, and only checks, so nothing reaches the Event Log
@@ -555,7 +544,7 @@ void TTest_ASWLog_WindowsEventLog::Test_ShouldLog_FollowsThePlatform()
 #endif
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_WindowsEventLog::Test_Windows_ReportsAFailedOpen()
+ASW_TEST(TTest_ASWLog_WindowsEventLog, Windows_ReportsAFailedOpen)
 {
 #if defined(_WIN32)
     // Arrange: only the system (LSA) may report to the Security log, so other processes can't open it as a source
@@ -583,7 +572,7 @@ void TTest_ASWLog_WindowsEventLog::Test_Windows_ReportsAFailedOpen()
 #endif
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_WindowsEventLog::Test_Windows_ReportsARealEvent()
+ASW_TEST(TTest_ASWLog_WindowsEventLog, Windows_ReportsARealEvent)
 {
 #if defined(_WIN32)
     // Arrange: one Warning event of a test source in the Application log, found again by a token of this run
@@ -608,7 +597,7 @@ void TTest_ASWLog_WindowsEventLog::Test_Windows_ReportsARealEvent()
 #endif
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_WindowsEventLog::Test_Windows_ReportsARefusedEvent()
+ASW_TEST(TTest_ASWLog_WindowsEventLog, Windows_ReportsARefusedEvent)
 {
 #if defined(_WIN32)
     // Arrange: a real source, and an event the Event Log refuses (ERROR_INVALID_PARAMETER), so nothing is written

@@ -30,12 +30,12 @@ namespace ASWUnitTests
 ///////////////////////////////////////////////////////////////////////////
 // TTest_ASWLog_Base
 ///////////////////////////////////////////////////////////////////////////
-class TTest_ASWLog_Base : public TTestGroupBase
+class TTest_ASWLog_Base : public TAutoTestGroup<TTest_ASWLog_Base>
 {
 private:
-    typedef TTestGroupBase inherited;
+    typedef TAutoTestGroup<TTest_ASWLog_Base> inherited;
 
-private: // Test methods
+public: // Test methods, each defined with ASW_TEST
     void Test_Backtrace_CapacityKeepsTheNewest();
     void Test_Backtrace_DisabledLoggerKeepsAndWritesNothing();
     void Test_Backtrace_DumpAtLevelOffWritesOnlyOnRequest();
