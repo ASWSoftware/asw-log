@@ -1,8 +1,8 @@
 # Configuration reference
 
-Every logger takes a `ASWLog::TASWLogConfig` (`ASWLog_Config.h`) in `Initialize()`. Its settings are grouped by
-concern, and a logger ignores the groups it doesn't use, so one config can be passed to several loggers (a multi-log
-passes its config on to the loggers it holds).
+Every logger takes a `ASWLog::TASWLogConfig` (`ASWLog_Config.h`) in `Initialize()`. Its settings are
+grouped by concern, and a logger ignores the groups it doesn't use, so one config can be passed to
+several loggers (a multi-log passes its config on to the loggers it holds).
 
 ```cpp
 ASWLog::TASWLogConfig config;
@@ -16,8 +16,8 @@ auto& log = ASWLog::TASWFileLog::GetInstance();
 log.Initialize(config);
 ```
 
-To change the settings of a running logger, copy its current config, change the copy, and pass it to `Reconfigure()`,
-which is safe while other threads log:
+To change the settings of a running logger, copy its current config, change the copy, and pass it to
+`Reconfigure()`, which is safe while other threads log:
 
 ```cpp
 auto config = *log.GetConfig();
@@ -25,10 +25,12 @@ config.Line.ShowThreadId = false;
 log.Reconfigure(config);
 ```
 
-`Reconfigure()` doesn't change the minimum level (use `SetMinimumLevel()`) and doesn't write the startup lines again,
-except in the new file of a file logger moved to a new path (see `File.WriteStartupLinesInNewFiles`).
+`Reconfigure()` doesn't change the minimum level (use `SetMinimumLevel()`) and doesn't write the
+startup lines again, except in the new file of a file logger moved to a new path (see
+`File.WriteStartupLinesInNewFiles`).
 
-The header comments in `ASWLog_Config.h` have the full details of each setting; this page is the overview.
+The header comments in `ASWLog_Config.h` have the full details of each setting; this page is the
+overview.
 
 ## Which logger uses what
 
@@ -45,8 +47,8 @@ The header comments in `ASWLog_Config.h` have the full details of each setting; 
 | `OnLogEntry`, `OnLogEntryMinimumLevel` | The text loggers |
 | `OnError`, `ErrorReportInterval` | Every logger; a multi-log passes them on, and each of its loggers reports its own failures |
 
-A category logger (`TASWCategoryLog`) and the null logger (`TASWNullLog`) take no config: the category's output
-belongs to the logger it wraps.
+A category logger (`TASWCategoryLog`) and the null logger (`TASWNullLog`) take no config: the
+category's output belongs to the logger it wraps.
 
 ## Top level
 
@@ -79,11 +81,13 @@ belongs to the logger it wraps.
 | `ShowSourceLine` | `false` | The source file and line that logged the entry. |
 | `ShowFields` | `true` | The entry's fields (its own and its scopes'), if it has any. |
 
-The `Show*` settings are read by the built-in layout and by `TASWJSONFormatter`; a pattern decides its own fields.
+The `Show*` settings are read by the built-in layout and by `TASWJSONFormatter`; a pattern decides
+its own fields.
 
 ## `Startup`: the lines `Initialize()` writes (`TASWStartupConfig`)
 
-A file logger also writes them at the top of each new file it starts (see `File.WriteStartupLinesInNewFiles`).
+A file logger also writes them at the top of each new file it starts (see
+`File.WriteStartupLinesInNewFiles`).
 
 | Setting | Default | What it does |
 |---|---|---|
@@ -130,8 +134,8 @@ A file logger also writes them at the top of each new file it starts (see `File.
 | `MaxBackupFiles` | 0 (unlimited) | After each rotation, keeps only the newest this many backups. |
 | `MaxBackupTotalBytes` | 0 (unlimited) | After each rotation, keeps only the newest backups that together take at most this many bytes. Set it above `MaxFileSizeBytes`. |
 
-Backups are named `<stem>.<reason>.<time>.bak`, e.g. `myapp.size.2026-10-10_143005_123.bak`, and a name is never
-reused. `TASWFileLog::DeleteOldLogs()` deletes other old files by a wildcard pattern.
+Backups are named `<stem>.<reason>.<time>.bak`, e.g. `myapp.size.2026-10-10_143005_123.bak`, and a
+name is never reused. `TASWFileLog::DeleteOldLogs()` deletes other old files by a wildcard pattern.
 
 ## `Async`: asynchronous writing (`TASWAsyncConfig`)
 
@@ -173,12 +177,13 @@ reused. `TASWFileLog::DeleteOldLogs()` deletes other old files by a wildcard pat
 
 ## Settings from environment variables
 
-`config.ApplyEnvironment()` reads these variables, named with a prefix (`ASWLOG_` by default), and their values
-replace what the code set. Nothing reads the environment unless the application calls it. Call it after setting
-`OnError` and before `Initialize()`. A variable that isn't set or is empty changes nothing, and neither does an invalid
-value, which is reported to `OnError` (or stderr) as `ErrorKind::InvalidSetting`. Keys and values ignore case. Each
-logger can have its own prefix, e.g. `config.ApplyEnvironment("MYAPP_CONSOLE_")`. `config.ApplySetting(key, value)`
-sets one of the same settings, e.g. from a command line.
+`config.ApplyEnvironment()` reads these variables, named with a prefix (`ASWLOG_` by default), and
+their values replace what the code set. Nothing reads the environment unless the application calls
+it. Call it after setting `OnError` and before `Initialize()`. A variable that isn't set or is empty
+changes nothing, and neither does an invalid value, which is reported to `OnError` (or stderr) as
+`ErrorKind::InvalidSetting`. Keys and values ignore case. Each logger can have its own prefix, e.g.
+`config.ApplyEnvironment("MYAPP_CONSOLE_")`. `config.ApplySetting(key, value)` sets one of the same
+settings, e.g. from a command line.
 
 | Variable | Values | Setting |
 |---|---|---|
@@ -207,7 +212,8 @@ myapp.exe
 
 ## Settings on the logger itself
 
-Some settings belong to the logger object rather than its config, and can be changed from any thread at any time:
+Some settings belong to the logger object rather than its config, and can be changed from any thread
+at any time:
 
 | Method | What it does |
 |---|---|

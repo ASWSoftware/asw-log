@@ -8,5 +8,5 @@ cmake --build example/cmake/build --config Release
 ```
 
 The example executable is written to the same configuration-specific
-`example/build/bin/<Configuration>` directory used by the RAD Studio project.
-Logs are written relative to the executable working directory.
+`example/build/bin/<Configuration>` directory used by the RAD Studio project. Logs are written
+relative to the executable working directory.
