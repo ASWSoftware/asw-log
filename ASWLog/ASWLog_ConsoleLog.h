@@ -2,7 +2,10 @@
 ASWLog_ConsoleLog.h
 Author: Anthony S. West - ASW Software
 
-A light-weight logging tool.
+A logging library.
+
+TASWConsoleLog, a text logger that writes to the console (stdout, and
+stderr for warnings and errors), optionally in color.
 
 Requires C++ 20 or higher.
 

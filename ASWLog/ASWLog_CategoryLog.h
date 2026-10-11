@@ -2,7 +2,10 @@
 ASWLog_CategoryLog.h
 Author: Anthony S. West - ASW Software
 
-A light-weight logging tool.
+A logging library.
+
+TASWCategoryLog, a named category of entries (e.g. "Net") with a minimum
+level of its own, which wraps another logger.
 
 Requires C++ 20 or higher.
 

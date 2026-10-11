@@ -4,8 +4,9 @@ Author: Anthony S. West - ASW Software
 
 A logging library.
 
-Source for logging wide (UTF-16 and UTF-32) text: conversions to and from UTF-8, and the text wrappers the logging
-methods and the *Fmt arguments take.
+Wide-string support: TASWWideText (wchar_t and char16_t messages), the
+Wide() and UTF8() wrappers for *Fmt arguments, and conversions between
+UTF-8 and UTF-16 or UTF-32.
 
 Requires C++ 20 or higher.
 

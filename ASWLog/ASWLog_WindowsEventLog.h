@@ -4,6 +4,9 @@ Author: Anthony S. West - ASW Software
 
 A logging library.
 
+TASWWindowsEventLog, a text logger that reports its lines to the Windows
+Event Log; it writes nothing on other platforms.
+
 Requires C++ 20 or higher.
 
 Copyright 2026 ASW Software

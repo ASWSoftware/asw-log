@@ -2,9 +2,10 @@
 ASWLog_Utils.h
 Author: Anthony S. West - ASW Software
 
-A light-weight logging tool.
+A logging library.
 
-Source for the ASWLog utility functions, etc.
+Helpers the loggers use, which an application can use too: log file names,
+process and system information, paths, time formatting and JSON escaping.
 
 Requires C++ 20 or higher.
 

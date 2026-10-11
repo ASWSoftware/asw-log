@@ -2,7 +2,10 @@
 ASWLog_MemoryLog.h
 Author: Anthony S. West - ASW Software
 
-A light-weight logging tool.
+A logging library.
+
+TASWMemoryLog, a text logger that keeps its newest lines in memory, e.g.
+for an in-app log viewer, a crash report or tests.
 
 Requires C++ 20 or higher.
 

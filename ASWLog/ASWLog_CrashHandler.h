@@ -2,7 +2,10 @@
 ASWLog_CrashHandler.h
 Author: Anthony S. West - ASW Software
 
-A light-weight logging tool.
+A logging library.
+
+Crash handlers that flush every text logger and write a "Crash: <reason>"
+line when the application crashes (InstallCrashHandlers(), HandleCrash()).
 
 Requires C++ 20 or higher.
 

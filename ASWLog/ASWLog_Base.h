@@ -2,7 +2,11 @@
 ASWLog_Base.h
 Author: Anthony S. West - ASW Software
 
-A light-weight logging tool.
+A logging library.
+
+TASWLogBase, the base of the built-in loggers: the minimum level, the
+enabled flag, the backtrace, the config and the error reporting that every
+logger shares.
 
 Requires C++ 20 or higher.
 

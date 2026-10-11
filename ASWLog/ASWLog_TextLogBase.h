@@ -2,7 +2,11 @@
 ASWLog_TextLogBase.h
 Author: Anthony S. West - ASW Software
 
-A light-weight logging tool.
+A logging library.
+
+TASWTextLogBase, the base of the loggers that write each entry as a line of
+text: locking, formatting, asynchronous writing and the startup lines. A
+custom text logger derives from it and implements only its output.
 
 Requires C++ 20 or higher.
 

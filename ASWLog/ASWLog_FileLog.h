@@ -2,7 +2,10 @@
 ASWLog_FileLog.h
 Author: Anthony S. West - ASW Software
 
-A light-weight logging tool.
+A logging library.
+
+TASWFileLog, a text logger that writes to a file, with rotation by size and
+by day, backup cleanup, and flush and sync settings for crash durability.
 
 Requires C++ 20 or higher.
 

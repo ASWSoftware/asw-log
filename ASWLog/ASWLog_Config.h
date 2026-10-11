@@ -2,9 +2,11 @@
 ASWLog_Config.h
 Author: Anthony S. West - ASW Software
 
-A light-weight logging tool.
+A logging library.
 
-Source for the ASWLog config options.
+TASWLogConfig, the settings of a logger, and the structs that group them
+(line layout, file, asynchronous writing, backtrace, startup and shutdown
+lines, and the settings of the system loggers).
 
 Requires C++ 20 or higher.
 

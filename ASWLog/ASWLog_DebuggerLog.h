@@ -2,7 +2,10 @@
 ASWLog_DebuggerLog.h
 Author: Anthony S. West - ASW Software
 
-A light-weight logging tool.
+A logging library.
+
+TASWDebuggerLog, a text logger that writes to the debugger's output on
+Windows (OutputDebugStringW); it writes nothing on other platforms.
 
 Requires C++ 20 or higher.
 

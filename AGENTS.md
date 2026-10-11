@@ -6,7 +6,7 @@ These instructions apply to the entire repository unless a more specific `AGENTS
 
 ## Repository Overview
 
-ASWLog is a thread-safe light-weight C++ logging tool for Windows and Linux projects.
+ASWLog is a thread-safe, dependency-free C++20 logging library for Windows and Linux.
 
 - `ASWLog/` contains the framework implementation.
 - `tests/` contains the unit tests: test modules (`Test_ASWLog_<Unit>`, the tests of `ASWLog_<Unit>`) and shared test helpers (`UT_Helper_<Topic>`, e.g. `UT_Helper_DateTime`) in `tests/tests/`, their CMake project in `tests/cmake/`, their RAD Studio console project in `tests/rad370/`, and their RAD Studio VCL GUI runner project in `tests/vcl/gui/rad370/` (built from the submodule's `vcl/gui/src`). `tests/compile_checks/` holds "must not compile" checks, which `tests/cmake/CMakeLists.txt` runs with `try_compile` when configuring (a failed check stops the configure). `tests/package/` is a project that builds against an installed ASWLog with `find_package` (CI installs the library and runs it).

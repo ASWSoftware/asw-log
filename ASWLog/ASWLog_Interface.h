@@ -2,7 +2,10 @@
 ASWLog_Interface.h
 Author: Anthony S. West - ASW Software
 
-A light-weight logging tool.
+A logging library.
+
+IASWLog, the interface of every logger, with its logging methods: plain,
+formatted (*Fmt, checked at compile time), raw and forced.
 
 Requires C++ 20 or higher.
 

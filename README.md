@@ -1,6 +1,14 @@
 # ASWLog - https://github.com/ASWSoftware/asw-log
 
-ASWLog is a thread-safe light-weight C++ logging tool for Windows and Linux projects.
+ASWLog is a thread-safe, dependency-free C++20 logging library for Windows and Linux.
+
+## Design
+
+ASWLog is a folder of standard C++ sources, or one CMake target, with no third-party code. Its defaults put crash
+durability first: a logging call is synchronous and every entry is flushed before the call returns, so the last
+entries before a crash are in the file. A call below the logger's level costs a few nanoseconds, so Debug and Trace
+calls can stay in release builds and be turned on at run time. The rest (asynchronous writing, backtrace, JSON and
+pattern formatters, crash handlers, and the other extras below) is opt-in.
 
 ## Features
 
@@ -67,7 +75,7 @@ ASWLog is a thread-safe light-weight C++ logging tool for Windows and Linux proj
 
 # Donations:
 
-If you find this tool helpful, donations are always appreciated:
+If you find this library helpful, donations are always appreciated:
 
 PayPal:
 donate@aswsoftware.com
