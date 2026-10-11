@@ -293,6 +293,7 @@ ASWLog::TASWLogConfig MakeRotationTestConfig(const std::filesystem::path& logFil
     config.Line.ShowThreadId = false;
     config.Line.ShowFunctionName = false;
     config.Line.ShowSourceLine = false;
+    config.Startup.WriteLoggerVersion = false;
     config.Startup.WriteTimeInfo = false;
     config.Startup.WriteOSInfo = false;
     config.Startup.WriteDriveInfo = false;
@@ -1460,6 +1461,7 @@ void TTest_ASWLog_FileLog::Test_InitializeAndLogInfo_WritesText()
     config.Line.ShowPeakWorkingSet = false;
     config.Line.ShowFunctionName = false;
     config.Line.ShowSourceLine = false;
+    config.Startup.WriteLoggerVersion = false;
     config.Startup.WriteTimeInfo = false;
     config.Startup.WriteOSInfo = false;
     config.Startup.WriteDriveInfo = false;

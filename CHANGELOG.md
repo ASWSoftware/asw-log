@@ -254,6 +254,11 @@ see [0.26.1](#0261---2026-09-17) for the initial versioned baseline.
   the library is now named `ASWLogd` (e.g. `ASWLogd.lib`), so Debug and
   Release can share an install prefix; nothing changes for code that links to
   the `ASWLog::ASWLog` target.
+- The ASWLog version in the startup lines: right after the banner, a text
+  logger writes e.g. `ASWLog: version=1.0.0, logger=TASWFileLog`, so a log
+  from the field says which ASWLog (and which logger) wrote it. On by
+  default; `Startup.WriteLoggerVersion = false` leaves it out, which code that
+  turns off every startup line one by one must now add.
 
 ### Changed
 

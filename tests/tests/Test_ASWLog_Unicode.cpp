@@ -254,6 +254,7 @@ ASWLog::TASWLogConfig MakeQuietConfig()
     config.Startup.WriteMemoryUsage = false;
     config.Startup.WriteOSInfo = false;
     config.Startup.WriteSystemMemoryInfo = false;
+    config.Startup.WriteLoggerVersion = false;
     config.Startup.WriteTimeInfo = false;
     return config;
 }

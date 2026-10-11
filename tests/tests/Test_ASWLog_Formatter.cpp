@@ -134,6 +134,7 @@ ASWLog::TASWLogConfig MakeConfigWithoutFields(const std::filesystem::path& file)
     config.Line.ShowSourceLine = false;
     config.File.OpenRetryCount = 1;
     config.Shutdown.WriteLine = false;
+    config.Startup.WriteLoggerVersion = false;
     config.Startup.WriteTimeInfo = false;
     config.Startup.WriteOSInfo = false;
     config.Startup.WriteDriveInfo = false;

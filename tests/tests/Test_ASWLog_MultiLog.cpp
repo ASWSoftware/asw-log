@@ -248,6 +248,7 @@ ASWLog::TASWLogConfig MakeFileConfig(const std::filesystem::path& dir, const std
     config.Line.ShowSourceLine = false;
     config.File.OpenRetryCount = 1;
     config.Shutdown.WriteLine = false;
+    config.Startup.WriteLoggerVersion = false;
     config.Startup.WriteTimeInfo = false;
     config.Startup.WriteOSInfo = false;
     config.Startup.WriteDriveInfo = false;

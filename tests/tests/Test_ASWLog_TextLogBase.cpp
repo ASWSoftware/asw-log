@@ -49,6 +49,7 @@ limitations under the License.
 #include "ASWLog_FileLog.h"
 #include "ASWLog_Formatter.h"
 #include "ASWLog_TextLogBase.h"
+#include "ASWLog_Version.h"
 //---------------------------------------------------------------------------
 
 namespace ASWUnitTests
@@ -342,6 +343,7 @@ ASWLog::TASWLogConfig MakeQuietConfig()
     config.Line.ShowSourceLine = false;
     config.File.OpenRetryCount = 1;
     config.Shutdown.WriteLine = false;
+    config.Startup.WriteLoggerVersion = false;
     config.Startup.WriteTimeInfo = false;
     config.Startup.WriteOSInfo = false;
     config.Startup.WriteDriveInfo = false;
@@ -418,6 +420,7 @@ TTest_ASWLog_TextLogBase::TTest_ASWLog_TextLogBase()
     RegisterTest(&TTest_ASWLog_TextLogBase::Test_Flush_ThrowingHookDoesNotEscape, "Flush_ThrowingHookDoesNotEscape");
     RegisterTest(&TTest_ASWLog_TextLogBase::Test_Formatter_FormatsEveryFileLine, "Formatter_FormatsEveryFileLine");
     RegisterTest(&TTest_ASWLog_TextLogBase::Test_Initialize_ThrowingFormatterStillInitializes, "Initialize_ThrowingFormatterStillInitializes");
+    RegisterTest(&TTest_ASWLog_TextLogBase::Test_Initialize_WritesLoggerVersionAfterTheBanner, "Initialize_WritesLoggerVersionAfterTheBanner");
     RegisterTest(&TTest_ASWLog_TextLogBase::Test_Initialize_WritesStartupLinesThenCallsAfterEntry, "Initialize_WritesStartupLinesThenCallsAfterEntry");
     RegisterTest(&TTest_ASWLog_TextLogBase::Test_Log_AtLevelOffIsNeverWritten, "Log_AtLevelOffIsNeverWritten");
     RegisterTest(&TTest_ASWLog_TextLogBase::Test_Log_DroppedWhenNotReadyOrNotPrepared, "Log_DroppedWhenNotReadyOrNotPrepared");
@@ -1094,6 +1097,31 @@ void TTest_ASWLog_TextLogBase::Test_Initialize_ThrowingFormatterStillInitializes
     CheckEquals(2, output.AfterEntryCount, "AfterEntryUnlocked should still run after the startup lines, and after the raw entry");
     CheckTrue(reportedMessages == std::vector<std::string>{ "Skipped the startup lines: format failed", "Dropped an entry: format failed" },
         "The skipped startup lines and the dropped entry should be reported");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_TextLogBase::Test_Initialize_WritesLoggerVersionAfterTheBanner()
+{
+    // Arrange
+    TMemoryOutput output;
+    TMemoryTextLog log(output);
+    auto config = MakeQuietConfig();
+    config.Startup.Banner = "starting";
+    config.Startup.WriteLoggerVersion = true;
+    config.Startup.WriteTimeInfo = true;
+
+    // Act
+    const bool initialized = log.Initialize(config);
+
+    // Assert
+    CheckTrue(initialized, "Initialize should succeed");
+    CheckEquals(3, output.Lines.size(), "Initialize should write the banner, the version line and the time line");
+    if (output.Lines.size() == 3)
+    {
+        CheckEquals(std::string("[INFO]: starting\n"), output.Lines[0], "The banner should come first");
+        CheckEquals(std::format("[INFO]: ASWLog: version={}, logger=TMemoryTextLog\n", ASWLog::Version), output.Lines[1],
+            "The version line should follow the banner, with the version and the logger's class");
+        CheckStartsWith(output.Lines[2], "[INFO]: Time: ", "The other startup lines should follow: " + output.Lines[2]);
+    }
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_TextLogBase::Test_Initialize_WritesStartupLinesThenCallsAfterEntry()

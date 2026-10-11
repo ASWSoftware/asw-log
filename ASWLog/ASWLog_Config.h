@@ -305,6 +305,9 @@ struct TASWStartupConfig
     bool WriteApplicationInfo  = true;
     bool WriteCommandLine      = false; // Added to the application info line
     bool WriteDriveInfo        = true;
+    // "ASWLog: version=<ASWLOG_VERSION_STRING>, logger=<class>", the first line after the banner, so a log says which
+    // ASWLog wrote it
+    bool WriteLoggerVersion    = true;
     bool WriteMemoryUsage      = true;
     bool WriteOSInfo           = true;
     bool WriteSystemMemoryInfo = true;

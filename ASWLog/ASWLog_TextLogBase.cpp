@@ -31,6 +31,7 @@ limitations under the License.
 //---------------------------------------------------------------------------
 #include "ASWLog_CrashHandler.h"
 #include "ASWLog_Utils.h"
+#include "ASWLog_Version.h"
 //---------------------------------------------------------------------------
 
 namespace ASWLog
@@ -977,6 +978,9 @@ void TASWTextLogBase::WriteInfoLine(std::string_view message, std::source_locati
 //---------------------------------------------------------------------------
 void TASWTextLogBase::WriteInitializationInfo()
 {
+    if (GetConfigUnlocked().Startup.WriteLoggerVersion)
+        WriteLoggerVersionInfo();
+
     if (GetConfigUnlocked().Startup.WriteTimeInfo)
         WriteTimeInfo();
 
@@ -1017,6 +1021,12 @@ std::string TASWTextLogBase::WriteLogEntry(const TASWLogRecord& record)
     WriteLineUnlocked(record.LogLevel, line, IsFormatted(record, config));
 
     return line;
+}
+
+//---------------------------------------------------------------------------
+void TASWTextLogBase::WriteLoggerVersionInfo()
+{
+    WriteInfoLine(std::format("ASWLog: version={}, logger={}", Version, GetLoggerClassName()));
 }
 
 //---------------------------------------------------------------------------

@@ -85,6 +85,7 @@ The `Show*` settings are read by the built-in layout and by `TASWJSONFormatter`;
 | Setting | Default | What it does |
 |---|---|---|
 | `Banner` | empty | A line written first, if set. |
+| `WriteLoggerVersion` | `true` | The ASWLog version and the logger's class, right after the banner, e.g. `ASWLog: version=1.0.0, logger=TASWFileLog`, so a log says which ASWLog wrote it. |
 | `WriteApplicationInfo` | `true` | The executable's path and build target, e.g. `App: app_exe='C:\MyApp\MyApp.exe', app_target=Win64`. |
 | `WriteCommandLine` | `false` | The command line, added to the application line. |
 | `WriteDriveInfo` | `true` | The disk's total, free and used space. |

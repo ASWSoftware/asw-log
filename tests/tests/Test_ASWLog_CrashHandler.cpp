@@ -270,6 +270,7 @@ ASWLog::TASWLogConfig MakeCrashTestConfig(const std::filesystem::path& fileName)
     config.Line.ShowFunctionName = false;
     config.Line.ShowSourceLine = false;
     config.Shutdown.WriteLine = false;
+    config.Startup.WriteLoggerVersion = false;
     config.Startup.WriteTimeInfo = false;
     config.Startup.WriteOSInfo = false;
     config.Startup.WriteDriveInfo = false;

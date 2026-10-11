@@ -209,6 +209,7 @@ private:
     void WriteInfoLine(std::string_view message, std::source_location loc = std::source_location::current());
     void WriteInitializationInfo();
     std::string WriteLogEntry(const TASWLogRecord& record);
+    void WriteLoggerVersionInfo();
     void WriteMemoryUsageInfo();
     void WriteOSInfo();
     void WriteQueuedEntries(std::deque<TQueuedEntry>& entries, std::size_t droppedCount) noexcept;

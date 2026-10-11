@@ -55,6 +55,7 @@ private: // Test methods
     void Test_Flush_ThrowingHookDoesNotEscape();
     void Test_Formatter_FormatsEveryFileLine();
     void Test_Initialize_ThrowingFormatterStillInitializes();
+    void Test_Initialize_WritesLoggerVersionAfterTheBanner();
     void Test_Initialize_WritesStartupLinesThenCallsAfterEntry();
     void Test_Log_AtLevelOffIsNeverWritten();
     void Test_Log_DroppedWhenNotReadyOrNotPrepared();

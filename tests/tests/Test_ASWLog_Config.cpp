@@ -341,6 +341,7 @@ void TTest_ASWLog_Config::Test_ApplyEnvironment_SeedsTheLevelAtInitialize()
     config.Startup.WriteMemoryUsage = false;
     config.Startup.WriteOSInfo = false;
     config.Startup.WriteSystemMemoryInfo = false;
+    config.Startup.WriteLoggerVersion = false;
     config.Startup.WriteTimeInfo = false;
     config.Shutdown.WriteLine = false;
     ASWLog::TASWMemoryLog log;
@@ -555,6 +556,7 @@ void TTest_ASWLog_Config::Test_Defaults_MatchDocumentedValues()
     CheckTrue(config.Startup.WriteApplicationInfo, "Startup.WriteApplicationInfo should default to true");
     CheckFalse(config.Startup.WriteCommandLine, "Startup.WriteCommandLine should default to false");
     CheckTrue(config.Startup.WriteDriveInfo, "Startup.WriteDriveInfo should default to true");
+    CheckTrue(config.Startup.WriteLoggerVersion, "Startup.WriteLoggerVersion should default to true");
     CheckTrue(config.Startup.WriteMemoryUsage, "Startup.WriteMemoryUsage should default to true");
     CheckTrue(config.Startup.WriteOSInfo, "Startup.WriteOSInfo should default to true");
     CheckTrue(config.Startup.WriteSystemMemoryInfo, "Startup.WriteSystemMemoryInfo should default to true");
