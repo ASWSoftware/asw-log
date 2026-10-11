@@ -36,6 +36,7 @@ private:
     typedef TTestGroupBase inherited;
 
 private: // Test methods
+    void Test_Async_DropsAnEntryWhileTheFileCantBeOpened();
     void Test_Async_EntryAtWaitAtLevelIsInTheFileWhenTheCallReturns();
     void Test_Async_EveryWriteFlushesEachBatch();
     void Test_Async_PeriodicFlushesOnTheSameThread();
@@ -49,17 +50,24 @@ private: // Test methods
     void Test_ChildProcess_DoesNotInheritLogFile();
     void Test_DailyRolling_KeepsExistingBackupForSameDate();
     void Test_DailyRolling_KeepsLeftoverLogFromSameDay();
+    void Test_DailyRolling_LocalZoneRollsAtLocalMidnight();
     void Test_DailyRolling_NamesBackupForContentDate();
+    void Test_DailyRolling_ReconfiguredZoneRollsAtItsMidnight();
     void Test_DailyRolling_RotatesLeftoverLogFromEarlierDay();
+    void Test_DailyRolling_RotatesLeftoverLogFromEarlierLocalDay();
     void Test_DailyRolling_SharedLogRollsOverOnce();
     void Test_DeleteOldLogs_AcceptsShortRelativeFolder();
     void Test_DeleteOldLogs_EmptyPatternDeletesNothing();
+    void Test_DeleteOldLogs_KeepsNonMatchingFilesAndSubfolders();
     void Test_DeleteOldLogs_MatchesNonASCIIFileNames();
     void Test_DeleteOldLogs_RemovesOldFiles();
+    void Test_FailedOpen_TriesOpenRetryCountTimes();
     void Test_FailedReopen_RetriesAndResumesLogging();
     void Test_FailedReopen_ZeroResetDelayRetriesOnNextWrite();
     void Test_FailedSizeRotation_WaitsBeforeRetrying();
     void Test_FileStream_FlushWorksAfterFailedWrite();
+    void Test_FileStream_InsertionIntoAClosedStreamFails();
+    void Test_FileStream_InsertionWritesAndCountsTheSize();
     void Test_FlushImmediatelyAtLevel_FlushesEntriesAtOrAboveTheLevel();
     void Test_FlushImmediatelyAtLevel_OffLeavesFlushingToFlushMode();
     void Test_Flush_WritesBufferedManualModeEntries();
@@ -74,6 +82,17 @@ private: // Test methods
     void Test_LogRawOptions();
     void Test_MultiThreadedStress_WritesAllMessagesToDisk();
     void Test_MultiThreadedStress_WritesAllMessagesToDisk_OpenClose();
+    void Test_NewFile_AsyncWorkerWritesTheStartupLinesBeforeTheEntry();
+    void Test_NewFile_DailyRollingStartsWithTheStartupLines();
+    void Test_NewFile_FailedRotationWritesNoStartupLines();
+    void Test_NewFile_InitializeWritesItsStartupLinesOnce();
+    void Test_NewFile_ManualRotationOpensASharedLogForTheStartupLines();
+    void Test_NewFile_MinimumLevelAboveInfoLeavesOutTheStartupLines();
+    void Test_NewFile_ReconfigureToANewPathStartsWithTheStartupLines();
+    void Test_NewFile_RotationWaitsUntilTheStartupLinesAreWritten();
+    void Test_NewFile_SharedLogGetsTheStartupLinesOnce();
+    void Test_NewFile_SizeRotationStartsWithTheStartupLines();
+    void Test_NewFile_UnopenedFileGetsTheStartupLinesWhenItOpens();
     void Test_OnBackupCreated_IsNotCalledWhenRotationFails();
     void Test_OnBackupCreated_LeavesARenamedBackupToTheApp();
     void Test_OnBackupCreated_ReportsDailyBackupAtInitialize();
@@ -87,6 +106,7 @@ private: // Test methods
     void Test_OnError_ReportsFullDisk();
     void Test_OnLogEntry_FiresForQualifyingLevelsOnly();
     void Test_OnLogEntry_ReentrantCallbackDoesNotDeadlock();
+    void Test_Open_KeepsAnOpenFile();
     void Test_Periodic_CloseStopsAndOpenRestartsTheThread();
     void Test_Periodic_CloseStopsTheThreadWithoutWaitingForTheInterval();
     void Test_Periodic_ConcurrentLoggingAndReconfigure();
@@ -101,8 +121,11 @@ private: // Test methods
     void Test_Reconfigure_UnopenableFileFailsButLoggerStaysInitialized();
     void Test_RetentionMaxAge_DefaultDisabledPreservesOldBackups();
     void Test_RetentionMaxAge_DeletesExpiredBackupsAfterRotation();
+    void Test_RotateLogFiles_FailsWhenEveryBackupNameIsTaken();
     void Test_RotateLogFiles_KeepsEveryBackup();
+    void Test_RotateLogFiles_NamesBackupInLocalTime();
     void Test_SetEnabled_FalseStopsAutoOpenCloseLogging();
+    void Test_ShutdownLine_TimeFollowsTimestampZone();
     void Test_SizeRotation_AutoOpenCloseCountsOtherWriters();
     void Test_SizeRotation_CountsExistingFileSize();
     void Test_SizeRotation_RotatesWhenLimitReached();

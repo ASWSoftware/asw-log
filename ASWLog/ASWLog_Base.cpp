@@ -79,6 +79,47 @@ public:
     TReportingErrorScope& operator=(const TReportingErrorScope&) = delete;
 };
 
+// True while this thread is in a logger's OnBeforeWrite hook (see TASWLogBase::WriteThroughHook()). Read only by a
+// logger that has a hook, since a thread_local read is a library call with some compilers (e.g. MinGW's GCC).
+thread_local bool IsRunningBeforeWrite = false;
+
+// Sets IsRunningBeforeWrite while alive (hooks don't nest: an entry logged inside one skips them)
+class TRunningBeforeWriteScope
+{
+public:
+    TRunningBeforeWriteScope() noexcept
+    {
+        IsRunningBeforeWrite = true;
+    }
+
+    ~TRunningBeforeWriteScope()
+    {
+        IsRunningBeforeWrite = false;
+    }
+
+    TRunningBeforeWriteScope(const TRunningBeforeWriteScope&) = delete;
+    TRunningBeforeWriteScope& operator=(const TRunningBeforeWriteScope&) = delete;
+};
+
+//---------------------------------------------------------------------------
+
+void ForgetCopiedViews(TASWLogRecord& record) noexcept;
+
+//---------------------------------------------------------------------------
+
+/*
+  ForgetCopiedViews
+
+  Empties the views of a kept record whose texts and fields are held in copies beside it (see TBacktraceEntry)
+*/
+void ForgetCopiedViews(TASWLogRecord& record) noexcept
+{
+    record.Message = {};
+    record.Category = {};
+    record.Fields = nullptr;
+    record.Scope = nullptr;
+}
+
 } // namespace
 
 //---------------------------------------------------------------------------
@@ -171,20 +212,28 @@ void TASWLogBase::KeepInBacktrace(const TASWLogRecord& record)
     if (m_BacktraceCapacity == 0)
         return; // Switched off since the gate let the entry in
 
+    // The fields are copied first, so a failed copy changes nothing
+    Detail::TOwnedFields fields;
+    fields.AssignMerged(record.Scope, record.GetOwnFields());
+
     if (m_Backtrace.size() < m_BacktraceCapacity)
     {
-        // The message is copied first, so a failed copy leaves no empty entry behind
-        TBacktraceEntry entry{ record, std::string(record.Message) };
-        entry.Record.Message = {};
+        // The texts are copied first, so a failed copy leaves no empty entry behind
+        TBacktraceEntry entry{ record, std::string(record.Message), std::string(record.Category), std::move(fields) };
+        ForgetCopiedViews(entry.Record);
         m_Backtrace.push_back(std::move(entry));
     }
     else
     {
-        // Replaces the oldest, reusing its message's memory
+        // Replaces the oldest, reusing its message's memory. The category is copied first and swapped in last, so a
+        // failed copy leaves the oldest entry as it was.
         auto& entry = m_Backtrace[m_BacktraceOldest];
+        std::string category(record.Category);
         entry.Message.assign(record.Message);
+        entry.Category.swap(category);
+        entry.Fields = std::move(fields);
         entry.Record = record;
-        entry.Record.Message = {};
+        ForgetCopiedViews(entry.Record);
         m_BacktraceOldest = (m_BacktraceOldest + 1) % m_BacktraceCapacity;
     }
 
@@ -292,6 +341,8 @@ std::shared_ptr<const TASWLogConfig> TASWLogBase::SetConfig(const TASWLogConfig&
         m_Config.swap(snapshot);
     }
 
+    m_HasBeforeWrite.store(config.OnBeforeWrite != nullptr, std::memory_order_relaxed);
+
     if (KeepsBacktrace())
         ApplyBacktraceConfig(config.Backtrace);
 
@@ -333,30 +384,25 @@ void TASWLogBase::Write(const TASWLogRecord& record) noexcept
 {
     // Off isn't a severity and a disabled logger writes nothing, even when forced; a forced entry ignores only the
     // minimum level. Checked before stamping, so a filtered entry costs no clock or thread id read.
-    const bool isAccepted = record.Forced ? record.LogLevel != Level::Off && IsEnabled() : PassesLevelGate(record.LogLevel);
-    if (!isAccepted)
+    if (!PassesLevelGate(record))
         return;
 
     // Stamped now, on the calling thread and before any lock, so the time is the moment of the call
     TASWLogRecord stampedRecord = record;
     StampRecord(stampedRecord);
 
+    if (stampedRecord.Scope == nullptr)
+        stampedRecord.Scope = TASWLogScope::GetCurrent();
+
     // A derived logger's WriteRecord() may throw (e.g. out of memory, or a custom logger's own error); logging must
     // never throw into the application, so the entry is dropped instead
     try
     {
-        // Let in only for the backtrace. Read again: if the minimum level changed since the gate, the entry is kept or
-        // written as if it had been logged just before or after the change.
-        if (!record.Forced && record.LogLevel < GetMinimumLevel())
-        {
-            KeepInBacktrace(stampedRecord);
-            return;
-        }
-
-        if (m_HasBacktrace.load(std::memory_order_relaxed) && record.LogLevel >= m_BacktraceDumpLevel.load(std::memory_order_relaxed))
-            WriteBacktrace();
-
-        WriteRecord(stampedRecord);
+        // An entry logged from inside a hook is written as it is, so a hook that logs doesn't recurse
+        if (m_HasBeforeWrite.load(std::memory_order_relaxed) && !IsRunningBeforeWrite)
+            WriteThroughHook(stampedRecord);
+        else
+            WriteOrKeep(stampedRecord);
     }
     catch (...)
     {
@@ -394,13 +440,75 @@ void TASWLogBase::WriteBacktrace()
 
     for (const auto& entry : entries)
     {
+        const auto fields = entry.Fields.Get();
+
         auto record = entry.Record;
         record.Message = entry.Message;
+        record.Category = entry.Category;
+        record.Fields = &fields;
         record.Forced = true;
+
         WriteRecord(record);
     }
 
     writeMarker(Detail::BacktraceEndText);
+}
+
+//---------------------------------------------------------------------------
+/*
+    TASWLogBase::WriteOrKeep
+
+    Write()'s last step, for a stamped entry that passed the gate (and the hook, if any): keeps it in the backtrace if
+    only the backtrace let it in, else writes the backtrace first if the entry's level dumps it, then the entry.
+*/
+void TASWLogBase::WriteOrKeep(const TASWLogRecord& record)
+{
+    // Read again: if the minimum level changed since the gate, the entry is kept or written as if it had been logged
+    // just before or after the change
+    if (!record.Forced && record.LogLevel < GetMinimumLevelFor(record))
+    {
+        KeepInBacktrace(record);
+        return;
+    }
+
+    if (m_HasBacktrace.load(std::memory_order_relaxed) && record.LogLevel >= m_BacktraceDumpLevel.load(std::memory_order_relaxed))
+        WriteBacktrace();
+
+    WriteRecord(record);
+}
+
+//---------------------------------------------------------------------------
+/*
+    TASWLogBase::WriteThroughHook
+
+    Passes a stamped entry to the config's OnBeforeWrite hook, then on to WriteOrKeep() as the hook changed it, unless
+    the hook drops it. A hook that throws drops the entry, which is reported.
+*/
+void TASWLogBase::WriteThroughHook(const TASWLogRecord& record)
+{
+    const auto config = GetConfig();
+    if (config->OnBeforeWrite == nullptr)
+    {
+        WriteOrKeep(record); // Reconfigured without a hook since Write() checked
+        return;
+    }
+
+    TASWPendingEntry entry(record);
+    bool isKept = false;
+
+    try
+    {
+        TRunningBeforeWriteScope runningScope;
+        isKept = config->OnBeforeWrite(entry);
+    }
+    catch (...)
+    {
+        ReportError(*config, MakeExceptionError("Dropped an entry, OnBeforeWrite threw"));
+        return;
+    }
+
+    if (isKept)
+        WriteOrKeep(entry.GetRecord());
 }
 
 //---------------------------------------------------------------------------

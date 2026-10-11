@@ -25,11 +25,13 @@ limitations under the License.
 #include "ASWLog_Types.h"
 //---------------------------------------------------------------------------
 #include <algorithm>
-#include <cctype>
 #include <format>
+#include <initializer_list>
 #include <iomanip>
 #include <iostream>
 #include <sstream>
+#include <utility>
+#include <vector>
 //---------------------------------------------------------------------------
 #include "ASWLog_Utils.h"
 //---------------------------------------------------------------------------
@@ -37,32 +39,15 @@ limitations under the License.
 namespace ASWLog
 {
 
-namespace
-{
-
-// Helper to check if two strings match case-insensitively without
-// creating a new, modified string allocation on the heap.
-bool iequals(std::string_view a, std::string_view b) noexcept
-{
-    return std::equal(a.begin(), a.end(), b.begin(), b.end(),
-        [](char char_a, char char_b)
-            {
-                // Cast to unsigned char before passing to tolower to avoid UB with negative values
-                return std::tolower(static_cast<unsigned char>(char_a)) == std::tolower(static_cast<unsigned char>(char_b));
-            });
-}
-
-} // namespace
-
 //---------------------------------------------------------------------------
 
 //---------------------------------------------------------------------------
 std::optional<AsyncOverflowPolicy> AsyncOverflowPolicy_FromString(std::string_view str) noexcept
 {
-    if (iequals(str, "BLOCK"))
+    if (Detail::EqualsIgnoringCase(str, "BLOCK"))
         return AsyncOverflowPolicy::Block;
 
-    if (iequals(str, "DROP_NEWEST") || iequals(str, "DROPNEWEST"))
+    if (Detail::EqualsIgnoringCase(str, "DROP_NEWEST") || Detail::EqualsIgnoringCase(str, "DROPNEWEST"))
         return AsyncOverflowPolicy::DropNewest;
 
     return std::nullopt;
@@ -71,13 +56,13 @@ std::optional<AsyncOverflowPolicy> AsyncOverflowPolicy_FromString(std::string_vi
 //---------------------------------------------------------------------------
 std::optional<ColorMode> ColorMode_FromString(std::string_view str) noexcept
 {
-    if (iequals(str, "AUTO"))
+    if (Detail::EqualsIgnoringCase(str, "AUTO"))
         return ColorMode::Auto;
 
-    if (iequals(str, "ALWAYS"))
+    if (Detail::EqualsIgnoringCase(str, "ALWAYS"))
         return ColorMode::Always;
 
-    if (iequals(str, "NEVER"))
+    if (Detail::EqualsIgnoringCase(str, "NEVER"))
         return ColorMode::Never;
 
     return std::nullopt; // Return empty optional if the string is not recognized
@@ -86,16 +71,16 @@ std::optional<ColorMode> ColorMode_FromString(std::string_view str) noexcept
 //---------------------------------------------------------------------------
 std::optional<FlushMode> FlushMode_FromString(std::string_view str) noexcept
 {
-    if (iequals(str, "EVERY_WRITE") || iequals(str, "EVERYWRITE"))
+    if (Detail::EqualsIgnoringCase(str, "EVERY_WRITE") || Detail::EqualsIgnoringCase(str, "EVERYWRITE"))
         return FlushMode::EveryWrite;
 
-    if (iequals(str, "ON_NEW_LINE") || iequals(str, "ONNEWLINE"))
+    if (Detail::EqualsIgnoringCase(str, "ON_NEW_LINE") || Detail::EqualsIgnoringCase(str, "ONNEWLINE"))
         return FlushMode::OnNewLine;
 
-    if (iequals(str, "MANUAL"))
+    if (Detail::EqualsIgnoringCase(str, "MANUAL"))
         return FlushMode::Manual;
 
-    if (iequals(str, "PERIODIC"))
+    if (Detail::EqualsIgnoringCase(str, "PERIODIC"))
         return FlushMode::Periodic;
 
     return std::nullopt;
@@ -104,25 +89,25 @@ std::optional<FlushMode> FlushMode_FromString(std::string_view str) noexcept
 //---------------------------------------------------------------------------
 std::optional<Level> Level_FromString(std::string_view str) noexcept
 {
-    if (iequals(str, "TRACE"))
+    if (Detail::EqualsIgnoringCase(str, "TRACE"))
         return Level::Trace;
 
-    if (iequals(str, "DEBUG"))
+    if (Detail::EqualsIgnoringCase(str, "DEBUG"))
         return Level::Debug;
 
-    if (iequals(str, "INFO"))
+    if (Detail::EqualsIgnoringCase(str, "INFO"))
         return Level::Info;
 
-    if (iequals(str, "WARN") || iequals(str, "WARNING"))
+    if (Detail::EqualsIgnoringCase(str, "WARN") || Detail::EqualsIgnoringCase(str, "WARNING"))
         return Level::Warn;
 
-    if (iequals(str, "ERROR"))
+    if (Detail::EqualsIgnoringCase(str, "ERROR"))
         return Level::Error;
 
-    if (iequals(str, "CRITICAL") || iequals(str, "FATAL"))
+    if (Detail::EqualsIgnoringCase(str, "CRITICAL") || Detail::EqualsIgnoringCase(str, "FATAL"))
         return Level::Critical;
 
-    if (iequals(str, "OFF") || iequals(str, "NONE"))
+    if (Detail::EqualsIgnoringCase(str, "OFF") || Detail::EqualsIgnoringCase(str, "NONE"))
         return Level::Off;
 
     return std::nullopt; // Return empty optional if the string is not recognized
@@ -131,13 +116,67 @@ std::optional<Level> Level_FromString(std::string_view str) noexcept
 //---------------------------------------------------------------------------
 std::optional<LineEnding> LineEnding_FromString(std::string_view str) noexcept
 {
-    if (iequals(str, "LF") || iequals(str, "LINUX"))
+    if (Detail::EqualsIgnoringCase(str, "LF") || Detail::EqualsIgnoringCase(str, "LINUX"))
         return LineEnding::LF;
 
-    if (iequals(str, "CRLF") || iequals(str, "WINDOWS"))
+    if (Detail::EqualsIgnoringCase(str, "CRLF") || Detail::EqualsIgnoringCase(str, "WINDOWS"))
         return LineEnding::CRLF;
 
     return std::nullopt; // Return empty optional if the string is not recognized
+}
+
+//---------------------------------------------------------------------------
+std::optional<MultilineMode> MultilineMode_FromString(std::string_view str) noexcept
+{
+    if (Detail::EqualsIgnoringCase(str, "PRESERVE"))
+        return MultilineMode::Preserve;
+
+    if (Detail::EqualsIgnoringCase(str, "INDENT"))
+        return MultilineMode::Indent;
+
+    if (Detail::EqualsIgnoringCase(str, "ESCAPE"))
+        return MultilineMode::Escape;
+
+    return std::nullopt;
+}
+
+//---------------------------------------------------------------------------
+std::optional<SyslogFacility> SyslogFacility_FromString(std::string_view str) noexcept
+{
+    for (const auto facility : { SyslogFacility::User, SyslogFacility::Daemon, SyslogFacility::Local0, SyslogFacility::Local1, SyslogFacility::Local2, SyslogFacility::Local3, SyslogFacility::Local4, SyslogFacility::Local5, SyslogFacility::Local6, SyslogFacility::Local7 })
+    {
+        if (Detail::EqualsIgnoringCase(str, SyslogFacility_ToString(facility)))
+            return facility;
+    }
+
+    return std::nullopt;
+}
+
+//---------------------------------------------------------------------------
+std::optional<TimePrecision> TimePrecision_FromString(std::string_view str) noexcept
+{
+    if (Detail::EqualsIgnoringCase(str, "MILLISECONDS") || Detail::EqualsIgnoringCase(str, "MS"))
+        return TimePrecision::Milliseconds;
+
+    if (Detail::EqualsIgnoringCase(str, "MICROSECONDS") || Detail::EqualsIgnoringCase(str, "US"))
+        return TimePrecision::Microseconds;
+
+    if (Detail::EqualsIgnoringCase(str, "NANOSECONDS") || Detail::EqualsIgnoringCase(str, "NS"))
+        return TimePrecision::Nanoseconds;
+
+    return std::nullopt;
+}
+
+//---------------------------------------------------------------------------
+std::optional<TimeZone> TimeZone_FromString(std::string_view str) noexcept
+{
+    if (Detail::EqualsIgnoringCase(str, "UTC"))
+        return TimeZone::UTC;
+
+    if (Detail::EqualsIgnoringCase(str, "LOCAL"))
+        return TimeZone::Local;
+
+    return std::nullopt;
 }
 
 //---------------------------------------------------------------------------
@@ -163,6 +202,102 @@ std::string TASWLogError::ToString() const
         text += std::format(" ({} more not reported)", SuppressedCount);
 
     return text;
+}
+
+//---------------------------------------------------------------------------
+
+/////////////////////////////////////////////////////////////////////////////
+// TASWPendingEntry
+/////////////////////////////////////////////////////////////////////////////
+
+//---------------------------------------------------------------------------
+TASWPendingEntry::TASWPendingEntry(const TASWLogRecord& record) noexcept
+    : m_Record(record)
+{
+}
+
+//---------------------------------------------------------------------------
+const TASWLogValue* TASWPendingEntry::FindField(std::string_view key) const noexcept
+{
+    const TASWLogValue* value = nullptr;
+    m_Record.ForEachField([key, &value](const TASWLogField& field) {
+            if (field.Key == key)
+                value = &field.Value;
+        });
+
+    return value;
+}
+
+//---------------------------------------------------------------------------
+const TASWLogRecord& TASWPendingEntry::GetRecord() const noexcept
+{
+    return m_Record;
+}
+
+//---------------------------------------------------------------------------
+void TASWPendingEntry::RemoveField(std::string_view key)
+{
+    if (FindField(key) == nullptr)
+        return;
+
+    std::vector<TASWLogField> fields;
+    m_Record.ForEachField([key, &fields](const TASWLogField& field) {
+            if (field.Key != key)
+                fields.push_back(field);
+        });
+
+    ReplaceFields(fields);
+}
+
+//---------------------------------------------------------------------------
+/*
+    TASWPendingEntry::ReplaceFields
+
+    Makes 'fields' (copied; they may refer to the current copies) the entry's only fields, in place of its own and its
+    scopes'. The copies they replace are kept until the entry ends, so a ForEachField() under way can finish.
+*/
+void TASWPendingEntry::ReplaceFields(std::span<const TASWLogField> fields)
+{
+    Detail::TOwnedFields replacement;
+    replacement.Assign(fields);
+
+    if (!m_Fields.Get().empty())
+        m_ReplacedFields.push_back(std::move(m_Fields));
+
+    m_Fields = std::move(replacement);
+    m_FieldsView = m_Fields.Get();
+    m_Record.Fields = &m_FieldsView;
+    m_Record.Scope = nullptr;
+}
+
+//---------------------------------------------------------------------------
+void TASWPendingEntry::SetField(std::string_view key, const TASWLogValue& value)
+{
+    std::vector<TASWLogField> fields;
+    bool isReplaced = false;
+    m_Record.ForEachField([key, &value, &fields, &isReplaced](const TASWLogField& field) {
+            if (field.Key == key)
+            {
+                fields.push_back(TASWLogField{ field.Key, value });
+                isReplaced = true;
+            }
+            else
+            {
+                fields.push_back(field);
+            }
+        });
+
+    if (!isReplaced)
+        fields.push_back(TASWLogField{ key, value });
+
+    ReplaceFields(fields);
+}
+
+//---------------------------------------------------------------------------
+void TASWPendingEntry::SetMessage(std::string message) noexcept
+{
+    m_Message = std::move(message);
+    m_Record.Message = m_Message;
 }
 
 //---------------------------------------------------------------------------

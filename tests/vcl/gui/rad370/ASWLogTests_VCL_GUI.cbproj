@@ -192,6 +192,10 @@
             <DependentOn>..\..\..\..\ASWLog\ASWLog_Base.h</DependentOn>
             <BuildOrder>2</BuildOrder>
         </CppCompile>
+        <CppCompile Include="..\..\..\..\ASWLog\ASWLog_CategoryLog.cpp">
+            <DependentOn>..\..\..\..\ASWLog\ASWLog_CategoryLog.h</DependentOn>
+            <BuildOrder>47</BuildOrder>
+        </CppCompile>
         <CppCompile Include="..\..\..\..\ASWLog\ASWLog_Config.cpp">
             <DependentOn>..\..\..\..\ASWLog\ASWLog_Config.h</DependentOn>
             <BuildOrder>3</BuildOrder>
@@ -203,6 +207,14 @@
         <CppCompile Include="..\..\..\..\ASWLog\ASWLog_CrashHandler.cpp">
             <DependentOn>..\..\..\..\ASWLog\ASWLog_CrashHandler.h</DependentOn>
             <BuildOrder>42</BuildOrder>
+        </CppCompile>
+        <CppCompile Include="..\..\..\..\ASWLog\ASWLog_DebuggerLog.cpp">
+            <DependentOn>..\..\..\..\ASWLog\ASWLog_DebuggerLog.h</DependentOn>
+            <BuildOrder>56</BuildOrder>
+        </CppCompile>
+        <CppCompile Include="..\..\..\..\ASWLog\ASWLog_Fields.cpp">
+            <DependentOn>..\..\..\..\ASWLog\ASWLog_Fields.h</DependentOn>
+            <BuildOrder>50</BuildOrder>
         </CppCompile>
         <CppCompile Include="..\..\..\..\ASWLog\ASWLog_FileLog.cpp">
             <DependentOn>..\..\..\..\ASWLog\ASWLog_FileLog.h</DependentOn>
@@ -216,9 +228,25 @@
             <DependentOn>..\..\..\..\ASWLog\ASWLog_Interface.h</DependentOn>
             <BuildOrder>6</BuildOrder>
         </CppCompile>
+        <CppCompile Include="..\..\..\..\ASWLog\ASWLog_Limiter.cpp">
+            <DependentOn>..\..\..\..\ASWLog\ASWLog_Limiter.h</DependentOn>
+            <BuildOrder>62</BuildOrder>
+        </CppCompile>
+        <CppCompile Include="..\..\..\..\ASWLog\ASWLog_MemoryLog.cpp">
+            <DependentOn>..\..\..\..\ASWLog\ASWLog_MemoryLog.h</DependentOn>
+            <BuildOrder>54</BuildOrder>
+        </CppCompile>
         <CppCompile Include="..\..\..\..\ASWLog\ASWLog_MultiLog.cpp">
             <DependentOn>..\..\..\..\ASWLog\ASWLog_MultiLog.h</DependentOn>
             <BuildOrder>7</BuildOrder>
+        </CppCompile>
+        <CppCompile Include="..\..\..\..\ASWLog\ASWLog_NullLog.cpp">
+            <DependentOn>..\..\..\..\ASWLog\ASWLog_NullLog.h</DependentOn>
+            <BuildOrder>52</BuildOrder>
+        </CppCompile>
+        <CppCompile Include="..\..\..\..\ASWLog\ASWLog_SyslogLog.cpp">
+            <DependentOn>..\..\..\..\ASWLog\ASWLog_SyslogLog.h</DependentOn>
+            <BuildOrder>58</BuildOrder>
         </CppCompile>
         <CppCompile Include="..\..\..\..\ASWLog\ASWLog_TextLogBase.cpp">
             <DependentOn>..\..\..\..\ASWLog\ASWLog_TextLogBase.h</DependentOn>
@@ -228,6 +256,10 @@
             <DependentOn>..\..\..\..\ASWLog\ASWLog_Types.h</DependentOn>
             <BuildOrder>8</BuildOrder>
         </CppCompile>
+        <CppCompile Include="..\..\..\..\ASWLog\ASWLog_Unicode.cpp">
+            <DependentOn>..\..\..\..\ASWLog\ASWLog_Unicode.h</DependentOn>
+            <BuildOrder>66</BuildOrder>
+        </CppCompile>
         <CppCompile Include="..\..\..\..\ASWLog\ASWLog_Utils.cpp">
             <DependentOn>..\..\..\..\ASWLog\ASWLog_Utils.h</DependentOn>
             <BuildOrder>9</BuildOrder>
@@ -236,9 +268,17 @@
             <DependentOn>..\..\..\..\ASWLog\ASWLog_Version.h</DependentOn>
             <BuildOrder>38</BuildOrder>
         </CppCompile>
+        <CppCompile Include="..\..\..\..\ASWLog\ASWLog_WindowsEventLog.cpp">
+            <DependentOn>..\..\..\..\ASWLog\ASWLog_WindowsEventLog.h</DependentOn>
+            <BuildOrder>60</BuildOrder>
+        </CppCompile>
         <CppCompile Include="..\..\..\tests\Test_ASWLog_Base.cpp">
             <DependentOn>..\..\..\tests\Test_ASWLog_Base.h</DependentOn>
             <BuildOrder>27</BuildOrder>
+        </CppCompile>
+        <CppCompile Include="..\..\..\tests\Test_ASWLog_CategoryLog.cpp">
+            <DependentOn>..\..\..\tests\Test_ASWLog_CategoryLog.h</DependentOn>
+            <BuildOrder>48</BuildOrder>
         </CppCompile>
         <CppCompile Include="..\..\..\tests\Test_ASWLog_Config.cpp">
             <DependentOn>..\..\..\tests\Test_ASWLog_Config.h</DependentOn>
@@ -252,6 +292,14 @@
             <DependentOn>..\..\..\tests\Test_ASWLog_CrashHandler.h</DependentOn>
             <BuildOrder>43</BuildOrder>
         </CppCompile>
+        <CppCompile Include="..\..\..\tests\Test_ASWLog_DebuggerLog.cpp">
+            <DependentOn>..\..\..\tests\Test_ASWLog_DebuggerLog.h</DependentOn>
+            <BuildOrder>57</BuildOrder>
+        </CppCompile>
+        <CppCompile Include="..\..\..\tests\Test_ASWLog_Fields.cpp">
+            <DependentOn>..\..\..\tests\Test_ASWLog_Fields.h</DependentOn>
+            <BuildOrder>51</BuildOrder>
+        </CppCompile>
         <CppCompile Include="..\..\..\tests\Test_ASWLog_FileLog.cpp">
             <DependentOn>..\..\..\tests\Test_ASWLog_FileLog.h</DependentOn>
             <BuildOrder>30</BuildOrder>
@@ -260,9 +308,25 @@
             <DependentOn>..\..\..\tests\Test_ASWLog_Formatter.h</DependentOn>
             <BuildOrder>37</BuildOrder>
         </CppCompile>
+        <CppCompile Include="..\..\..\tests\Test_ASWLog_Limiter.cpp">
+            <DependentOn>..\..\..\tests\Test_ASWLog_Limiter.h</DependentOn>
+            <BuildOrder>63</BuildOrder>
+        </CppCompile>
+        <CppCompile Include="..\..\..\tests\Test_ASWLog_MemoryLog.cpp">
+            <DependentOn>..\..\..\tests\Test_ASWLog_MemoryLog.h</DependentOn>
+            <BuildOrder>55</BuildOrder>
+        </CppCompile>
         <CppCompile Include="..\..\..\tests\Test_ASWLog_MultiLog.cpp">
             <DependentOn>..\..\..\tests\Test_ASWLog_MultiLog.h</DependentOn>
             <BuildOrder>31</BuildOrder>
+        </CppCompile>
+        <CppCompile Include="..\..\..\tests\Test_ASWLog_NullLog.cpp">
+            <DependentOn>..\..\..\tests\Test_ASWLog_NullLog.h</DependentOn>
+            <BuildOrder>53</BuildOrder>
+        </CppCompile>
+        <CppCompile Include="..\..\..\tests\Test_ASWLog_SyslogLog.cpp">
+            <DependentOn>..\..\..\tests\Test_ASWLog_SyslogLog.h</DependentOn>
+            <BuildOrder>59</BuildOrder>
         </CppCompile>
         <CppCompile Include="..\..\..\tests\Test_ASWLog_TextLogBase.cpp">
             <DependentOn>..\..\..\tests\Test_ASWLog_TextLogBase.h</DependentOn>
@@ -272,6 +336,10 @@
             <DependentOn>..\..\..\tests\Test_ASWLog_Types.h</DependentOn>
             <BuildOrder>32</BuildOrder>
         </CppCompile>
+        <CppCompile Include="..\..\..\tests\Test_ASWLog_Unicode.cpp">
+            <DependentOn>..\..\..\tests\Test_ASWLog_Unicode.h</DependentOn>
+            <BuildOrder>67</BuildOrder>
+        </CppCompile>
         <CppCompile Include="..\..\..\tests\Test_ASWLog_Utils.cpp">
             <DependentOn>..\..\..\tests\Test_ASWLog_Utils.h</DependentOn>
             <BuildOrder>33</BuildOrder>
@@ -279,6 +347,26 @@
         <CppCompile Include="..\..\..\tests\Test_ASWLog_Version.cpp">
             <DependentOn>..\..\..\tests\Test_ASWLog_Version.h</DependentOn>
             <BuildOrder>39</BuildOrder>
+        </CppCompile>
+        <CppCompile Include="..\..\..\tests\Test_ASWLog_WindowsEventLog.cpp">
+            <DependentOn>..\..\..\tests\Test_ASWLog_WindowsEventLog.h</DependentOn>
+            <BuildOrder>61</BuildOrder>
+        </CppCompile>
+        <CppCompile Include="..\..\..\tests\UT_Helper_DateTime.cpp">
+            <DependentOn>..\..\..\tests\UT_Helper_DateTime.h</DependentOn>
+            <BuildOrder>44</BuildOrder>
+        </CppCompile>
+        <CppCompile Include="..\..\..\tests\UT_Helper_Environment.cpp">
+            <DependentOn>..\..\..\tests\UT_Helper_Environment.h</DependentOn>
+            <BuildOrder>64</BuildOrder>
+        </CppCompile>
+        <CppCompile Include="..\..\..\tests\UT_Helper_JSON.cpp">
+            <DependentOn>..\..\..\tests\UT_Helper_JSON.h</DependentOn>
+            <BuildOrder>49</BuildOrder>
+        </CppCompile>
+        <CppCompile Include="..\..\..\tests\UT_Helper_StdErr.cpp">
+            <DependentOn>..\..\..\tests\UT_Helper_StdErr.h</DependentOn>
+            <BuildOrder>65</BuildOrder>
         </CppCompile>
         <CppCompile Include="ASWLogTests_VCL_GUI.cpp">
             <BuildOrder>0</BuildOrder>
@@ -352,6 +440,14 @@
         <CppCompile Include="..\..\..\..\third_party\asw-unit-tests\vcl\gui\src\ASWUnitTests_GUI_Selection.cpp">
             <DependentOn>..\..\..\..\third_party\asw-unit-tests\vcl\gui\src\ASWUnitTests_GUI_Selection.h</DependentOn>
             <BuildOrder>41</BuildOrder>
+        </CppCompile>
+        <CppCompile Include="..\..\..\..\third_party\asw-unit-tests\vcl\gui\src\ASWUnitTests_GUI_Shuffle.cpp">
+            <DependentOn>..\..\..\..\third_party\asw-unit-tests\vcl\gui\src\ASWUnitTests_GUI_Shuffle.h</DependentOn>
+            <BuildOrder>45</BuildOrder>
+        </CppCompile>
+        <CppCompile Include="..\..\..\..\third_party\asw-unit-tests\vcl\gui\src\ASWUnitTests_GUI_ShuffleSeedDialog.cpp">
+            <DependentOn>..\..\..\..\third_party\asw-unit-tests\vcl\gui\src\ASWUnitTests_GUI_ShuffleSeedDialog.h</DependentOn>
+            <BuildOrder>46</BuildOrder>
         </CppCompile>
         <CppCompile Include="..\..\..\..\third_party\asw-unit-tests\vcl\gui\src\ASWUnitTests_GUI_Strings.cpp">
             <DependentOn>..\..\..\..\third_party\asw-unit-tests\vcl\gui\src\ASWUnitTests_GUI_Strings.h</DependentOn>

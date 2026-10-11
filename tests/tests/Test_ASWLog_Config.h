@@ -36,6 +36,17 @@ private:
     typedef TTestGroupBase inherited;
 
 private: // Test methods
+    void Test_ApplyEnvironment_AppliesPatternAfterFormat();
+    void Test_ApplyEnvironment_AppliesTheCategoryLevels();
+    void Test_ApplyEnvironment_IgnoresUnsetAndEmptyVariables();
+    void Test_ApplyEnvironment_ReadsTheDefaultPrefix();
+    void Test_ApplyEnvironment_ReadsUTF8Values();
+    void Test_ApplyEnvironment_ReportsInvalidValues();
+    void Test_ApplyEnvironment_SeedsTheLevelAtInitialize();
+    void Test_ApplyEnvironment_SetsEachKey();
+    void Test_ApplySetting_ReportsAnUnknownKey();
+    void Test_ApplySetting_SetsOneSetting();
+    void Test_ApplySetting_WritesToStdErrWithoutHandler();
     void Test_Defaults_MatchDocumentedValues();
     void Test_ResolveFolder_CustomFolder();
     void Test_ResolvePath_AbsolutePath();

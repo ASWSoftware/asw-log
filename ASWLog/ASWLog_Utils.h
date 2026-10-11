@@ -2,9 +2,10 @@
 ASWLog_Utils.h
 Author: Anthony S. West - ASW Software
 
-A light-weight logging tool.
+A logging library.
 
-Source for the ASWLog utility functions, etc.
+Helpers the loggers use, which an application can use too: log file names,
+process and system information, paths, time formatting and JSON escaping.
 
 Requires C++ 20 or higher.
 
@@ -33,9 +34,12 @@ limitations under the License.
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <system_error>
+//---------------------------------------------------------------------------
+#include "ASWLog_Types.h"
 //---------------------------------------------------------------------------
 
 namespace ASWLog
@@ -72,7 +76,6 @@ struct TSystemMemoryUsage
 */
 [[nodiscard]] std::string GenerateLogFileName(std::string_view prefix, std::string_view customPostfix);
 
-[[nodiscard]] std::string GetApplicationInfoString();
 [[nodiscard]] std::string GetCommandLineString();
 
 // The operating system's id for the current process, as shown by Task Manager, ps, and debuggers.
@@ -84,6 +87,13 @@ struct TSystemMemoryUsage
 
 [[nodiscard]] std::string GetDriveInfoString();
 [[nodiscard]] std::filesystem::path GetExecutablePath();
+
+// The file version in the version resource of 'file' (e.g. an executable or DLL), as four numbers, e.g. "2.3.1.45",
+// what Explorer shows as "File version". Empty if the file has no version resource or can't be read, and always on
+// Linux, which has no version resources. Windows may report its own system files' version differently (e.g. 6.2 for
+// 10.0) to an application without a compatibility manifest. Throws std::bad_alloc if out of memory.
+[[nodiscard]] std::string GetFileVersionString(const std::filesystem::path& file);
+
 [[nodiscard]] TMemoryUsage GetMemoryUsage();
 [[nodiscard]] std::string GetMemoryUsageString();
 [[nodiscard]] std::string GetOSInfoString();
@@ -134,8 +144,110 @@ struct TSystemMemoryUsage
 */
 [[nodiscard]] std::error_code RenameWithoutReplacing(const std::filesystem::path& from, const std::filesystem::path& to) noexcept;
 
+namespace Detail
+{
+
+// A piece of a JSON string's text (see NextJSONPiece())
+struct TJSONPiece
+{
+    std::string_view Text;
+    bool IsEscape = false; // An escape or U+FFFD, which must not be cut; otherwise ASCII and valid UTF-8, as they are
+};
+
+// A piece of a line as a MultilineMode writes it (see NextMultilinePiece())
+struct TMultilinePiece
+{
+    std::string_view Text;
+    bool IsLineBreak = false; // A line break as the mode writes it, which must not be cut; otherwise text as it is
+};
+
+//---------------------------------------------------------------------------
+
+/*
+    ApplyMultilineMode
+
+    Rewrites the line breaks inside 'line' as 'mode' asks (see MultilineMode), Indent with 'ending' as the line ending.
+    Leaves 'line' as it is, without allocating, if it has no line break to rewrite.
+*/
+void ApplyMultilineMode(std::string& line, MultilineMode mode, LineEnding ending);
+
+/*
+    CutToFit
+
+    Cuts 'text' to at most 'maxBytes' bytes, between UTF-8 characters, ending with " [cut]" if that fits too. Leaves a
+    text that fits as it is.
+*/
+void CutToFit(std::string& text, std::size_t maxBytes);
+
+/*
+    EqualsIgnoringCase
+
+    True if 'a' and 'b' are the same text, ignoring the case of ASCII letters
+*/
+[[nodiscard]] bool EqualsIgnoringCase(std::string_view a, std::string_view b) noexcept;
+
+/*
+    NextJSONPiece
+
+    The next piece of 'text', from 'index' on, as JSON::AppendString() writes it between the quotes, and moves 'index'
+    past it: a run of characters written as they are (a view of 'text', which can be cut between UTF-8 sequences), or
+    one escape or U+FFFD, written into 'escape'. An empty piece at the end of 'text'. Allocates nothing, so a crash
+    handler can write a JSON string piece by piece into a fixed buffer.
+*/
+[[nodiscard]] TJSONPiece NextJSONPiece(std::string_view text, std::size_t& index, char (& escape)[6]) noexcept;
+
+/*
+    NextMultilinePiece
+
+    The next piece of 'text', from 'index' on, as ApplyMultilineMode() writes it, and moves 'index' past it: a run of
+    text without a line break to rewrite (a view of 'text'; with Preserve, the rest of it), or one line break as 'mode'
+    writes it (Indent: 'ending' and the marker of the next line, "    | ", or "    |" when that line is empty). An empty
+    piece at the end of 'text'. Allocates nothing, so a crash handler can use it too.
+*/
+[[nodiscard]] TMultilinePiece NextMultilinePiece(std::string_view text, std::size_t& index, MultilineMode mode,
+    LineEnding ending) noexcept;
+
+/*
+    ReadEnvironmentVariable
+
+    The value of the environment variable 'name' in UTF-8 (read with the wide Windows API on Windows, which the C
+    runtime's getenv() doesn't use), or nullopt if it isn't set or can't be read. A variable set to an empty value
+    gives an empty string. Never throws.
+*/
+[[nodiscard]] std::optional<std::string> ReadEnvironmentVariable(std::string_view name) noexcept;
+
+/*
+    TrimSpaces
+
+    'text' without the spaces and tabs at its start and end
+*/
+[[nodiscard]] std::string_view TrimSpaces(std::string_view text) noexcept;
+
+} // namespace Detail
+
+namespace JSON
+{
+
+/*
+    AppendString
+
+    Appends 'text' to 'output' as a JSON string, in double quotes, escaped as RFC 8259 asks: '"' and '\' with a
+    backslash, the control characters below 0x20 as \b, \f, \n, \r, \t or \u00XX. Valid UTF-8 is written as it is, and
+    each invalid UTF-8 sequence (the longest start of a valid sequence, or else one byte, as Unicode recommends) is
+    replaced with U+FFFD, so the result is always valid UTF-8 JSON.
+*/
+void AppendString(std::string& output, std::string_view text);
+
+} // namespace JSON
+
 namespace Time
 {
+
+// The size of the buffer WriteISO8601() writes to: enough for the longest form, a 6-character year with nanoseconds
+// and an offset
+inline constexpr std::size_t ISO8601BufferSize = 40;
+
+//---------------------------------------------------------------------------
 
 /*
     GetUTCOffsetMinutes
@@ -149,27 +261,42 @@ namespace Time
 /*
     ToISO8601String
 
-    Converts a high-precision system time point into a valid ISO 8601 UTC string.
-        Format: YYYY-MM-DDTHH:mm:ss.mmmZ
+    Converts a system time point into an ISO 8601 string, as WriteISO8601() writes it.
+        Format: YYYY-MM-DDTHH:mm:ss.mmmZ (the defaults)
 */
-[[nodiscard]] std::string ToISO8601String(std::chrono::system_clock::time_point timePoint);
+[[nodiscard]] std::string ToISO8601String(std::chrono::system_clock::time_point timePoint, TimeZone zone = TimeZone::UTC,
+    TimePrecision precision = TimePrecision::Milliseconds);
 
 /*
     ToDateString
 
-    Extracts just the calendar date segment needed for midnight rolling checks.
+    The date part of ToISO8601String(), in 'zone', e.g. for daily rolling.
         Format: YYYY-MM-DD
 */
-[[nodiscard]] std::string ToDateString(std::chrono::system_clock::time_point timePoint);
+[[nodiscard]] std::string ToDateString(std::chrono::system_clock::time_point timePoint, TimeZone zone = TimeZone::UTC);
 
 /*
     ToLocalISO8601String
 
     Converts a system time point into an ISO 8601 local time string with the local time zone's offset from UTC (see
-    GetUTCOffsetMinutes()), with milliseconds like ToISO8601String().
+    GetUTCOffsetMinutes()), with milliseconds: ToISO8601String() with TimeZone::Local.
         Format: YYYY-MM-DDTHH:mm:ss.mmm+hh:mm (e.g. 2026-09-28T21:02:44.123-05:00)
 */
 [[nodiscard]] std::string ToLocalISO8601String(std::chrono::system_clock::time_point timePoint);
+
+/*
+    WriteISO8601
+
+    Writes 'timePoint' as an ISO 8601 string into 'buffer' and returns the number of characters written: the date, the
+    time with 3, 6 or 9 digits of the second ('precision'), and "Z" for TimeZone::UTC, or the local time zone's offset
+    from UTC for TimeZone::Local (see GetUTCOffsetMinutes()). A 4-digit year for the years 0 to 9999, the year in full
+    outside them. Allocates nothing. UTC is calendar arithmetic only, so a crash handler can use it, even in a POSIX
+    signal handler; Local calls localtime_s/localtime_r, which isn't safe there, and falls back to UTC if the local
+    time can't be determined.
+        Format: YYYY-MM-DDTHH:mm:ss.mmmZ (the defaults), or e.g. 2026-09-28T16:02:44.342519-05:00
+*/
+[[nodiscard]] std::size_t WriteISO8601(char (& buffer)[ISO8601BufferSize], std::chrono::system_clock::time_point timePoint,
+    TimeZone zone = TimeZone::UTC, TimePrecision precision = TimePrecision::Milliseconds) noexcept;
 
 } // namespace Time
 

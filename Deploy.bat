@@ -64,9 +64,23 @@ if errorlevel 1 exit /b 1
 call :CopyFile "README.md" "%TARGET_DIR%\README.md"
 if errorlevel 1 exit /b 1
 
+call :CopyFile "cmake\ASWLogConfig.cmake.in" "%TARGET_DIR%\cmake\ASWLogConfig.cmake.in"
+if errorlevel 1 exit /b 1
+
+call :CopyFile "docs\Configuration.md" "%TARGET_DIR%\docs\Configuration.md"
+if errorlevel 1 exit /b 1
+call :CopyFile "docs\CustomLoggers.md" "%TARGET_DIR%\docs\CustomLoggers.md"
+if errorlevel 1 exit /b 1
+call :CopyFile "docs\Guarantees.md" "%TARGET_DIR%\docs\Guarantees.md"
+if errorlevel 1 exit /b 1
+
 call :CopyFile "ASWLog\ASWLog_Base.cpp" "%TARGET_DIR%\ASWLog\ASWLog_Base.cpp"
 if errorlevel 1 exit /b 1
 call :CopyFile "ASWLog\ASWLog_Base.h" "%TARGET_DIR%\ASWLog\ASWLog_Base.h"
+if errorlevel 1 exit /b 1
+call :CopyFile "ASWLog\ASWLog_CategoryLog.cpp" "%TARGET_DIR%\ASWLog\ASWLog_CategoryLog.cpp"
+if errorlevel 1 exit /b 1
+call :CopyFile "ASWLog\ASWLog_CategoryLog.h" "%TARGET_DIR%\ASWLog\ASWLog_CategoryLog.h"
 if errorlevel 1 exit /b 1
 call :CopyFile "ASWLog\ASWLog_Config.cpp" "%TARGET_DIR%\ASWLog\ASWLog_Config.cpp"
 if errorlevel 1 exit /b 1
@@ -80,6 +94,14 @@ call :CopyFile "ASWLog\ASWLog_CrashHandler.cpp" "%TARGET_DIR%\ASWLog\ASWLog_Cras
 if errorlevel 1 exit /b 1
 call :CopyFile "ASWLog\ASWLog_CrashHandler.h" "%TARGET_DIR%\ASWLog\ASWLog_CrashHandler.h"
 if errorlevel 1 exit /b 1
+call :CopyFile "ASWLog\ASWLog_DebuggerLog.cpp" "%TARGET_DIR%\ASWLog\ASWLog_DebuggerLog.cpp"
+if errorlevel 1 exit /b 1
+call :CopyFile "ASWLog\ASWLog_DebuggerLog.h" "%TARGET_DIR%\ASWLog\ASWLog_DebuggerLog.h"
+if errorlevel 1 exit /b 1
+call :CopyFile "ASWLog\ASWLog_Fields.cpp" "%TARGET_DIR%\ASWLog\ASWLog_Fields.cpp"
+if errorlevel 1 exit /b 1
+call :CopyFile "ASWLog\ASWLog_Fields.h" "%TARGET_DIR%\ASWLog\ASWLog_Fields.h"
+if errorlevel 1 exit /b 1
 call :CopyFile "ASWLog\ASWLog_FileLog.cpp" "%TARGET_DIR%\ASWLog\ASWLog_FileLog.cpp"
 if errorlevel 1 exit /b 1
 call :CopyFile "ASWLog\ASWLog_FileLog.h" "%TARGET_DIR%\ASWLog\ASWLog_FileLog.h"
@@ -92,9 +114,25 @@ call :CopyFile "ASWLog\ASWLog_Interface.cpp" "%TARGET_DIR%\ASWLog\ASWLog_Interfa
 if errorlevel 1 exit /b 1
 call :CopyFile "ASWLog\ASWLog_Interface.h" "%TARGET_DIR%\ASWLog\ASWLog_Interface.h"
 if errorlevel 1 exit /b 1
+call :CopyFile "ASWLog\ASWLog_Limiter.cpp" "%TARGET_DIR%\ASWLog\ASWLog_Limiter.cpp"
+if errorlevel 1 exit /b 1
+call :CopyFile "ASWLog\ASWLog_Limiter.h" "%TARGET_DIR%\ASWLog\ASWLog_Limiter.h"
+if errorlevel 1 exit /b 1
+call :CopyFile "ASWLog\ASWLog_MemoryLog.cpp" "%TARGET_DIR%\ASWLog\ASWLog_MemoryLog.cpp"
+if errorlevel 1 exit /b 1
+call :CopyFile "ASWLog\ASWLog_MemoryLog.h" "%TARGET_DIR%\ASWLog\ASWLog_MemoryLog.h"
+if errorlevel 1 exit /b 1
 call :CopyFile "ASWLog\ASWLog_MultiLog.cpp" "%TARGET_DIR%\ASWLog\ASWLog_MultiLog.cpp"
 if errorlevel 1 exit /b 1
 call :CopyFile "ASWLog\ASWLog_MultiLog.h" "%TARGET_DIR%\ASWLog\ASWLog_MultiLog.h"
+if errorlevel 1 exit /b 1
+call :CopyFile "ASWLog\ASWLog_NullLog.cpp" "%TARGET_DIR%\ASWLog\ASWLog_NullLog.cpp"
+if errorlevel 1 exit /b 1
+call :CopyFile "ASWLog\ASWLog_NullLog.h" "%TARGET_DIR%\ASWLog\ASWLog_NullLog.h"
+if errorlevel 1 exit /b 1
+call :CopyFile "ASWLog\ASWLog_SyslogLog.cpp" "%TARGET_DIR%\ASWLog\ASWLog_SyslogLog.cpp"
+if errorlevel 1 exit /b 1
+call :CopyFile "ASWLog\ASWLog_SyslogLog.h" "%TARGET_DIR%\ASWLog\ASWLog_SyslogLog.h"
 if errorlevel 1 exit /b 1
 call :CopyFile "ASWLog\ASWLog_TextLogBase.cpp" "%TARGET_DIR%\ASWLog\ASWLog_TextLogBase.cpp"
 if errorlevel 1 exit /b 1
@@ -104,6 +142,10 @@ call :CopyFile "ASWLog\ASWLog_Types.cpp" "%TARGET_DIR%\ASWLog\ASWLog_Types.cpp"
 if errorlevel 1 exit /b 1
 call :CopyFile "ASWLog\ASWLog_Types.h" "%TARGET_DIR%\ASWLog\ASWLog_Types.h"
 if errorlevel 1 exit /b 1
+call :CopyFile "ASWLog\ASWLog_Unicode.cpp" "%TARGET_DIR%\ASWLog\ASWLog_Unicode.cpp"
+if errorlevel 1 exit /b 1
+call :CopyFile "ASWLog\ASWLog_Unicode.h" "%TARGET_DIR%\ASWLog\ASWLog_Unicode.h"
+if errorlevel 1 exit /b 1
 call :CopyFile "ASWLog\ASWLog_Utils.cpp" "%TARGET_DIR%\ASWLog\ASWLog_Utils.cpp"
 if errorlevel 1 exit /b 1
 call :CopyFile "ASWLog\ASWLog_Utils.h" "%TARGET_DIR%\ASWLog\ASWLog_Utils.h"
@@ -111,6 +153,10 @@ if errorlevel 1 exit /b 1
 call :CopyFile "ASWLog\ASWLog_Version.cpp" "%TARGET_DIR%\ASWLog\ASWLog_Version.cpp"
 if errorlevel 1 exit /b 1
 call :CopyFile "ASWLog\ASWLog_Version.h" "%TARGET_DIR%\ASWLog\ASWLog_Version.h"
+if errorlevel 1 exit /b 1
+call :CopyFile "ASWLog\ASWLog_WindowsEventLog.cpp" "%TARGET_DIR%\ASWLog\ASWLog_WindowsEventLog.cpp"
+if errorlevel 1 exit /b 1
+call :CopyFile "ASWLog\ASWLog_WindowsEventLog.h" "%TARGET_DIR%\ASWLog\ASWLog_WindowsEventLog.h"
 if errorlevel 1 exit /b 1
 
 call :CopyFile "example\cmake\CMakeLists.txt" "%TARGET_DIR%\example\cmake\CMakeLists.txt"

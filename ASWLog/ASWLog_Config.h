@@ -2,9 +2,11 @@
 ASWLog_Config.h
 Author: Anthony S. West - ASW Software
 
-A light-weight logging tool.
+A logging library.
 
-Source for the ASWLog config options.
+TASWLogConfig, the settings of a logger, and the structs that group them
+(line layout, file, asynchronous writing, backtrace, startup and shutdown
+lines, and the settings of the system loggers).
 
 Requires C++ 20 or higher.
 
@@ -29,6 +31,7 @@ limitations under the License.
 #ifndef ASWLog_ConfigH
 #define ASWLog_ConfigH
 //---------------------------------------------------------------------------
+#include <array>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
@@ -112,6 +115,21 @@ struct TASWBackupInfo
 
 
 /////////////////////////////////////////////////////////////////////////////
+// TASWEventLogConfig
+//
+// How a TASWWindowsEventLog reports its entries to the Windows Event Log (TASWLogConfig::EventLog).
+/////////////////////////////////////////////////////////////////////////////
+struct TASWEventLogConfig
+{
+    // The event source Event Viewer shows, in the Application log. Empty: the executable's file name without its
+    // extension. Register it once to get plain messages (see TASWWindowsEventLog::RegisterSource()).
+    std::string Source;
+    // The event ID of each level's entries, indexed by Level (Trace first): by default 1000 to 1005, Critical 1005
+    std::array<std::uint16_t, LevelCount> EventIds{ 1000, 1001, 1002, 1003, 1004, 1005 };
+};
+
+
+/////////////////////////////////////////////////////////////////////////////
 // TASWFileConfig
 //
 // The log file's location, flushing, reopening, rotation and retention (TASWLogConfig::File). Only a file logger
@@ -156,9 +174,16 @@ struct TASWFileConfig
     // After a failed size rotation (e.g. another program holds the file), entries keep going to the current file, and
     // rotating isn't tried again until this long after the failure. 0 = try on every entry.
     std::chrono::milliseconds RotationRetryDelay{ 500 };
-    // Rolls the file over at UTC midnight, and at Initialize() if the file was last written on an earlier UTC day. The
-    // backup is named for the day it holds.
+    // Rolls the file over at midnight, and at Initialize() if the file was last written on an earlier day, both in
+    // Line.TimestampZone (UTC by default). The backup is named for the day it holds.
     bool EnableDailyRolling   = false;
+    // Starts each file the logger begins after Initialize() (by rotation, daily rolling or Reconfigure() to a new path)
+    // with a line saying where the log continues from, e.g. "Log continued from aswlog.size.2026-10-10_143005_123.bak
+    // (size)" or "Log continued from logs\old.txt (reconfigure)", followed by the startup lines as Initialize() writes
+    // them (see TASWStartupConfig, whose settings still apply), so each file says what wrote it. They are Info lines,
+    // written before the entry that started the file. Not after a failed rotation, and with AutoOpenClosePerWrite, only
+    // by the process that rotated the shared log.
+    bool WriteStartupLinesInNewFiles = true;
 
     // --- Backup Event ---
     // Called once for each backup that rotation makes, e.g. to compress it, upload it or move it elsewhere. Called
@@ -213,20 +238,51 @@ struct TASWFileConfig
 /////////////////////////////////////////////////////////////////////////////
 struct TASWLineConfig
 {
-    // Formats each entry's line (not LogRaw entries). Empty: TASWTextFormatter's layout, from the Show* options below.
-    // One formatter can be shared by several loggers.
+    // Formats each entry's line (LogRaw entries only if the formatter says so, as TASWJSONFormatter does). Empty:
+    // TASWTextFormatter's layout, from the Show* options below. For a layout of your own, assign a TASWPatternFormatter
+    // (e.g. "{time} {level:5} {message}") or your own formatter; for JSON Lines, a TASWJSONFormatter. One formatter can
+    // be shared by several loggers.
     std::shared_ptr<const IASWLogFormatter> Formatter;
-    LineEnding Ending = LineEnding::LF; // Added after each line (not after LogRaw entries)
+    LineEnding Ending = LineEnding::LF; // Added after each formatted line (not after LogRaw entries written as is)
+    // The line breaks inside a formatted line, e.g. of a multi-line message: written as they are (the default), each
+    // followed by "    | " on the next line (Indent), or as \r and \n (Escape), so that every entry is recognizable as
+    // one (see MultilineMode). LogRaw entries written as is always stay as they are; a JSON line has no line breaks.
+    MultilineMode Multiline = MultilineMode::Preserve;
 
-    // The fields TASWTextFormatter writes before the message
-    bool ShowTimestamp      = true; // The entry's time, in UTC
+    // The clock and precision of the timestamps, e.g. 2026-09-28T21:02:44.342Z (the defaults) or, with
+    // TimeZone::Local and TimePrecision::Microseconds, 2026-09-28T16:02:44.342519-05:00. The zone also sets when daily
+    // rolling starts a new file (File.EnableDailyRolling), the time in backup names, and the shutdown line's time. A
+    // crash line written in a POSIX signal handler, or when the logger's lock stays busy, is always UTC with
+    // milliseconds (see ASWLog_CrashHandler.h). Local time costs a C runtime call per line (localtime_s/localtime_r).
+    TimeZone TimestampZone = TimeZone::UTC;
+    TimePrecision TimestampPrecision = TimePrecision::Milliseconds;
+
+    // The fields TASWTextFormatter and TASWJSONFormatter write before the message (a TASWPatternFormatter's pattern
+    // decides its own)
+    bool ShowTimestamp      = true; // The entry's time (see TimestampZone and TimestampPrecision)
     bool ShowLevel          = true;
+    bool ShowCategory       = true; // The entry's category, if it has one (see TASWCategoryLog)
     bool ShowProcessId      = true;
     bool ShowThreadId       = true;
     bool ShowWorkingSet     = false; // The process's memory use
     bool ShowPeakWorkingSet = false;
     bool ShowFunctionName   = false; // The function that logged the entry
     bool ShowSourceLine     = false; // The source file and line that logged the entry
+    bool ShowFields         = true; // The entry's fields (its own and its scopes'; see TASWLogScope), if it has any
+};
+
+
+/////////////////////////////////////////////////////////////////////////////
+// TASWMemoryConfig
+//
+// How much a TASWMemoryLog keeps (TASWLogConfig::Memory). When a new line doesn't fit, the oldest lines go.
+/////////////////////////////////////////////////////////////////////////////
+struct TASWMemoryConfig
+{
+    std::size_t MaxLines = 1000; // 0 = no limit
+    // The most bytes of text kept, the lines' characters (not the memory each line takes beyond them); 0 = no limit. A
+    // line longer than this on its own is kept cut to fit, ending with " [cut]".
+    std::size_t MaxBytes = 0;
 };
 
 
@@ -252,14 +308,35 @@ struct TASWShutdownConfig
 /////////////////////////////////////////////////////////////////////////////
 struct TASWStartupConfig
 {
+    // The application's version, written on the "App:" line as app_version='...' (see WriteApplicationInfo). Empty: on
+    // Windows, the executable's file version from its version resource, if it has one (see GetFileVersionString()).
+    std::string ApplicationVersion;
     std::string Banner; // Written first, if set
     bool WriteApplicationInfo  = true;
     bool WriteCommandLine      = false; // Added to the application info line
     bool WriteDriveInfo        = true;
+    // "ASWLog: version=<ASWLOG_VERSION_STRING>, logger=<class>", the first line after the banner, so a log says which
+    // ASWLog wrote it
+    bool WriteLoggerVersion    = true;
     bool WriteMemoryUsage      = true;
     bool WriteOSInfo           = true;
     bool WriteSystemMemoryInfo = true;
     bool WriteTimeInfo         = true;
+};
+
+
+/////////////////////////////////////////////////////////////////////////////
+// TASWSyslogConfig
+//
+// How a TASWSyslogLog sends its entries to syslog (TASWLogConfig::Syslog).
+/////////////////////////////////////////////////////////////////////////////
+struct TASWSyslogConfig
+{
+    // The name syslog shows for each message, e.g. "myapp" in "myapp[1234]: ...". Empty: the executable's file name.
+    // Process-wide: the syslog logger initialized or reconfigured last sets it, and the application's own openlog()
+    // call replaces it (see TASWSyslogLog).
+    std::string Ident;
+    SyslogFacility Facility = SyslogFacility::User; // Sent with each message, so each syslog logger can have its own
 };
 
 
@@ -283,6 +360,24 @@ struct TASWLogConfig
     TASWFileConfig File;
     TASWAsyncConfig Async;
     TASWBacktraceConfig Backtrace;
+    TASWMemoryConfig Memory;
+    TASWSyslogConfig Syslog;
+    TASWEventLogConfig EventLog;
+
+    // --- Pre-write Hook ---
+    // A last chance for the application to drop or change each of its entries before the logger writes it, e.g. to
+    // redact secrets or personal data, or to drop noisy entries by content or category. Return false to drop the entry;
+    // to change it, call entry.SetMessage(), SetField() or RemoveField(). Called for each application entry that passes
+    // the level checks (LogRaw() entries included, with record.Raw set; those the backtrace keeps too, which it then
+    // keeps as changed), on the logging thread, before the logger takes its lock or queues the entry, so it may log to
+    // another logger, and threads that log at the same time call it at the same time (keep it thread-safe and quick).
+    // An entry logged from inside the hook, on its thread, skips the hooks and is written as it is. The
+    // logger's own lines (startup, shutdown, backtrace markers, crash lines) don't pass through it. If it throws, the
+    // entry is dropped and the exception reported (see OnError). OnLogEntry gets the changed entry. A multi-log calls
+    // its hook once per entry and passes the changed entry on; the config it passes to its loggers has no hook. With no
+    // hook set, a written entry costs one more flag check.
+    using BeforeWriteCallback = std::function<bool (TASWPendingEntry& entry)>;
+    BeforeWriteCallback OnBeforeWrite;
 
     // --- Log Entry Callback Options ---
     // Receives the entry's record (with its time and ids) and the line as written. Both are only valid during the call.
@@ -305,6 +400,39 @@ struct TASWLogConfig
     // and counts the failures it leaves out in its next report of that kind (TASWLogError::SuppressedCount). Measured
     // on the logger's clock (see TASWLogBase::NowUTC()). 0 = report every failure.
     std::chrono::milliseconds ErrorReportInterval{ std::chrono::minutes(1) };
+
+    // --- Settings from the Environment ---
+    // Sets the settings below from environment variables named with 'prefix', e.g. ASWLOG_LEVEL=Debug, so that a
+    // deployed application can log more, or elsewhere, without being rebuilt. Nothing reads them unless the application
+    // calls this; call it on the config before Initialize(), after setting OnError. Their values replace what the code
+    // set; LEVEL seeds the minimum level at Initialize() only (Reconfigure() keeps the current level). Each logger can
+    // read its own variables, e.g. config.ApplyEnvironment("MYAPP_CONSOLE_"). A variable that isn't set, or is empty,
+    // leaves its setting as it is, and so does an invalid value, which is reported to OnError (or written to stderr if
+    // it's empty) as ErrorKind::InvalidSetting. Variables with the prefix that aren't keys are ignored. Returns false
+    // if a value was invalid. Keys and values (ignoring case and the spaces around a value):
+    //   LEVEL           Trace, Debug, Info, Warn, Error, Critical or Off      InitialMinimumLevel
+    //   CATEGORIES      the category levels, e.g. "*=Info,Net=Debug"; process-wide, so set it under one prefix only
+    //                   (see TASWCategoryLog::ApplyLevels())
+    //   FOLDER          a folder (UTF-8)                                      File.FolderPath
+    //   FILE            a file name or path (UTF-8)                           File.FilePath
+    //   FLUSH           EveryWrite, OnNewLine, Manual or Periodic             File.Flush
+    //   SYNC_AT_LEVEL   a level                                               File.SyncToDiskAtLevel
+    //   ASYNC           1, true, yes or on; 0, false, no or off               Async.Enabled
+    //   BACKTRACE       how many entries to keep, 0 = none                    Backtrace.Capacity
+    //   TIME_ZONE       UTC or Local                                          Line.TimestampZone
+    //   TIME_PRECISION  ms, us or ns (or Milliseconds, Microseconds...)       Line.TimestampPrecision
+    //   MULTILINE       Preserve, Indent or Escape                            Line.Multiline
+    //   SHOW_FUNCTION   as ASYNC                                              Line.ShowFunctionName
+    //   SHOW_SOURCE     as ASYNC                                              Line.ShowSourceLine
+    //   FORMAT          Text (the built-in layout) or JSON                    Line.Formatter
+    //   PATTERN         a TASWPatternFormatter pattern, e.g. "{time} {message}", applied after FORMAT
+    // Throws std::bad_alloc if out of memory.
+    bool ApplyEnvironment(std::string_view prefix = "ASWLOG_");
+    // Sets one of ApplyEnvironment()'s settings, 'key' (without a prefix, ignoring case), from 'value', e.g. from the
+    // application's command line or settings file. An empty value leaves the setting as it is. Reports an unknown key
+    // or an invalid value as ApplyEnvironment() does, and returns false for them. Throws std::bad_alloc if out of
+    // memory.
+    bool ApplySetting(std::string_view key, std::string_view value);
 };
 
 } // namespace ASWLog

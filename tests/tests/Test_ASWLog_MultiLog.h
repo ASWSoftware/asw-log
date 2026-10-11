@@ -41,6 +41,7 @@ private: // Test methods
     void Test_Backtrace_EachLoggerKeepsItsOwn();
     void Test_Backtrace_IsNotKeptByTheMultiLog();
     void Test_Close_AllowsInitializeAgain();
+    void Test_Close_ReachesEverySinkEvenAfterAFailure();
     void Test_Contains_ReflectsRegistrationState();
     void Test_DumpBacktrace_ReachesEverySinkUnlessDisabled();
     void Test_Flush_ReachesEverySinkEvenAfterAFailure();
@@ -50,12 +51,15 @@ private: // Test methods
     void Test_GetLoggerCount_ReflectsAddAndRemove();
     void Test_GetLoggers_ReturnsSnapshotOfRegisteredSinks();
     void Test_Initialize_ConcurrentCallsSucceedOnce();
+    void Test_Initialize_FailsOnlyForASinkThatIsNotOpen();
     void Test_IsOpen_RequiresAllSinksOpen();
     void Test_Log_AtLevelOffIsNotFannedOut();
     void Test_Log_FansOutToAllRegisteredSinks();
     void Test_Log_ThrowingSinkDoesNotStopOtherSinks();
     void Test_LogFmt_FormatsOnceForAllSinks();
     void Test_LogForce_BypassesCompositeGate();
+    void Test_OnBeforeWrite_RunsOnceBeforeTheFanOut();
+    void Test_Open_ReachesEverySinkEvenAfterAFailure();
     void Test_Reconfigure_PassesConfigToEverySink();
     void Test_RemoveAllLoggers_ClearsRegistrationAndReturnsCount();
     void Test_RemoveLogger_StopsReceivingEntries();

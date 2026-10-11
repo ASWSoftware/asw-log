@@ -53,11 +53,17 @@ private: // Test methods
     void Test_LogFormatMethods_SkipFormattingWhenNotWritten();
     void Test_LogLevelConvenienceMethods();
     void Test_LogMethods_PassRecordsToWrite();
+    void Test_OnBeforeWrite_DropsOrChangesEntries();
+    void Test_OnBeforeWrite_EntriesLoggedInsideTheHookAreWrittenAsIs();
+    void Test_OnBeforeWrite_ReconfigureSetsAndClearsTheHook();
+    void Test_OnBeforeWrite_SeesEntriesThatPassTheLevelChecks();
+    void Test_OnBeforeWrite_ThrowingHookDropsTheEntryAndReports();
     void Test_ReportError_FailureInHandlerIsNotReportedAgain();
     void Test_ReportError_ThrottlesEachKindSeparately();
     void Test_ReportError_ThrowingHandlerDoesNotEscape();
     void Test_ReportError_WritesToStdErrWithoutHandler();
     void Test_SetGetMinimumLevel_RoundTrips();
+    void Test_ShouldLog_RecordFollowsWritesChecks();
     void Test_ShouldLog_ReflectsEnabledAndLevel();
     void Test_Write_AppliesEnabledOffAndLevelChecks();
     void Test_Write_KeepsFieldsAlreadyStamped();

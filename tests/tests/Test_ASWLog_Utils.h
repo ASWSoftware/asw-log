@@ -36,21 +36,39 @@ private:
     typedef TTestGroupBase inherited;
 
 private: // Test methods
+    void Test_ApplyMultilineMode_EscapeWritesCRAndLFAsText();
+    void Test_ApplyMultilineMode_FindsLineBreaksAnywhereInALongText();
+    void Test_ApplyMultilineMode_IndentMarksEachLineAfterTheFirst();
+    void Test_ApplyMultilineMode_LeavesOtherLinesAsTheyAre();
+    void Test_EqualsIgnoringCase_IgnoresOnlyASCIICase();
     void Test_GenerateLogFileName_ContainsExpectedFields();
     void Test_GenerateLogFileName_PrefixAndPostfixAreOptional();
     void Test_GetCurrentOSProcessId_MatchesOS();
     void Test_GetCurrentOSThreadId_IdentifiesCallingThread();
+    void Test_GetFileVersionString_IsEmptyWithoutAVersionResource();
+    void Test_GetFileVersionString_ReadsTheFileVersion();
     void Test_GetOSInfoString_ContainsEdition();
     void Test_GetTimeInfoString_ReportsCurrentOffset();
     void Test_GetWindowsEditionName_ProductTypes();
     void Test_IsRootFolder_DetectsRootFolders();
     void Test_IsRootFolder_ResolvesRelativePaths();
+    void Test_JSON_AppendString_EscapesQuotesBackslashAndControls();
+    void Test_JSON_AppendString_FindsSpecialCharactersAnywhereInALongText();
+    void Test_JSON_AppendString_KeepsValidUTF8();
+    void Test_JSON_AppendString_ReplacesInvalidUTF8();
     void Test_MatchesWildcard_Patterns();
+    void Test_ReadEnvironmentVariable_ReadsUTF8Values();
     void Test_RenameWithoutReplacing_KeepsExistingTarget();
     void Test_Time_GetUTCOffsetMinutes_FollowsDaylightSavingTime();
     void Test_Time_ToDateString();
+    void Test_Time_ToDateString_FollowsZone();
     void Test_Time_ToISO8601String();
     void Test_Time_ToLocalISO8601String_IncludesOffset();
+    void Test_Time_WriteISO8601_CalendarEdges();
+    void Test_Time_WriteISO8601_LocalTimeWithEachPrecision();
+    void Test_Time_WriteISO8601_UTCWithEachPrecision();
+    void Test_Time_WriteISO8601_YearPast9999IsWrittenInFull();
+    void Test_TrimSpaces_RemovesOuterSpacesAndTabs();
 
 public:
     TTest_ASWLog_Utils();

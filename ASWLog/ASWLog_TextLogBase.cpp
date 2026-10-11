@@ -31,6 +31,7 @@ limitations under the License.
 //---------------------------------------------------------------------------
 #include "ASWLog_CrashHandler.h"
 #include "ASWLog_Utils.h"
+#include "ASWLog_Version.h"
 //---------------------------------------------------------------------------
 
 namespace ASWLog
@@ -70,6 +71,19 @@ void TASWTextLogBase::AfterQueuedEntriesUnlocked(bool mustFlush)
 {
     if (mustFlush)
         FlushUnlocked();
+}
+
+//---------------------------------------------------------------------------
+// The fixed-layout crash line for 'record', as text or, for a TASWJSONFormatter logger, as JSON (see
+// StoreCrashLineSettingsUnlocked()). Allocates nothing.
+void TASWTextLogBase::AppendCrashLine(Detail::TCrashText& line, const TASWLogRecord& record) const noexcept
+{
+    const bool usesCRLF = m_CrashLineUsesCRLF.load(std::memory_order_relaxed);
+
+    if (m_CrashLineUsesJSON.load(std::memory_order_relaxed))
+        Detail::AppendCrashJSONLine(line, record, usesCRLF);
+    else
+        Detail::AppendCrashLine(line, record, usesCRLF, m_CrashLineMultiline.load(std::memory_order_relaxed));
 }
 
 //---------------------------------------------------------------------------
@@ -142,7 +156,8 @@ void TASWTextLogBase::Finalize() noexcept
         // AutoOpenClosePerWrite)
         if (GetConfigUnlocked().Shutdown.WriteLine && EnsureReadyUnlocked())
         {
-            std::string msg = "Logger shutdown: " + Time::ToISO8601String(NowUTC());
+            const auto& line = GetConfigUnlocked().Line;
+            std::string msg = "Logger shutdown: " + Time::ToISO8601String(NowUTC(), line.TimestampZone, line.TimestampPrecision);
 
             if (!GetConfigUnlocked().Shutdown.Banner.empty())
                 msg += ", " + GetConfigUnlocked().Shutdown.Banner;
@@ -183,14 +198,15 @@ void TASWTextLogBase::FlushForCrashUnlocked() noexcept
 /*
     TASWTextLogBase::FormatEntry
 
-    The line written for 'record' with 'config': its message as is for a Raw record, otherwise the formatter's line
-    followed by the line ending.
+    The line written for 'record' with 'config': the formatter's line, its line breaks written as Line.Multiline asks,
+    followed by the line ending, or, for a Raw record that the formatter doesn't format (see IsFormatted()), its
+    message as is.
 */
 std::string TASWTextLogBase::FormatEntry(const TASWLogRecord& record, const TASWLogConfig& config)
 {
     std::string line;
 
-    if (record.Raw)
+    if (!IsFormatted(record, config))
     {
         line.reserve(record.Message.size() + 2);
         line.append(record.Message);
@@ -202,6 +218,9 @@ std::string TASWTextLogBase::FormatEntry(const TASWLogRecord& record, const TASW
     // at exit before a never-destroyed singleton logger writes its shutdown line)
     const auto* formatter = config.Line.Formatter.get();
     line = formatter != nullptr ? formatter->Format(record, config) : TASWTextFormatter::FormatLine(record, config);
+
+    if (config.Line.Multiline != MultilineMode::Preserve)
+        Detail::ApplyMultilineMode(line, config.Line.Multiline, config.Line.Ending);
 
     if (config.Line.Ending == LineEnding::CRLF)
         line += "\r\n";
@@ -242,22 +261,8 @@ bool TASWTextLogBase::Initialize(const TASWLogConfig& config) noexcept
 
         Detail::TCrashHandling::Register(*this);
 
-        // The output is ready, so the startup lines are best effort: if one throws (e.g. a formatter that throws, or
-        // out of memory while gathering the system info), the rest are skipped but the logger is still initialized
-        try
-        {
-            if (!GetConfigUnlocked().Startup.Banner.empty())
-            {
-                WriteInfoLine(GetConfigUnlocked().Startup.Banner);
-            }
-
-            WriteInitializationInfo();
-        }
-        catch (...)
-        {
-            ReportCurrentExceptionUnlocked("Skipped the startup lines");
-        }
-
+        // The output is ready, so the startup lines are best effort: a failed one doesn't fail Initialize()
+        WriteStartupLinesUnlocked();
         AfterEntryUnlocked();
 
         return true;
@@ -266,6 +271,23 @@ bool TASWTextLogBase::Initialize(const TASWLogConfig& config) noexcept
     {
         return false;
     }
+}
+
+//---------------------------------------------------------------------------
+/*
+    TASWTextLogBase::IsFormatted
+
+    True if 'record' gets the formatter's line and the line ending: every record but a Raw one, unless the formatter
+    formats Raw records too (IASWLogFormatter::FormatsRawEntries()).
+*/
+bool TASWTextLogBase::IsFormatted(const TASWLogRecord& record, const TASWLogConfig& config) noexcept
+{
+    if (!record.Raw)
+        return true;
+
+    const auto* formatter = config.Line.Formatter.get();
+
+    return formatter != nullptr && formatter->FormatsRawEntries();
 }
 
 //---------------------------------------------------------------------------
@@ -316,6 +338,7 @@ void TASWTextLogBase::OnCrash(std::string_view message, bool isInSignalHandler, 
     record.LogLevel = Level::Critical;
     record.Message = message;
     record.Forced = true;
+    record.Scope = TASWLogScope::GetCurrent(); // The crashing thread's
     StampRecord(record);
 
     const bool writesLine = IsEnabled() && m_WritesCrashLine.load(std::memory_order_relaxed);
@@ -368,7 +391,7 @@ void TASWTextLogBase::OnCrash(std::string_view message, bool isInSignalHandler, 
     if (!isLineWritten)
     {
         Detail::TCrashText line;
-        Detail::AppendCrashLine(line, record, m_CrashLineUsesCRLF.load(std::memory_order_relaxed));
+        AppendCrashLine(line, record);
         WriteCrashLineDirect(line.View());
     }
 }
@@ -420,11 +443,17 @@ bool TASWTextLogBase::QueueRecord(const TASWLogRecord& record)
     entry.Line = FormatEntry(record, *config);
     entry.Record = record;
     entry.Record.Message = {};
+    entry.Record.Category = {};
+    entry.Record.Fields = nullptr;
+    entry.Record.Scope = nullptr;
+    entry.EndsLine = IsFormatted(record, *config);
     entry.MustFlush = record.LogLevel >= config->Async.WaitAtLevel;
 
     if (config->OnLogEntry != nullptr && record.LogLevel >= config->OnLogEntryMinimumLevel)
     {
         entry.Message = record.Message;
+        entry.Category = record.Category;
+        entry.Fields.AssignMerged(record.Scope, record.GetOwnFields());
         entry.CallbackConfig = config;
     }
 
@@ -658,6 +687,9 @@ void TASWTextLogBase::StoreCrashLineSettingsUnlocked() noexcept
 {
     const auto& config = GetConfigUnlocked();
     m_CrashLineUsesCRLF.store(config.Line.Ending == LineEnding::CRLF, std::memory_order_relaxed);
+    const bool usesJSON = dynamic_cast<const TASWJSONFormatter*>(config.Line.Formatter.get()) != nullptr;
+    m_CrashLineUsesJSON.store(usesJSON, std::memory_order_relaxed);
+    m_CrashLineMultiline.store(config.Line.Multiline, std::memory_order_relaxed);
     m_WritesCrashLine.store(config.Shutdown.WriteCrashLine, std::memory_order_relaxed);
 }
 
@@ -817,7 +849,18 @@ void TASWTextLogBase::WaitForQueuedEntries()
 //---------------------------------------------------------------------------
 void TASWTextLogBase::WriteApplicationInfo()
 {
-    auto applicationInfo = std::format("app_exe='{}', app_target=", PathToUTF8String(GetExecutablePath()));
+    const auto executablePath = GetExecutablePath();
+    auto applicationInfo = std::format("app_exe='{}'", PathToUTF8String(executablePath));
+
+    // The configured version, or else the executable's file version (Windows)
+    auto applicationVersion = GetConfigUnlocked().Startup.ApplicationVersion;
+    if (applicationVersion.empty())
+        applicationVersion = GetFileVersionString(executablePath);
+
+    if (!applicationVersion.empty())
+        applicationInfo += std::format(", app_version='{}'", applicationVersion);
+
+    applicationInfo += ", app_target=";
 
 #if defined(_WIN64)
     applicationInfo += "Win64";
@@ -878,10 +921,9 @@ void TASWTextLogBase::WriteBacktraceForCrash(const TWriteLine& writeLine, bool m
 */
 void TASWTextLogBase::WriteBacktraceForCrashDirect(bool mustClear, std::chrono::steady_clock::time_point deadline) noexcept
 {
-    const bool usesCRLF = m_CrashLineUsesCRLF.load(std::memory_order_relaxed);
-    WriteBacktraceForCrash([this, usesCRLF](const TASWLogRecord& record) {
+    WriteBacktraceForCrash([this](const TASWLogRecord& record) {
             Detail::TCrashText line;
-            Detail::AppendCrashLine(line, record, usesCRLF);
+            AppendCrashLine(line, record);
             WriteCrashLineDirect(line.View());
         }, mustClear, deadline);
 }
@@ -899,7 +941,7 @@ void TASWTextLogBase::WriteBacktraceForCrashUnlocked(std::chrono::steady_clock::
     const auto& config = GetConfigUnlocked();
     WriteBacktraceForCrash([this, &config](const TASWLogRecord& record) {
             const auto line = FormatEntry(record, config);
-            WriteLineUnlocked(record.LogLevel, line, !record.Raw);
+            WriteLineUnlocked(record.LogLevel, line, IsFormatted(record, config));
         }, true, deadline);
 }
 
@@ -933,6 +975,9 @@ void TASWTextLogBase::WriteInfoLine(std::string_view message, std::source_locati
 //---------------------------------------------------------------------------
 void TASWTextLogBase::WriteInitializationInfo()
 {
+    if (GetConfigUnlocked().Startup.WriteLoggerVersion)
+        WriteLoggerVersionInfo();
+
     if (GetConfigUnlocked().Startup.WriteTimeInfo)
         WriteTimeInfo();
 
@@ -962,15 +1007,23 @@ void TASWTextLogBase::WriteInitializationInfo()
 */
 std::string TASWTextLogBase::WriteLogEntry(const TASWLogRecord& record)
 {
-    if (!IsEnabled() || (!record.Forced && record.LogLevel < GetMinimumLevel()))
+    if (!IsEnabled() || (!record.Forced && record.LogLevel < GetMinimumLevelFor(record)))
         return {};
 
     if (!PrepareWriteUnlocked(record.Timestamp))
         return {};
 
-    auto line = FormatEntry(record, GetConfigUnlocked());
-    WriteLineUnlocked(record.LogLevel, line, !record.Raw);
+    const auto& config = GetConfigUnlocked();
+    auto line = FormatEntry(record, config);
+    WriteLineUnlocked(record.LogLevel, line, IsFormatted(record, config));
+
     return line;
+}
+
+//---------------------------------------------------------------------------
+void TASWTextLogBase::WriteLoggerVersionInfo()
+{
+    WriteInfoLine(std::format("ASWLog: version={}, logger={}", Version, GetLoggerClassName()));
 }
 
 //---------------------------------------------------------------------------
@@ -1010,7 +1063,7 @@ void TASWTextLogBase::WriteQueuedEntries(std::deque<TQueuedEntry>& entries, std:
                 if (!EnsureReadyUnlocked() || !PrepareWriteUnlocked(entry.Record.Timestamp))
                     continue;
 
-                WriteLineUnlocked(entry.Record.LogLevel, entry.Line, !entry.Record.Raw);
+                WriteLineUnlocked(entry.Record.LogLevel, entry.Line, entry.EndsLine);
                 AfterEntryUnlocked();
                 entry.IsWritten = true;
                 mustFlush = mustFlush || entry.MustFlush;
@@ -1074,8 +1127,12 @@ void TASWTextLogBase::WriteQueuedEntries(std::deque<TQueuedEntry>& entries, std:
         if (!entry.IsWritten || entry.CallbackConfig == nullptr)
             continue;
 
+        const auto fields = entry.Fields.Get();
         auto record = entry.Record;
         record.Message = entry.Message;
+        record.Category = entry.Category;
+        record.Fields = &fields;
+
         DispatchLogCallback(*entry.CallbackConfig, record, entry.Line);
     }
 }
@@ -1115,6 +1172,31 @@ void TASWTextLogBase::WriteRecord(const TASWLogRecord& record)
 
     if (callbackConfig != nullptr)
         DispatchLogCallback(*callbackConfig, record, writtenLine);
+}
+
+//---------------------------------------------------------------------------
+void TASWTextLogBase::WriteStartupLinesUnlocked(std::string_view firstLine) noexcept
+{
+    m_IsWritingStartupLines = true;
+
+    // If a line throws (e.g. a formatter that throws, or out of memory while gathering the system info), the rest are
+    // skipped
+    try
+    {
+        if (!firstLine.empty())
+            WriteInfoLine(firstLine);
+
+        if (!GetConfigUnlocked().Startup.Banner.empty())
+            WriteInfoLine(GetConfigUnlocked().Startup.Banner);
+
+        WriteInitializationInfo();
+    }
+    catch (...)
+    {
+        ReportCurrentExceptionUnlocked("Skipped the startup lines");
+    }
+
+    m_IsWritingStartupLines = false;
 }
 
 //---------------------------------------------------------------------------

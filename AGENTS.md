@@ -6,15 +6,17 @@ These instructions apply to the entire repository unless a more specific `AGENTS
 
 ## Repository Overview
 
-ASWLog is a thread-safe light-weight C++ logging tool for Windows and Linux projects.
+ASWLog is a thread-safe, dependency-free C++20 logging library for Windows and Linux.
 
 - `ASWLog/` contains the framework implementation.
-- `tests/` contains the unit tests: test modules in `tests/tests/`, their CMake project in `tests/cmake/`, their RAD Studio console project in `tests/rad370/`, and their RAD Studio VCL GUI runner project in `tests/vcl/gui/rad370/` (built from the submodule's `vcl/gui/src`). `tests/compile_checks/` holds "must not compile" checks, which `tests/cmake/CMakeLists.txt` runs with `try_compile` when configuring (a failed check stops the configure).
+- `tests/` contains the unit tests: test modules (`Test_ASWLog_<Unit>`, the tests of `ASWLog_<Unit>`) and shared test helpers (`UT_Helper_<Topic>`, e.g. `UT_Helper_DateTime`) in `tests/tests/`, their CMake project in `tests/cmake/`, their RAD Studio console project in `tests/rad370/`, and their RAD Studio VCL GUI runner project in `tests/vcl/gui/rad370/` (built from the submodule's `vcl/gui/src`). `tests/compile_checks/` holds "must not compile" checks, which `tests/cmake/CMakeLists.txt` runs with `try_compile` when configuring (a failed check stops the configure). `tests/package/` is a project that builds against an installed ASWLog with `find_package` (CI installs the library and runs it).
+- `CMakeLists.txt` (the root) defines the `ASWLog::ASWLog` library target and its install rules; `cmake/ASWLogConfig.cmake.in` is the template of the installed package file. The project version is read from `ASWLog/ASWLog_Version.h`.
 - `third_party/asw-unit-tests/` is the ASWUnitTests framework, a git submodule pinned to a release tag. Never edit files in it; test modules self-register with `ASW_REGISTER_TEST_GROUP`, so adding a test only touches `tests/` and its build files.
-- `.github/workflows/ci.yml` builds and runs the unit tests on Windows (MSVC, MinGW) and Linux (GCC, Clang), plus Linux Clang builds with ThreadSanitizer and with AddressSanitizer + UBSan (`ASWLOG_SANITIZE`).
+- `.github/workflows/ci.yml` builds and runs the unit tests on Windows (MSVC, MinGW) and Linux (GCC, Clang), plus Linux Clang builds with ThreadSanitizer and with AddressSanitizer + UBSan (`ASWLOG_SANITIZE`); the non-sanitizer jobs also check the installed CMake package (`tests/package/`). A Linux GCC coverage job (informational, it never fails the run) shows the library's line coverage on its summary page and uploads an HTML report.
 - `example/` contains example app that uses the logger.
 - `example/rad370/` contains the RAD Studio 13.1 project and Windows build scripts.
-- `README.md` contains repo details.
+- `README.md` contains repo details: features, quick start, project setup, API overview, versions and tests.
+- `docs/` contains the reference documentation: `Configuration.md` (every `TASWLogConfig` setting, its default and which loggers use it, and the environment variables), `Guarantees.md` (thread safety, order, callback threads, lifetimes, crash durability) and `CustomLoggers.md` (custom formatters and loggers).
 - `CHANGELOG.md` records notable changes per release (see Changelog below).
 - `CONTRIBUTING.md` contains the guidelines for contributors (issues, branches, commit history, pull requests, and bug reports); it defers to this file for coding rules, so keep the two consistent.
 - `.uncrustify.cfg` and `.githooks/` define the repository formatting workflow.
@@ -53,6 +55,7 @@ Prefer standard C++ and portable library facilities. Avoid compiler-, IDE-, or o
 - Follow the surrounding naming, indentation, brace, include, and comment style. Avoid unrelated formatting changes.
 - Keep declarations and definitions consistent, and update all relevant project or build files when adding source files.
 - Add or update focused tests for behavior changes, including error and platform-specific cases where applicable.
+- Keep the documentation in step: a new or changed `TASWLogConfig` setting or environment key goes in `docs/Configuration.md`, a new logger in the README's API overview, and a change to threading, lifetimes or durability in `docs/Guarantees.md`. Add a new docs file to `Deploy.bat`.
 
 ## Building and Testing
 
@@ -67,7 +70,7 @@ cmake --build tests/cmake/build --config Release
 
 The VCL GUI runner builds with `tests/vcl/gui/rad370/Build_Win64x_Debug.bat` or `Build_Win64x_Release.bat` into the same output folder. To run every test in it without interaction, use `start /wait ASWLogTests_VCL_GUI.exe --run --exit --layout-ignore --report-junit results.xml`; its exit code matches the console runner's.
 
-When adding a test module, add its `.cpp`/`.h` to `tests/cmake/CMakeLists.txt`, `tests/rad370/ASWLogTests.cbproj`, and `tests/vcl/gui/rad370/ASWLogTests_VCL_GUI.cbproj`, and keep their include paths in sync. Never open the GUI's main form (`ASWUnitTests_GUI_MainForm`) in the RAD Studio designer and save it, since that writes into the submodule.
+When adding a test module or a test helper, add its `.cpp`/`.h` to `tests/cmake/CMakeLists.txt`, `tests/rad370/ASWLogTests.cbproj`, and `tests/vcl/gui/rad370/ASWLogTests_VCL_GUI.cbproj`, and keep their include paths in sync. Never open the GUI's main form (`ASWUnitTests_GUI_MainForm`) in the RAD Studio designer and save it, since that writes into the submodule.
 
 For other environments, use the repository's CMake configuration when present or the IDE's native project configuration. Tests should be run outside the debugger unless debugging an expected exception is intentional. Before considering a change complete:
 

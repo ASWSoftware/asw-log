@@ -47,7 +47,20 @@ private: // Test methods
     void Test_Level_ToString();
     void Test_LineEnding_FromString();
     void Test_LineEnding_ToString();
+    void Test_MultilineMode_FromString();
+    void Test_MultilineMode_ToString();
+    void Test_PendingEntry_ChangingFieldsWhileVisitingIsSafe();
+    void Test_PendingEntry_FindsFieldsOfTheEntryAndItsScopes();
+    void Test_PendingEntry_RemoveFieldRemovesItForThisEntry();
+    void Test_PendingEntry_SetFieldReplacesOrAddsACopy();
+    void Test_PendingEntry_SetMessageOwnsTheText();
     void Test_LogError_ToString();
+    void Test_SyslogFacility_FromString();
+    void Test_SyslogFacility_ToString();
+    void Test_TimePrecision_FromString();
+    void Test_TimePrecision_ToString();
+    void Test_TimeZone_FromString();
+    void Test_TimeZone_ToString();
 
 public:
     TTest_ASWLog_Types();

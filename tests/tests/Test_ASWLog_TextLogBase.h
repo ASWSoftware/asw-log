@@ -36,6 +36,9 @@ private:
     typedef TTestGroupBase inherited;
 
 private: // Test methods
+    void Test_ApplicationInfo_WritesTheCommandLineWhenAsked();
+    void Test_ApplicationInfo_WritesTheConfiguredVersion();
+    void Test_ApplicationInfo_WritesTheExecutablesFileVersionByDefault();
     void Test_Async_BacktraceIsTakenWhenTheTriggerIsLogged();
     void Test_Async_BlockWaitsForRoomInTheQueue();
     void Test_Async_CallReturnsBeforeTheEntryIsWritten();
@@ -55,13 +58,22 @@ private: // Test methods
     void Test_Flush_ThrowingHookDoesNotEscape();
     void Test_Formatter_FormatsEveryFileLine();
     void Test_Initialize_ThrowingFormatterStillInitializes();
+    void Test_Initialize_WritesLoggerVersionAfterTheBanner();
     void Test_Initialize_WritesStartupLinesThenCallsAfterEntry();
     void Test_Log_AtLevelOffIsNeverWritten();
     void Test_Log_DroppedWhenNotReadyOrNotPrepared();
     void Test_Log_FormatsFiltersAndCallsAfterEntry();
     void Test_Log_MinimumLevelOffAllowsOnlyForcedEntries();
     void Test_Log_ThrowingWriteDoesNotEscape();
+    void Test_LogRaw_FormatterCanFormatRawEntries();
     void Test_LogRaw_WritesMessageAsIs();
+    void Test_Multiline_AppliesToEveryFormattersLine();
+    void Test_Multiline_EscapeKeepsEachEntryOnOneLine();
+    void Test_Multiline_LogRawStaysAsIs();
+    void Test_Multiline_PreserveWritesLineBreaksAsTheyAre();
+    void Test_OnBeforeWrite_RunsOnEveryLoggingThread();
+    void Test_OnBeforeWrite_RunsOutsideTheLockBeforeQueuing();
+    void Test_OnBeforeWrite_SkipsTheLoggersOwnLines();
     void Test_OnLogEntry_CallbackCanReconfigureTheLogger();
     void Test_Reconfigure_AppliesNewConfigButKeepsLevel();
     void Test_Reconfigure_IsSafeWhileOtherThreadsLog();

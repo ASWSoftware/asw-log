@@ -26,7 +26,6 @@ limitations under the License.
 //---------------------------------------------------------------------------
 #include <chrono>
 #include <cstdint>
-#include <cstdlib>
 #include <iostream>
 #include <streambuf>
 #include <optional>
@@ -35,17 +34,13 @@ limitations under the License.
 #include <thread>
 #include <utility>
 #include <vector>
-
-#if defined(_WIN32)
-#include <windows.h>
-#undef min
-#undef max
-#endif
 //---------------------------------------------------------------------------
 #include "ASWUnitTests_Registry.h"
 //---------------------------------------------------------------------------
 #include "ASWLog_ConsoleLog.h"
 #include "ASWLog_Utils.h"
+//---------------------------------------------------------------------------
+#include "UT_Helper_Environment.h"
 //---------------------------------------------------------------------------
 
 namespace ASWUnitTests
@@ -155,64 +150,6 @@ public:
     }
 };
 
-// RAII helper: sets an environment variable (or removes it, given std::nullopt), restoring its previous value on
-// destruction.
-class TScopedEnvironmentVariable
-{
-private:
-    std::string m_Name;
-    std::optional<std::string> m_PreviousValue;
-
-    static std::optional<std::string> Get(const std::string& name)
-    {
-#if defined(_WIN32)
-        // The Windows API rather than the C runtime, since that's what TASWConsoleLog reads (and MinGW's runtime has
-        // no _dupenv_s)
-        const DWORD size = GetEnvironmentVariableA(name.c_str(), nullptr, 0);
-        if (size == 0)
-            return std::nullopt;
-
-        std::string value(size, '\0');
-        value.resize(GetEnvironmentVariableA(name.c_str(), value.data(), size));
-        return value;
-#else
-        const char* value = std::getenv(name.c_str());
-        if (value == nullptr)
-            return std::nullopt;
-
-        return std::string(value);
-#endif
-    }
-
-    static void Set(const std::string& name, const std::optional<std::string>& value)
-    {
-#if defined(_WIN32)
-        SetEnvironmentVariableA(name.c_str(), value ? value->c_str() : nullptr); // nullptr removes the variable
-#else
-        if (value)
-            setenv(name.c_str(), value->c_str(), 1);
-        else
-            unsetenv(name.c_str());
-#endif
-    }
-
-public:
-    TScopedEnvironmentVariable(std::string name, std::optional<std::string> value)
-        : m_Name(std::move(name)),
-          m_PreviousValue(Get(m_Name))
-    {
-        Set(m_Name, value);
-    }
-
-    ~TScopedEnvironmentVariable()
-    {
-        Set(m_Name, m_PreviousValue);
-    }
-
-    TScopedEnvironmentVariable(const TScopedEnvironmentVariable&) = delete;
-    TScopedEnvironmentVariable& operator=(const TScopedEnvironmentVariable&) = delete;
-};
-
 // RAII helper: redirects a standard stream's buffer to an internal buffer for
 // the lifetime of the object, restoring the original buffer on destruction.
 class TStreamCapture
@@ -254,6 +191,7 @@ ASWLog::TASWLogConfig MakeQuietConfig()
     config.Line.ShowFunctionName = false;
     config.Line.ShowSourceLine = false;
     config.Shutdown.WriteLine = false;
+    config.Startup.WriteLoggerVersion = false;
     config.Startup.WriteTimeInfo = false;
     config.Startup.WriteOSInfo = false;
     config.Startup.WriteDriveInfo = false;
@@ -365,7 +303,7 @@ void TTest_ASWLog_ConsoleLog::Test_ColorModeAuto_ColorsOnlyStreamsThatSupportIt(
 
     // Assert
     CheckTrue(initialized, "Initialize should succeed");
-    CheckTrue(logger.GetColorMode() == ASWLog::ColorMode::Auto, "ColorMode should default to Auto");
+    CheckEquals(ASWLog::ColorMode::Auto, logger.GetColorMode(), "ColorMode should default to Auto");
     CheckContains(outContents, "\x1b[", "Auto should color a stream that shows colors");
     CheckNotContains(errContents, "\x1b[", "Auto should not color a stream that doesn't show colors, such as a file or a pipe");
     CheckContains(errContents, "stderr_message", "The uncolored message should still be written");
@@ -406,11 +344,28 @@ void TTest_ASWLog_ConsoleLog::Test_ColorModeAuto_HonorsNoColor()
         alwaysContents = outCapture.Str();
     }
 
+    // Act: NO_COLOR set to an empty value doesn't count (see https://no-color.org)
+    std::string emptyContents;
+    bool emptyInitialized = false;
+    {
+        TScopedEnvironmentVariable emptyNoColor("NO_COLOR", "");
+        TColorDetectConsoleLog emptyLogger;
+        emptyLogger.StdOutSupportsColor = true;
+        emptyLogger.StdErrSupportsColor = true;
+
+        TStreamCapture outCapture(std::cout);
+        emptyInitialized = emptyLogger.Initialize(config);
+        emptyLogger.LogInfo("empty_message");
+        emptyLogger.Close();
+        emptyContents = outCapture.Str();
+    }
+
     // Assert
-    CheckTrue(autoInitialized && alwaysInitialized, "Initialize should succeed");
+    CheckTrue(autoInitialized && alwaysInitialized && emptyInitialized, "Initialize should succeed");
     CheckNotContains(autoContents, "\x1b[", "Auto should not color any stream when NO_COLOR is set");
     CheckContains(autoContents, "auto_message", "The uncolored message should still be written");
     CheckContains(alwaysContents, "\x1b[", "Always should color even when NO_COLOR is set");
+    CheckContains(emptyContents, "\x1b[", "Auto should still color when NO_COLOR is set but empty");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_ConsoleLog::Test_ColorModeNever_SuppressesAnsiCodes()
@@ -479,17 +434,17 @@ void TTest_ASWLog_ConsoleLog::Test_GetColorMode_ReflectsSetColorMode()
     ASWLog::TASWConsoleLog logger;
 
     // Assert
-    CheckTrue(logger.GetColorMode() == ASWLog::ColorMode::Auto, "ColorMode should default to Auto");
+    CheckEquals(ASWLog::ColorMode::Auto, logger.GetColorMode(), "ColorMode should default to Auto");
 
     // Act & Assert
     logger.SetColorMode(ASWLog::ColorMode::Always);
-    CheckTrue(logger.GetColorMode() == ASWLog::ColorMode::Always, "SetColorMode(Always) should be reflected by GetColorMode()");
+    CheckEquals(ASWLog::ColorMode::Always, logger.GetColorMode(), "SetColorMode(Always) should be reflected by GetColorMode()");
 
     logger.SetColorMode(ASWLog::ColorMode::Never);
-    CheckTrue(logger.GetColorMode() == ASWLog::ColorMode::Never, "SetColorMode(Never) should be reflected by GetColorMode()");
+    CheckEquals(ASWLog::ColorMode::Never, logger.GetColorMode(), "SetColorMode(Never) should be reflected by GetColorMode()");
 
     logger.SetColorMode(ASWLog::ColorMode::Auto);
-    CheckTrue(logger.GetColorMode() == ASWLog::ColorMode::Auto, "SetColorMode(Auto) should be reflected by GetColorMode()");
+    CheckEquals(ASWLog::ColorMode::Auto, logger.GetColorMode(), "SetColorMode(Auto) should be reflected by GetColorMode()");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_ConsoleLog::Test_GetInstance_ReturnsSameInstance()
@@ -499,7 +454,7 @@ void TTest_ASWLog_ConsoleLog::Test_GetInstance_ReturnsSameInstance()
     auto& second = ASWLog::TASWConsoleLog::GetInstance();
 
     // Assert
-    CheckTrue(&first == &second, "GetInstance should return the same logger on every call");
+    CheckSame(&first, &second, "GetInstance should return the same logger on every call");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_ConsoleLog::Test_GetLevelColor_OffHasNoColor()
@@ -514,7 +469,7 @@ void TTest_ASWLog_ConsoleLog::Test_GetLevelColor_OffHasNoColor()
     const auto offColor = logger.GetLevelColor(ASWLog::Level::Off);
 
     // Assert
-    CheckTrue(offColor.empty(), "Off isn't a severity, so it should have no color, and setting one should be ignored");
+    CheckEmpty(offColor, "Off isn't a severity, so it should have no color, and setting one should be ignored");
     CheckEquals(defaultCriticalColor, logger.GetLevelColor(ASWLog::Level::Critical),
         "Setting or resetting Off's color should not change another level's color");
 }
@@ -749,7 +704,7 @@ void TTest_ASWLog_ConsoleLog::Test_OnError_ReportsOnlyTheWriteThatFailedTheStrea
     if (reports.empty())
         return;
 
-    CheckTrue(reports[0].Kind == ASWLog::ErrorKind::WriteFailed, "A failed console write should be reported as WriteFailed");
+    CheckEquals(ASWLog::ErrorKind::WriteFailed, reports[0].Kind, "A failed console write should be reported as WriteFailed");
     CheckEquals(std::string("Couldn't write to stdout"), reports[0].Message, "The report should name the stream");
 }
 //---------------------------------------------------------------------------
@@ -864,7 +819,7 @@ void TTest_ASWLog_ConsoleLog::Test_SetLevelColor_OverridesDefaultColor()
 
     // Assert
     CheckTrue(initialized, "Initialize should succeed");
-    CheckFalse(defaultInfoColor.empty(), "GetLevelColor should return a non-empty default color for Info");
+    CheckNotEmpty(defaultInfoColor, "GetLevelColor should return a non-empty default color for Info");
     CheckEquals(customColor, updatedColor, "GetLevelColor should reflect the color set via SetLevelColor");
     CheckContains(contents, customColor, "WriteLogEntry should use the custom color for Info");
     CheckNotContains(contents, defaultInfoColor, "The default color should no longer appear for Info once overridden");

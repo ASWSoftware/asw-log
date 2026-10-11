@@ -47,6 +47,7 @@ limitations under the License.
 #endif
 //---------------------------------------------------------------------------
 #include "ASWLog_TextLogBase.h"
+#include "ASWLog_Utils.h"
 //---------------------------------------------------------------------------
 
 namespace ASWLog
@@ -539,6 +540,76 @@ void UninstallCrashHandlers() noexcept
 namespace Detail
 {
 
+namespace
+{
+
+// The room a fixed-layout line keeps after its fields: the rest of the line's own text, part of the message, and the
+// line ending
+constexpr std::size_t FieldsReserved = 96;
+
+//---------------------------------------------------------------------------
+
+bool AppendCrashFields(TCrashText& line, const TASWLogRecord& record, bool isJSON) noexcept;
+
+//---------------------------------------------------------------------------
+
+/*
+  AppendCrashFields
+
+  Appends the entry's fields as the text layout writes them (key="text" key=17, separated by spaces) or, for 'isJSON',
+  as JSON members ("key":"text","key":17), each only if it fits whole while FieldsReserved characters stay free (a long
+  text is cut to fit), and returns false if none was written. Allocates nothing.
+*/
+bool AppendCrashFields(TCrashText& line, const TASWLogRecord& record, bool isJSON) noexcept
+{
+    bool hasField = false;
+
+    record.ForEachField([&line, &hasField, isJSON](const TASWLogField& field) {
+                    const std::size_t used = line.GetSize() + FieldsReserved;
+                    if (used >= TCrashText::Capacity)
+                        return;
+
+                    // Built aside, so that a field that doesn't fit is left out whole
+                    const std::size_t room = TCrashText::Capacity - used;
+                    TCrashText text;
+                    if (hasField)
+                        text.Append(isJSON ? "," : " ");
+
+                    if (isJSON)
+                    {
+                        text.AppendJSONString(field.Key, TCrashText::Capacity - room);
+                        text.Append(":");
+                    }
+                    else
+                    {
+                        text.Append(field.Key);
+                        text.Append("=");
+                    }
+
+                    if (field.Value.GetKind() == ValueKind::Text)
+                    {
+                        text.AppendJSONString(field.Value.GetText(), TCrashText::Capacity - room);
+                    }
+                    else
+                    {
+                        char buffer[ScalarValueBufferSize];
+                        text.Append(WriteScalarValue(buffer, field.Value, isJSON));
+                    }
+
+                    if (text.GetSize() <= room)
+                    {
+                        line.Append(text.View());
+                        hasField = true;
+                    }
+                });
+
+    return hasField;
+}
+
+} // namespace
+
+//---------------------------------------------------------------------------
+
 /////////////////////////////////////////////////////////////////////////////
 // TCrashText
 /////////////////////////////////////////////////////////////////////////////
@@ -592,25 +663,71 @@ void TCrashText::AppendHex(std::uint64_t value, int minDigits) noexcept
 //---------------------------------------------------------------------------
 void TCrashText::AppendISO8601(std::chrono::system_clock::time_point time) noexcept
 {
-    // Calendar arithmetic only, which doesn't allocate (unlike Time::ToISO8601String())
-    const auto day = std::chrono::floor<std::chrono::days>(time);
-    const std::chrono::year_month_day date{ day };
-    const auto milliseconds = std::chrono::duration_cast<std::chrono::milliseconds>(time - day).count();
+    // Doesn't allocate (unlike Time::ToISO8601String())
+    char buffer[Time::ISO8601BufferSize];
+    Append(std::string_view(buffer, Time::WriteISO8601(buffer, time)));
+}
 
-    AppendDecimal(static_cast<std::uint64_t>(static_cast<int>(date.year())), 4);
-    Append("-");
-    AppendDecimal(static_cast<unsigned>(date.month()), 2);
-    Append("-");
-    AppendDecimal(static_cast<unsigned>(date.day()), 2);
-    Append("T");
-    AppendDecimal(static_cast<std::uint64_t>(milliseconds / 3600000), 2);
-    Append(":");
-    AppendDecimal(static_cast<std::uint64_t>(milliseconds / 60000 % 60), 2);
-    Append(":");
-    AppendDecimal(static_cast<std::uint64_t>(milliseconds / 1000 % 60), 2);
-    Append(".");
-    AppendDecimal(static_cast<std::uint64_t>(milliseconds % 1000), 3);
-    Append("Z");
+//---------------------------------------------------------------------------
+void TCrashText::AppendJSONString(std::string_view text, std::size_t reserved) noexcept
+{
+    // The text ends before the closing quote and 'reserved'
+    const std::size_t limit = Capacity - std::min(Capacity, reserved + 1);
+    char escape[6];
+    std::size_t index = 0;
+
+    Append("\"");
+
+    while (index < text.size())
+    {
+        const auto piece = NextJSONPiece(text, index, escape);
+        const std::size_t room = limit > m_Size ? limit - m_Size : 0;
+        if (piece.Text.size() <= room)
+        {
+            Append(piece.Text);
+            continue;
+        }
+
+        // A run of plain characters is cut between UTF-8 sequences; an escape or U+FFFD is left out whole
+        if (!piece.IsEscape)
+        {
+            std::size_t count = room;
+            while (count > 0 && (static_cast<unsigned char>(piece.Text[count]) & 0xC0) == 0x80)
+                --count;
+
+            Append(piece.Text.substr(0, count));
+        }
+
+        break;
+    }
+
+    Append("\"");
+}
+
+//---------------------------------------------------------------------------
+void TCrashText::AppendMultiline(std::string_view text, MultilineMode mode, LineEnding ending,
+    std::size_t reserved) noexcept
+{
+    const std::size_t limit = Capacity - std::min(Capacity, reserved);
+    std::size_t index = 0;
+
+    while (index < text.size())
+    {
+        const auto piece = NextMultilinePiece(text, index, mode, ending);
+        const std::size_t room = limit > m_Size ? limit - m_Size : 0;
+
+        if (piece.Text.size() <= room)
+        {
+            Append(piece.Text);
+            continue;
+        }
+
+        // A run of text is cut; a rewritten line break is left out whole
+        if (!piece.IsLineBreak)
+            Append(piece.Text.substr(0, room));
+
+        break;
+    }
 }
 
 //---------------------------------------------------------------------------
@@ -707,7 +824,57 @@ void AppendBacktraceBeginText(TCrashText& text, std::size_t count) noexcept
 }
 
 //---------------------------------------------------------------------------
-void AppendCrashLine(TCrashText& line, const TASWLogRecord& record, bool usesCRLF) noexcept
+void AppendCrashJSONLine(TCrashText& line, const TASWLogRecord& record, bool usesCRLF) noexcept
+{
+    // The room kept after the category: the ids, "raw", an empty message, the closing brace and the line ending
+    constexpr std::size_t CategoryReserved = 64;
+    const std::string_view ending = usesCRLF ? "\r\n" : "\n";
+
+    char digits[24];
+    const auto sinceEpoch = std::chrono::floor<std::chrono::milliseconds>(record.Timestamp.time_since_epoch());
+    const auto result = std::to_chars(digits, digits + sizeof(digits), static_cast<std::int64_t>(sinceEpoch.count()));
+
+    line.Append("{\"time\":\"");
+    line.AppendISO8601(record.Timestamp);
+    line.Append("\",\"epoch_ms\":");
+    line.Append(std::string_view(digits, static_cast<std::size_t>(result.ptr - digits)));
+    line.Append(",\"level\":\"");
+    line.Append(Level_ToString(record.LogLevel));
+    line.Append("\"");
+
+    if (!record.Category.empty())
+    {
+        line.Append(",\"category\":");
+        line.AppendJSONString(record.Category, CategoryReserved);
+    }
+
+    line.Append(",\"pid\":");
+    line.AppendDecimal(record.ProcessId);
+    line.Append(",\"tid\":");
+    line.AppendDecimal(record.ThreadId);
+
+    if (record.HasFields())
+    {
+        const std::size_t sizeBefore = line.GetSize();
+        line.Append(",\"fields\":{");
+
+        if (AppendCrashFields(line, record, true))
+            line.Append("}");
+        else
+            line.Truncate(sizeBefore);
+    }
+
+    if (record.Raw)
+        line.Append(",\"raw\":true");
+
+    line.Append(",\"message\":");
+    line.AppendJSONString(record.Message, 1 + ending.size());
+    line.Append("}");
+    line.Append(ending);
+}
+
+//---------------------------------------------------------------------------
+void AppendCrashLine(TCrashText& line, const TASWLogRecord& record, bool usesCRLF, MultilineMode multiline) noexcept
 {
     const std::string_view ending = usesCRLF ? "\r\n" : "\n";
 
@@ -715,12 +882,29 @@ void AppendCrashLine(TCrashText& line, const TASWLogRecord& record, bool usesCRL
     line.AppendISO8601(record.Timestamp);
     line.Append("][");
     line.Append(Level_ToString(record.LogLevel));
+
+    if (!record.Category.empty())
+    {
+        line.Append("][");
+        line.Append(record.Category);
+    }
+
     line.Append("][P:");
     line.AppendDecimal(record.ProcessId);
     line.Append("][T:");
     line.AppendDecimal(record.ThreadId);
+
+    if (record.HasFields())
+    {
+        const std::size_t sizeBefore = line.GetSize();
+        line.Append("][");
+
+        if (!AppendCrashFields(line, record, false))
+            line.Truncate(sizeBefore);
+    }
+
     line.Append("]: ");
-    line.Append(record.Message);
+    line.AppendMultiline(record.Message, multiline, usesCRLF ? LineEnding::CRLF : LineEnding::LF, ending.size());
 
     line.Truncate(TCrashText::Capacity - ending.size());
     line.Append(ending);

@@ -2,7 +2,10 @@
 ASWLog_Version.h
 Author: Anthony S. West - ASW Software
 
-Single source for the ASWLog semantic version (https://semver.org).
+A logging library.
+
+The ASWLog version (https://semver.org), as macros and constants: the only
+place where the version is set.
 
 Requires C++ 20 or higher.
 
@@ -33,11 +36,11 @@ limitations under the License.
 // pre-release such as "dev.1", which comes before that release in version order (e.g. 1.1.0-dev.1 < 1.1.0).
 // ASWLOG_VERSION_STRING is "MAJOR.MINOR.PATCH", followed by "-PRERELEASE" if the pre-release isn't empty; change
 // them together (a unit test checks that they match).
-#define ASWLOG_VERSION_MAJOR 0
-#define ASWLOG_VERSION_MINOR 75
+#define ASWLOG_VERSION_MAJOR 1
+#define ASWLOG_VERSION_MINOR 0
 #define ASWLOG_VERSION_PATCH 0
 #define ASWLOG_VERSION_PRERELEASE ""
-#define ASWLOG_VERSION_STRING "0.75.0"
+#define ASWLOG_VERSION_STRING "1.0.0"
 
 namespace ASWLog
 {

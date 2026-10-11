@@ -25,9 +25,13 @@ limitations under the License.
 #include <string>
 #include <string_view>
 //---------------------------------------------------------------------------
+#include "ASWLog_CategoryLog.h"
 #include "ASWLog_ConsoleLog.h"
 #include "ASWLog_CrashHandler.h"
+#include "ASWLog_DebuggerLog.h"
+#include "ASWLog_Fields.h"
 #include "ASWLog_FileLog.h"
+#include "ASWLog_Limiter.h"
 #include "ASWLog_MultiLog.h"
 #include "ASWLog_Utils.h"
 //---------------------------------------------------------------------------
@@ -101,6 +105,10 @@ int main(int argc, char* argv[])
     globalConfig.Line.ShowWorkingSet = true;
     globalConfig.Line.ShowPeakWorkingSet = true;
 
+    // Environment variables may replace these settings, e.g. ASWLOG_LEVEL=Info or ASWLOG_FORMAT=JSON, so a deployed
+    // build can log differently without being rebuilt. Unset variables change nothing.
+    globalConfig.ApplyEnvironment();
+
     // Get singleton instance - the logger supports singleton and non-singleton instances
     auto& globalLogger = ASWLog::TASWFileLog::GetInstance();
     if (!globalLogger.Initialize(globalConfig))
@@ -138,6 +146,14 @@ int main(int argc, char* argv[])
 
     // New C++ 'format' is supported
     globalLogger.LogCriticalFmt("CRITICAL EVENT BOUNDARY RECOVERY CODE: {:X}", 0xDEADBEEF);
+
+    // Rate limiting: of these 25 warnings in a loop, only the 1st, 11th and 21st are written
+    for (int attempt = 1; attempt <= 25; ++attempt)
+        ASWLOG_EVERY_N(globalLogger, 10, ASWLog::Level::Warn, "Retrying the connection, attempt {}", attempt);
+
+    // Wide text (e.g. C++Builder's UnicodeString::c_str()) is written as UTF-8, here "Wide text: cafe" with an e acute
+    globalLogger.LogInfo(L"Wide text: caf\x00E9");
+    globalLogger.LogInfoFmt("Opened {}", ASWLog::Wide(L"C:\\Data\\report.txt"));
 
     // Example of independent standalone/local logger instance
     std::cout << "Testing independent local stack instance execution...\n";
@@ -189,19 +205,46 @@ int main(int argc, char* argv[])
         std::cout << "Console logger failed to initialize!\n";
     }
 
-    // Example of fanning a single call out to multiple sinks at once
-    std::cout << "Testing multi-sink logger (file + console fan-out)...\n";
+    // The debugger's output: on Windows, the RAD Studio Event Log, Visual Studio's Output window or DebugView; it writes
+    // nothing on other platforms
+    ASWLog::TASWDebuggerLog debuggerLogger;
+    if (!debuggerLogger.Initialize(consoleConfig))
+        std::cout << "Debugger logger failed to initialize!\n";
+
+    // Example of fanning a single call out to multiple sinks at once. The multi-log doesn't own its loggers, so they
+    // are declared before it and outlive it.
+    std::cout << "Testing multi-sink logger (file + console + debugger fan-out)...\n";
     ASWLog::TASWMultiLog multiLogger;
-    multiLogger.AddLogger(globalLogger);  // Reuses the already-initialized file singleton
-    multiLogger.AddLogger(consoleLogger); // Reuses the already-initialized console logger
+    multiLogger.AddLogger(globalLogger);   // Reuses the already-initialized file singleton
+    multiLogger.AddLogger(consoleLogger);  // Reuses the already-initialized console logger
+    multiLogger.AddLogger(debuggerLogger); // Reuses the already-initialized debugger logger
 
     // One call reaches every registered sink; each sink still applies its own level and formatting
-    multiLogger.LogInfo("This single call is written to both the log file and the console.");
+    multiLogger.LogInfo("This single call is written to the log file, the console and the debugger output.");
 
     // The composite's own level is an optional pre-filter, independent of each sink's own level
     multiLogger.SetMinimumLevel(ASWLog::Level::Error);
-    multiLogger.LogWarn("This Warn is suppressed by the composite gate before reaching either sink.");
-    multiLogger.LogError("This Error clears the composite gate and reaches both sinks.");
+    multiLogger.LogWarn("This Warn is suppressed by the composite gate before reaching any sink.");
+    multiLogger.LogError("This Error clears the composite gate and reaches every sink.");
+
+    // Example of categories: each entry shows its category after the level, e.g. "[Db]", and a category with a level
+    // of its own uses it instead of the wrapped logger's (Trace here)
+    std::cout << "Testing category loggers...\n";
+    ASWLog::TASWCategoryLog netLogger("Net", globalLogger);
+    ASWLog::TASWCategoryLog dbLogger("Db", globalLogger);
+    dbLogger.SetMinimumLevel(ASWLog::Level::Warn);
+    netLogger.LogDebug("This Net entry follows the file logger's level, so it is written.");
+    dbLogger.LogInfo("This Db entry is below the Db category's own level (Warn), so it is skipped.");
+    dbLogger.LogWarn("This Db entry is at the Db category's own level, so it is written.");
+
+    // Example of fields: an entry's own, and a scope's, which every entry logged on this thread carries while the scope
+    // exists, e.g. [requestId="8f3a" orderId=17 total=9.99]
+    std::cout << "Testing fields and scopes...\n";
+    {
+        const ASWLog::TASWLogScope requestScope{ { "requestId", "8f3a" } };
+        globalLogger.LogInfo("Order placed", { { "orderId", 17 }, { "total", 9.99 } });
+        netLogger.LogDebug("This Net entry carries the request's scope fields too.");
+    }
 
     globalLogger.LogInfo("Application terminated naturally via main exit block.");
     std::cout << "Execution completed.\n";

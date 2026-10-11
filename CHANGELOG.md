@@ -10,6 +10,301 @@ see [0.26.1](#0261---2026-09-17) for the initial versioned baseline.
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-10-11
+
+### Added
+
+- Local-time and finer timestamps: `Line.TimestampZone` (`TimeZone::UTC`,
+  the default, or `TimeZone::Local`) and `Line.TimestampPrecision`
+  (`TimePrecision::Milliseconds`, the default, `Microseconds` or
+  `Nanoseconds`), e.g. `2026-09-28T16:02:44.342519-05:00` for local time
+  with microseconds. The digits past the system clock's resolution are 0
+  (100 ns with MSVC and MinGW, 1 us with RAD Studio's libc++). The zone also
+  decides when daily rolling starts a new file (local midnight with
+  `Local`), the time in backup names, and the time in the "Logger shutdown"
+  line; a `Reconfigure()` that changes it rolls over next at the new zone's
+  midnight. The fixed-layout crash line (in a POSIX signal handler, or when
+  the logger's lock stays busy) stays UTC with milliseconds. Local time
+  costs a `localtime_s`/`localtime_r` call per line. `Time::WriteISO8601()`
+  and `Time::ToISO8601String()` take the zone and precision too, and
+  `Time::ToDateString()` the zone.
+- Categories with their own levels: `TASWCategoryLog` (new
+  `ASWLog_CategoryLog.h`) wraps any logger, e.g.
+  `static ASWLog::TASWCategoryLog NetLog("Net", ASWLog::TASWFileLog::GetInstance());`,
+  and passes its entries on with the category's name, which the built-in
+  layout shows after the level (`[2026-10-08T14:31:00.217Z][DEBUG][Net]...`;
+  hide it with the new `Line.ShowCategory`). Entries without a category
+  are written as before. A category follows the wrapped logger's minimum
+  level until `SetMinimumLevel()` gives it one of its own, which then
+  replaces the wrapped logger's for that category's entries, both ways: with
+  the file logger at Info, a `Net` category at Debug writes its Debug
+  entries and a `Db` category at Warn skips its Info entries (the backtrace
+  still keeps them; behind a multi-log, each logger still applies its own
+  level). `ResetMinimumLevel()` makes it follow again, and
+  `SetEnabled(false)` silences only that category. A category wrapping
+  another one is named after both, e.g. `Net.Http`, and inherits its level.
+  `GetConfig()`, `Flush()`, `IsOpen()` and `DumpBacktrace()` pass on to the
+  wrapped logger; `Initialize()`, `Reconfigure()`, `Open()` and `Close()` do
+  nothing and return false. `TASWLogRecord` gains `Category` and
+  `CategoryLevel`, which `OnLogEntry` and custom formatters see, and the
+  fixed-layout crash and backtrace lines show the category too. Breaking
+  for a class that implements `IASWLog` directly: it must now implement
+  `ShouldLog(const TASWLogRecord&)` (classes derived from `TASWLogBase` get
+  it), which tells a category whether an entry with its level would be
+  written. `TASWLogRecord`'s `Raw` and `Forced` now come right after
+  `LogLevel`, so designated initializers must follow the new order.
+- Line patterns: `TASWPatternFormatter` writes each line from a pattern,
+  e.g. `config.Line.Formatter = std::make_shared<const ASWLog::TASWPatternFormatter>("{time} {level:5} {[category] }{message}");`
+  for `2026-10-08T14:31:00.217Z DEBUG [Net] connected`. The placeholders are
+  `{time}` (in `Line.TimestampZone` and `Line.TimestampPrecision`),
+  `{level}`, `{category}`, `{pid}`, `{tid}`, `{ws}`, `{pws}`, `{function}`,
+  `{file}` (the name without folders), `{line}` and `{message}`; `{{` and
+  `}}` write a brace. `{level:5}` pads a field to a minimum width. Text
+  inside the braces around the name is written only when the field isn't
+  empty: punctuation and spaces as they are (`{[category] }`), anything else
+  in single quotes, with `''` for a quote (`{'cat=' category ' '}`). The
+  pattern is parsed once, when the formatter is made, and an invalid one
+  throws `std::invalid_argument` naming the problem and where it is. The
+  `Line.Show*` options don't apply to a pattern, and the logger still adds
+  `Line.Ending` after each line.
+- JSON Lines output: `TASWJSONFormatter` writes each entry as a JSON object
+  on one line, e.g.
+  `config.Line.Formatter = std::make_shared<const ASWLog::TASWJSONFormatter>();`
+  for
+  `{"time":"2026-10-08T14:31:00.217Z","epoch_ms":1791469860217,"level":"DEBUG","category":"Net","pid":4120,"tid":7788,"message":"connected"}`.
+  It writes the fields that the `Line.Show*` options turn on, in the
+  built-in layout's order: `time` (in `Line.TimestampZone` and
+  `Line.TimestampPrecision`) with `epoch_ms` (whole milliseconds since 1970
+  UTC), `level`, `category`, `pid`, `tid`, `ws`, `pws`, `function`, `file`
+  and `line`, then always `message`. Texts are escaped as RFC 8259 asks,
+  and invalid UTF-8 is replaced with U+FFFD, so a multi-line message stays
+  on its line. A `LogRaw()` entry gets an object of its own with
+  `"raw":true` instead of being written as is, and the startup, shutdown
+  and crash lines are objects too, including the fixed-layout crash line
+  (in a POSIX signal handler, or when the logger's lock stays busy). A
+  custom formatter can format raw entries too by overriding the new
+  `IASWLogFormatter::FormatsRawEntries()` (false by default), and
+  `JSON::AppendString()` writes a text as an escaped JSON string.
+- Structured fields and scoped context (new `ASWLog_Fields.h`; add
+  `ASWLog_Fields.cpp` to projects that list the ASWLog sources). Every
+  logging method has an overload that takes fields for that entry, e.g.
+  `logger.LogInfo("Order placed", {{"orderId", 17}, {"total", 9.99}})`,
+  and every `*Fmt` method one with the fields first, e.g.
+  `logger.LogInfoFmt({{"orderId", id}}, "Order {} placed", id)`. A value
+  is a signed or unsigned integer, a double, a bool or text, viewed rather
+  than copied, so the call doesn't allocate; characters, enums and
+  pointers other than to text are rejected at compile time. A
+  `TASWLogScope`, e.g. `ASWLog::TASWLogScope scope{{"requestId", id}};`,
+  adds its fields to every entry the thread logs while it exists, also in
+  the functions it calls; scopes nest, and each key is written once, the
+  entry's own value winning over a scope's and an inner scope's over an
+  outer one's. Scopes stay on their thread: `TASWLogScope::Capture()`
+  copies the current ones into a `TASWLogContext`, and
+  `TASWLogScope scope(context);` applies it on another thread, e.g. in a
+  thread pool. The built-in layout writes the fields before the message,
+  `[requestId="8f3a" orderId=17 total=9.99]: Order placed`, text always
+  in quotes and escaped (hide them with the new `Line.ShowFields`); the
+  pattern formatter has `{fields}`, and the JSON formatter writes a
+  `"fields"` object (a NaN or infinite double as the string `"NaN"`,
+  `"Infinity"` or `"-Infinity"`). A `LogRaw()` entry is still written as
+  is by the text layouts. The backtrace, an asynchronous logger's
+  `OnLogEntry` and the fixed-layout crash lines keep the fields, and the
+  crash line gets the crashing thread's scope fields. `TASWLogRecord`
+  gains `Fields` and `Scope` (both pointers, so a filtered call costs no
+  more), read with `ForEachField()`.
+- Multi-line message handling: `Line.Multiline` (`MultilineMode::Preserve`,
+  the default, writes line breaks as they are, as before). With
+  `MultilineMode::Indent`, each `\n` or `\r\n` in a formatted line is
+  written as the line ending followed by `    | ` (`    |` for an empty
+  line), so every line after an entry's first is marked as part of it and
+  can't pass for an entry of its own; a lone `\r` stays as it is. With
+  `MultilineMode::Escape`, each CR and LF is written as the two characters
+  `\r` and `\n` (other characters, backslashes included, as they are), so
+  every entry is one line. It applies to the line of any formatter,
+  including your own (a JSON line has no line breaks), and to the
+  fixed-layout crash and backtrace lines; `LogRaw()` entries written as is
+  stay as they are.
+- A hook to drop or change entries before they are written:
+  `OnBeforeWrite`, e.g. to redact secrets or personal data, or to drop
+  noisy entries by content, category or field. It gets a `TASWPendingEntry`
+  for each entry that passes the level checks (`LogRaw()` entries
+  included): return false to drop it, or change it with `SetMessage()`,
+  `SetField()` and `RemoveField()` (read with `GetRecord()`, `FindField()`
+  and `ForEachField()`); level, time and category stay as they are. It runs
+  on the logging thread before the logger's lock or queue, so it may log
+  elsewhere; an entry logged from inside it is written as is. Entries the
+  backtrace keeps are kept as changed, `OnLogEntry` sees the changed entry,
+  and a hook that throws drops the entry and reports it (`OnError`). The
+  logger's own lines (startup, shutdown, backtrace markers, crash lines)
+  don't pass through it. A multi-log runs its hook once per entry and
+  passes its config on without it.
+- `TASWNullLog` (new `ASWLog_NullLog.h`): a logger that writes nothing,
+  e.g. to turn logging off behind an `IASWLog&` or to pass to code under
+  test; `TASWNullLog::GetInstance()` gives a shared one, e.g. for a default
+  argument. No logging call formats or copies anything (`ShouldLog()` and
+  `IsEnabled()` are always false), while the lifecycle methods succeed,
+  `GetConfig()` returns the config last passed in, and the minimum level
+  reads back as set.
+- `TASWMemoryLog` (new `ASWLog_MemoryLog.h`): a text logger that keeps its
+  newest lines in memory, formatted like a file logger's and without the
+  line ending, e.g. for an in-app log viewer, a crash report or tests of
+  code that logs. The new `TASWLogConfig::Memory` group sets how much it
+  keeps: `MaxLines` (default 1000) and `MaxBytes` (default 0, no limit; a
+  single longer line is cut to fit, ending with " [cut]"); the oldest lines
+  go first. `GetLines()`, `GetLineCount()` and `Clear()` read and clear
+  them, and `GetLinesSince(n)` returns only the lines numbered n and up
+  (every kept line gets the next sequence number), with the number to ask
+  for next and how many lines were missed, so a viewer can poll for new
+  lines.
+- `TASWDebuggerLog` (new `ASWLog_DebuggerLog.h`): writes each line to the
+  debugger's output with `OutputDebugStringW` on Windows, shown in the RAD
+  Studio Event Log, Visual Studio's Output window and DebugView (even
+  without a debugger; each line then still costs some microseconds, so add
+  it where wanted, e.g. in debug builds). `TASWDebuggerLog::GetInstance()`
+  gives the shared one. Other platforms have no debugger output: there the
+  class builds but writes nothing (`ShouldLog()` is false and no line is
+  formatted), so the same code can add it everywhere.
+- `TASWSyslogLog` (new `ASWLog_SyslogLog.h`): sends each line to the system
+  log with `syslog()` on Linux (the journal on systemd hosts), without its
+  line ending, the level as the priority (Trace and Debug `LOG_DEBUG`, Info
+  `LOG_INFO`, Warn `LOG_WARNING`, Error `LOG_ERR`, Critical `LOG_CRIT`).
+  The new `TASWLogConfig::Syslog` group sets the ident (`Ident`, empty =
+  the executable's file name; passed to `openlog()` with `LOG_PID`, so it
+  is process-wide) and the facility (`Facility`, a new `SyslogFacility`:
+  `User`, the default, `Daemon` or `Local0` to `Local7`; sent with each
+  message). The line is formatted as configured, so consider turning off
+  `Line.ShowTimestamp` and `Line.ShowProcessId`, which syslog adds itself.
+  `TASWSyslogLog::GetInstance()` gives the shared one. Windows has no
+  syslog: there the class builds but writes nothing (`ShouldLog()` is false
+  and no line is formatted).
+- `TASWWindowsEventLog` (new `ASWLog_WindowsEventLog.h`): reports each line
+  to the Windows Event Log (Application log), without its line ending: Trace,
+  Debug and Info as Information events, Warn as Warning, Error and Critical
+  as Error. The new `TASWLogConfig::EventLog` group sets the event source
+  (`Source`, empty = the executable's file name without its extension) and
+  the event ID per level (`EventIds`, by default 1000 for Trace to 1005 for
+  Critical). A line longer than `TASWWindowsEventLog::MaxMessageSize`
+  (31,839 bytes) is cut to fit, ending with ` [cut]`. Each event takes
+  about a hundred microseconds, so it suits warnings and errors.
+  `TASWWindowsEventLog::RegisterSource()` and `UnregisterSource()` register
+  a source (administrator rights, e.g. in an installer) with the .NET
+  Framework's `EventLogMessages.dll`, so that Event Viewer shows the text
+  without "The description for Event ID ... cannot be found".
+  `TASWWindowsEventLog::GetInstance()` gives the shared one. Other platforms
+  have no Event Log: there the class builds but writes nothing.
+- Rate-limited logging (new `ASWLog_Limiter.h`): `ASWLOG_ONCE(log, level,
+  ...)`, `ASWLOG_EVERY_N(log, n, level, ...)` and `ASWLOG_EVERY_INTERVAL(log,
+  interval, level, ...)` log only the first, every nth, or at most one entry
+  per interval at the place they are written, e.g.
+  `ASWLOG_EVERY_INTERVAL(log, std::chrono::seconds(5), ASWLog::Level::Warn,
+  "Retrying {}", host);`. The arguments after the level are those of
+  `LogFmt()` (format string, arguments, optional fields). Only entries the
+  logger would write count, and only those are formatted. After skipped calls,
+  `ASWLOG_EVERY_INTERVAL` adds a `suppressed` field with their number. The
+  macros keep a lock-free `TASWLogLimiter` (`Once()`, `EveryN()`,
+  `EveryInterval()`) in a static where they are written; the class can also be
+  used on its own.
+- Settings from environment variables, e.g. to turn on full verbosity in a
+  deployed release build without rebuilding it:
+  `config.ApplyEnvironment();` before `Initialize()` reads `ASWLOG_LEVEL`,
+  `ASWLOG_CATEGORIES`, `ASWLOG_FOLDER`, `ASWLOG_FILE`, `ASWLOG_FLUSH`,
+  `ASWLOG_SYNC_AT_LEVEL`, `ASWLOG_ASYNC`, `ASWLOG_BACKTRACE`,
+  `ASWLOG_TIME_ZONE`, `ASWLOG_TIME_PRECISION`, `ASWLOG_MULTILINE`,
+  `ASWLOG_SHOW_FUNCTION`, `ASWLOG_SHOW_SOURCE`, `ASWLOG_FORMAT` (`Text` or
+  `JSON`) and `ASWLOG_PATTERN` (a `TASWPatternFormatter` pattern), and their
+  values replace what the code set (see `TASWLogConfig::ApplyEnvironment()`
+  for the values; case doesn't matter). Nothing reads the environment unless
+  the application calls it, and each logger can have its own prefix, e.g.
+  `ApplyEnvironment("MYAPP_CONSOLE_")`. A variable that isn't set or is
+  empty changes nothing; an invalid value changes nothing either and is
+  reported to `OnError` (or stderr) as the new `ErrorKind::InvalidSetting`.
+  `ApplySetting(key, value)` sets one of the same settings, e.g. from a
+  command line or a settings file. `ASWLOG_CATEGORIES`, e.g.
+  `*=Info,Net=Debug,Net.Http=Trace`, sets category levels through the new
+  `TASWCategoryLog::ApplyLevels()`: a name covers that category and those
+  under it (`Net` covers `Net.Http`), `*` covers all, and the longest name
+  wins; it applies process-wide, to the categories that exist and to those
+  made later, and a spec with an invalid item changes nothing. On Windows,
+  the values are read as UTF-8 (paths included). Breaking only for code that
+  lists every `ErrorKind` (e.g. a `switch`) or relies on `ErrorKindCount`
+  being 9.
+- Wide-string logging (new `ASWLog_Unicode.h`; add `ASWLog_Unicode.cpp` to
+  projects that list the ASWLog sources). Every logging method also takes a
+  message of wide text, `wchar_t` (e.g. `L"Opened"`, a `std::wstring`, or
+  C++Builder's `UnicodeString::c_str()`) or `char16_t` (e.g. `u"Opened"`),
+  converted to UTF-8 only if the entry is used, so a filtered call converts
+  nothing; field keys and texts stay UTF-8. Every `*Fmt` method also takes a
+  `wchar_t` format string, checked at compile time like a narrow one, e.g.
+  `log.LogInfoFmt(L"Opened {} ({} bytes)", fileName, size);` (wrap a
+  run-time one in `RuntimeFormat()`); its arguments are formatted as wide
+  text, so pass UTF-8 text as `ASWLog::UTF8(text)` (a narrow `std::string`
+  doesn't compile there). In a narrow `*Fmt` call, `ASWLog::Wide(text)`
+  formats wide text, converted only if the entry is formatted, e.g.
+  `log.LogInfoFmt("Opened {}", ASWLog::Wide(fileName));`. `WideToUTF8()`
+  (from `std::wstring_view` or `std::u16string_view`), `UTF8ToWide()` and
+  `UTF8ToUTF16()` convert on any platform (`wchar_t` text is UTF-16 on
+  Windows and UTF-32 on Linux); invalid input becomes U+FFFD. `std::format`
+  has no `char16_t` format strings, so `char16_t` text goes in as a message
+  or through `Wide()`.
+- CMake install and package files: `cmake --install` on the repository root
+  installs the static library, the headers (to `include/ASWLog`, so code
+  includes them as before, e.g. `#include "ASWLog_FileLog.h"`) and
+  `ASWLogConfig.cmake`, after which `find_package(ASWLog CONFIG)` gives the
+  `ASWLog::ASWLog` target. A requested version is met by any later release
+  with the same major version. The install rules are on by default only when
+  ASWLog is the top-level project (option `ASWLOG_INSTALL`). A Debug build of
+  the library is now named `ASWLogd` (e.g. `ASWLogd.lib`), so Debug and
+  Release can share an install prefix; nothing changes for code that links to
+  the `ASWLog::ASWLog` target.
+- The ASWLog version in the startup lines: right after the banner, a text
+  logger writes e.g. `ASWLog: version=1.0.0, logger=TASWFileLog`, so a log
+  from the field says which ASWLog (and which logger) wrote it. On by
+  default; `Startup.WriteLoggerVersion = false` leaves it out, which code that
+  turns off every startup line one by one must now add.
+- The application's version in the startup lines: the "App:" line now has
+  `app_version='...'` after the executable's path, from the new
+  `Startup.ApplicationVersion`, or, when that is empty, on Windows, from the
+  executable's file version in its version resource (e.g. `2.3.1.45`, as
+  RAD Studio's Version Info sets it). Without either, the line is as before.
+  The new `ASWLog::GetFileVersionString(path)` reads any file's version
+  (Windows; empty on Linux). It loads `version.dll` at run time, so no
+  project needs a new library to link.
+- The startup lines at the top of each new log file: a file logger now starts
+  every file it begins after `Initialize()` (size rotation, daily rolling,
+  `RotateLogFiles()`, `Reconfigure()` to a new path) with a line saying where
+  the log continues from, e.g. `Log continued from
+  myapp.size.2026-10-10_143005_123.bak (size)` or `Log continued from
+  logs\old.txt (reconfigure)`, followed by the startup lines as
+  `Initialize()` writes them (the banner and each line its `Startup` setting
+  turns on), so a rotated log still says which version and system wrote it.
+  They come before the entry that started the file. On by default; the new
+  `File.WriteStartupLinesInNewFiles = false` keeps the old output, in which a
+  new file starts with that entry. A rotation no longer happens in the middle
+  of the startup lines: if they reach `File.MaxFileSizeBytes`, the next entry
+  rotates the file.
+
+### Changed
+
+- Writing a formatted line is much faster: the built-in layout now writes
+  the timestamp, level, process and thread ids and memory fields itself
+  instead of through `std::format`, which took most of a line's time. A
+  `LogInfo` line to a file with `FlushMode::Manual` takes about 0.4 us
+  instead of 1.0 us (MinGW and RAD Studio, Windows); the output is
+  unchanged. `Time::ToISO8601String()` and `Time::ToDateString()` (which
+  daily rolling calls for each entry) use the same code, and the new
+  `Time::WriteISO8601()` writes the timestamp into a buffer of
+  `Time::ISO8601BufferSize` characters without allocating, e.g. for a
+  custom formatter. A time before 1970 is now written as the day and
+  millisecond it falls in, instead of a malformed time.
+
+### Removed
+
+- `GetApplicationInfoString()` (from `ASWLog_Utils.h`). It was an older form
+  of the startup "App:" line and nothing in ASWLog used it. Breaking for code
+  that called it: build the text from `GetExecutablePath()` (with
+  `PathToUTF8String()`) and `GetCommandLineString()`, which it combined as
+  `application_exe='<path>', command_line='<command line>'`.
+
 ## [0.75.0] - 2026-10-06
 
 ### Added
@@ -636,7 +931,8 @@ Everything already present in the logger at this point (`TASWFileLog`,
 and CMake example projects, unit tests, `Deploy.bat`, etc.) is treated as the
 baseline and is not itemized commit-by-commit.
 
-[Unreleased]: https://github.com/ASWSoftware/asw-log/compare/v0.75.0...HEAD
+[Unreleased]: https://github.com/ASWSoftware/asw-log/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/ASWSoftware/asw-log/compare/v0.75.0...v1.0.0
 [0.75.0]: https://github.com/ASWSoftware/asw-log/compare/v0.66.0...v0.75.0
 [0.66.0]: https://github.com/ASWSoftware/asw-log/compare/v0.65.0...v0.66.0
 [0.65.0]: https://github.com/ASWSoftware/asw-log/compare/v0.45.0...v0.65.0

@@ -2,7 +2,11 @@
 ASWLog_TextLogBase.h
 Author: Anthony S. West - ASW Software
 
-A light-weight logging tool.
+A logging library.
+
+TASWTextLogBase, the base of the loggers that write each entry as a line of
+text: locking, formatting, asynchronous writing and the startup lines. A
+custom text logger derives from it and implements only its output.
 
 Requires C++ 20 or higher.
 
@@ -53,6 +57,7 @@ namespace Detail
 {
 
 class TCrashHandling; // See ASWLog_CrashHandler.h
+class TCrashText;
 
 } // namespace Detail
 
@@ -104,11 +109,15 @@ private:
     // An entry queued by an asynchronous logger (see TASWAsyncConfig), for the worker to write
     struct TQueuedEntry
     {
-        TASWLogRecord Record; // Its Message is empty: the text is in Message, if needed
+        // Its Message, Category, Fields and Scope are empty: the copies below hold them, if needed
+        TASWLogRecord Record;
         std::string Message; // The record's message, copied only if OnLogEntry will be called
+        std::string Category; // The record's category, likewise
+        Detail::TOwnedFields Fields; // The record's fields and its scopes', merged, likewise
         std::string Line; // The line to write: formatted, or the raw text
         std::shared_ptr<const TASWLogConfig> CallbackConfig; // Set only if OnLogEntry will be called
         std::uint64_t Sequence = 0;
+        bool EndsLine = true; // Line ends with the line ending (see IsFormatted())
         bool MustFlush = false; // At or above TASWAsyncConfig::WaitAtLevel: its caller waits until it is flushed
         bool IsWritten = false;
     };
@@ -136,6 +145,7 @@ private:
     std::atomic<bool> m_IsAsync{ false };
 
     bool m_IsWritingQueuedEntries = false; // Guarded by m_Mutex (see IsWritingQueuedEntriesUnlocked())
+    bool m_IsWritingStartupLines = false; // Guarded by m_Mutex (see IsWritingStartupLinesUnlocked())
 
     // This logger's place on the list of loggers a crash flushes, guarded by that list's lock (see
     // Detail::TCrashHandling)
@@ -145,6 +155,8 @@ private:
 
     // From the config (see StoreCrashLineSettingsUnlocked()), for a crash handler that doesn't get the lock
     std::atomic<bool> m_CrashLineUsesCRLF{ false };
+    std::atomic<bool> m_CrashLineUsesJSON{ false }; // The formatter is a TASWJSONFormatter
+    std::atomic<MultilineMode> m_CrashLineMultiline{ MultilineMode::Preserve };
     std::atomic<bool> m_WritesCrashLine{ true };
 
 private:
@@ -174,8 +186,10 @@ private:
 
 private:
     static std::string FormatEntry(const TASWLogRecord& record, const TASWLogConfig& config);
+    static bool IsFormatted(const TASWLogRecord& record, const TASWLogConfig& config) noexcept;
 
 private:
+    void AppendCrashLine(Detail::TCrashText& line, const TASWLogRecord& record) const noexcept;
     void DispatchLogCallback(const TASWLogConfig& config, const TASWLogRecord& record, std::string_view formattedLine) const noexcept;
     TASWLogRecord MakeBacktraceMarker(std::string_view message) const noexcept;
     void OnCrash(std::string_view message, bool isInSignalHandler, std::chrono::steady_clock::time_point deadline) noexcept;
@@ -196,6 +210,7 @@ private:
     void WriteInfoLine(std::string_view message, std::source_location loc = std::source_location::current());
     void WriteInitializationInfo();
     std::string WriteLogEntry(const TASWLogRecord& record);
+    void WriteLoggerVersionInfo();
     void WriteMemoryUsageInfo();
     void WriteOSInfo();
     void WriteQueuedEntries(std::deque<TQueuedEntry>& entries, std::size_t droppedCount) noexcept;
@@ -281,6 +296,13 @@ protected:
         return m_IsWritingQueuedEntries;
     }
 
+    // True while the startup lines are written (see WriteStartupLinesUnlocked()), so that PrepareWriteUnlocked() can
+    // leave starting a new output (e.g. rotating a file) until after them.
+    bool IsWritingStartupLinesUnlocked() const noexcept
+    {
+        return m_IsWritingStartupLines;
+    }
+
     // Called on the worker thread, every GetWorkerIntervalUnlocked() (measured from the start of the previous call),
     // e.g. to flush the output. Reports a failure with ReportErrorUnlocked(): the worker passes it on to OnError after
     // the unlock, on its own thread. An exception is caught and reported. Does nothing by default.
@@ -315,8 +337,15 @@ protected:
     // state m_Mutex guards being consistent. Does nothing by default.
     virtual void WriteCrashLineDirect(std::string_view line) noexcept;
 
-    // Writes a finished line. 'endsLine' is true if 'line' ends with the line ending (false for a Raw record).
+    // Writes a finished line. 'endsLine' is true if 'line' ends with the line ending (false for a Raw record written
+    // as is; see IASWLogFormatter::FormatsRawEntries()).
     virtual void WriteLineUnlocked(Level level, std::string_view line, bool endsLine) = 0;
+
+    // Writes the startup lines as Initialize() does: 'firstLine' if it isn't empty, the banner, then the lines
+    // TASWStartupConfig turns on, each as an Info line through PrepareWriteUnlocked() and WriteLineUnlocked(). For a
+    // derived logger that starts a new output, e.g. a file logger's next file after a rotation. A line that fails (e.g.
+    // its formatter throws) is reported and the rest are skipped. Never throws.
+    void WriteStartupLinesUnlocked(std::string_view firstLine = {}) noexcept;
 
 protected: // TASWLogBase hook
     // Writes the entry under m_Mutex, through the hooks above, then calls OnLogEntry. An asynchronous logger formats the
