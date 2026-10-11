@@ -311,6 +311,7 @@ void TTest_ASWLog_Types::Test_LineEnding_FromString()
     CheckEquals(ASWLog::LineEnding::LF, *lf_lower, "lf should map to LF");
     CheckEquals(ASWLog::LineEnding::CRLF, *crlf, "CRLF should map to CRLF");
     CheckEquals(ASWLog::LineEnding::CRLF, *crlfAlias, "WINDOWS should map to CRLF");
+    CheckFalse(ASWLog::LineEnding_FromString("CR").has_value(), "An unknown name should not parse");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_Types::Test_LineEnding_ToString()

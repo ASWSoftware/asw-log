@@ -364,6 +364,7 @@ bool WaitUntil(const std::function<bool()>& condition)
 TTest_ASWLog_FileLog::TTest_ASWLog_FileLog()
     : inherited("ASWLog_FileLog_Tests")
 {
+    RegisterTest(&TTest_ASWLog_FileLog::Test_Async_DropsAnEntryWhileTheFileCantBeOpened, "Async_DropsAnEntryWhileTheFileCantBeOpened");
     RegisterTest(&TTest_ASWLog_FileLog::Test_Async_EntryAtWaitAtLevelIsInTheFileWhenTheCallReturns, "Async_EntryAtWaitAtLevelIsInTheFileWhenTheCallReturns");
     RegisterTest(&TTest_ASWLog_FileLog::Test_Async_EveryWriteFlushesEachBatch, "Async_EveryWriteFlushesEachBatch");
     RegisterTest(&TTest_ASWLog_FileLog::Test_Async_PeriodicFlushesOnTheSameThread, "Async_PeriodicFlushesOnTheSameThread");
@@ -491,6 +492,47 @@ void TTest_ASWLog_FileLog::TearDown_Test(ITestCase& testCase)
 
 // /////// Begin tests after this line ///////////////////////
 
+//---------------------------------------------------------------------------
+void TTest_ASWLog_FileLog::Test_Async_DropsAnEntryWhileTheFileCantBeOpened()
+{
+    // Arrange: a "folder" that is a file can't hold the log, on any OS and for any user
+    using namespace std::chrono_literals;
+    const auto logFile = TestTempDir / "async_dropped.log";
+    const auto notAFolder = TestTempDir / "async_not_a_folder";
+    std::ofstream(notAFolder) << "file";
+
+    // OnLogEntry runs on the logger's thread, which Close() joins before the checks read this
+    std::vector<std::string> callbackMessages;
+    auto config = MakeRotationTestConfig(logFile);
+    config.Async.Enabled = true;
+    config.File.CircuitBreakerResetDelay = 1h; // The logger's thread doesn't try the file again for the entry
+    config.OnError = IgnoreError;
+    config.OnLogEntryMinimumLevel = ASWLog::Level::Info;
+    config.OnLogEntry = [&callbackMessages](const ASWLog::TASWLogRecord& record, std::string_view /*formattedLine*/) {
+            callbackMessages.emplace_back(record.Message);
+        };
+
+    auto unopenableConfig = config;
+    unopenableConfig.File.FilePath = notAFolder / "unopenable.log";
+
+    ASWLog::TASWFileLog logger;
+
+    // Act: Reconfigure() first writes what is queued, so each entry meets the file it was logged for
+    const bool initialized = logger.Initialize(config);
+    logger.LogInfo("before");
+    const bool reconfiguredToUnopenable = logger.Reconfigure(unopenableConfig);
+    logger.LogInfo("dropped");
+    const bool reconfiguredBack = logger.Reconfigure(config);
+    logger.LogInfo("after");
+    logger.Close();
+
+    // Assert
+    const std::vector<std::string> expectedMessages{ "before", "after" };
+    CheckTrue(initialized && reconfiguredBack, "Initialize and the Reconfigure() back should succeed");
+    CheckFalse(reconfiguredToUnopenable, "Reconfigure() to an unopenable file should fail");
+    CheckEquals(std::string(": before\n: after\n"), ReadFileText(logFile), "The queued entry should be dropped while the file can't be opened");
+    CheckTrue(callbackMessages == expectedMessages, "OnLogEntry should be called only for the entries written");
+}
 //---------------------------------------------------------------------------
 void TTest_ASWLog_FileLog::Test_Async_EntryAtWaitAtLevelIsInTheFileWhenTheCallReturns()
 {

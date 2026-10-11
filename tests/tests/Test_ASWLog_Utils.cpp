@@ -44,6 +44,8 @@ limitations under the License.
 
 #if defined(_WIN32)
 #include <windows.h>
+#undef min
+#undef max
 #endif
 //---------------------------------------------------------------------------
 #include "ASWUnitTests_Registry.h"
@@ -136,6 +138,7 @@ TTest_ASWLog_Utils::TTest_ASWLog_Utils()
     RegisterTest(&TTest_ASWLog_Utils::Test_Time_WriteISO8601_CalendarEdges, "Time_WriteISO8601_CalendarEdges");
     RegisterTest(&TTest_ASWLog_Utils::Test_Time_WriteISO8601_LocalTimeWithEachPrecision, "Time_WriteISO8601_LocalTimeWithEachPrecision");
     RegisterTest(&TTest_ASWLog_Utils::Test_Time_WriteISO8601_UTCWithEachPrecision, "Time_WriteISO8601_UTCWithEachPrecision");
+    RegisterTest(&TTest_ASWLog_Utils::Test_Time_WriteISO8601_YearPast9999IsWrittenInFull, "Time_WriteISO8601_YearPast9999IsWrittenInFull");
     RegisterTest(&TTest_ASWLog_Utils::Test_TrimSpaces_RemovesOuterSpacesAndTabs, "TrimSpaces_RemovesOuterSpacesAndTabs");
 }
 //---------------------------------------------------------------------------
@@ -936,6 +939,27 @@ void TTest_ASWLog_Utils::Test_Time_WriteISO8601_UTCWithEachPrecision()
         CheckEquals(testCase.Expected, std::string(buffer, size), testCase.What);
         CheckEquals(testCase.Expected, ASWLog::Time::ToISO8601String(time, ASWLog::TimeZone::UTC, testCase.Precision), testCase.What + " (ToISO8601String)");
     }
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_Utils::Test_Time_WriteISO8601_YearPast9999IsWrittenInFull()
+{
+    // Arrange: libstdc++'s system_clock counts nanoseconds, which end in 2262; libc++'s microseconds and MSVC's 100 ns
+    // ticks reach far past 9999. Compared in days, since converting the year to the clock's ticks could overflow.
+    using namespace std::chrono;
+    using namespace std::chrono_literals;
+    const sys_days firstDay{ 10000y / 1 / 1 };
+    if (floor<days>(system_clock::time_point::max()) <= firstDay)
+        Skip("This standard library's system_clock ends before the year 10000");
+
+    // Cast first: libc++ on Windows keeps minutes in a 32-bit long, so firstDay + 2min would overflow
+    const auto time = time_point_cast<system_clock::duration>(firstDay) + 1h + 2min + 3s + 4ms;
+
+    // Act
+    char buffer[ASWLog::Time::ISO8601BufferSize];
+    const auto size = ASWLog::Time::WriteISO8601(buffer, time);
+
+    // Assert
+    CheckEquals(std::string("10000-01-01T01:02:03.004Z"), std::string(buffer, size), "A year past 9999 should be written in full");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_Utils::Test_TrimSpaces_RemovesOuterSpacesAndTabs()

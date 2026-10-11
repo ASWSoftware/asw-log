@@ -36,6 +36,7 @@ private:
     typedef TTestGroupBase inherited;
 
 private: // Test methods
+    void Test_Async_DropsAnEntryWhileTheFileCantBeOpened();
     void Test_Async_EntryAtWaitAtLevelIsInTheFileWhenTheCallReturns();
     void Test_Async_EveryWriteFlushesEachBatch();
     void Test_Async_PeriodicFlushesOnTheSameThread();

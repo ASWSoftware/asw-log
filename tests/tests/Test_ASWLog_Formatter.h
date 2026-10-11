@@ -49,6 +49,7 @@ private: // Test methods
     void Test_Formatter_SharedByTwoLoggers();
     void Test_JSONFormatter_DefaultFields();
     void Test_JSONFormatter_EachShowOption();
+    void Test_JSONFormatter_EmptyScopeLeavesOutTheFields();
     void Test_JSONFormatter_EntryFields();
     void Test_JSONFormatter_EscapesTheTexts();
     void Test_JSONFormatter_FileLoggerWritesJSONLines();

@@ -190,6 +190,7 @@ TTest_ASWLog_Formatter::TTest_ASWLog_Formatter()
     RegisterTest(&TTest_ASWLog_Formatter::Test_Formatter_SharedByTwoLoggers, "Formatter_SharedByTwoLoggers");
     RegisterTest(&TTest_ASWLog_Formatter::Test_JSONFormatter_DefaultFields, "JSONFormatter_DefaultFields");
     RegisterTest(&TTest_ASWLog_Formatter::Test_JSONFormatter_EachShowOption, "JSONFormatter_EachShowOption");
+    RegisterTest(&TTest_ASWLog_Formatter::Test_JSONFormatter_EmptyScopeLeavesOutTheFields, "JSONFormatter_EmptyScopeLeavesOutTheFields");
     RegisterTest(&TTest_ASWLog_Formatter::Test_JSONFormatter_EntryFields, "JSONFormatter_EntryFields");
     RegisterTest(&TTest_ASWLog_Formatter::Test_JSONFormatter_EscapesTheTexts, "JSONFormatter_EscapesTheTexts");
     RegisterTest(&TTest_ASWLog_Formatter::Test_JSONFormatter_FileLoggerWritesJSONLines, "JSONFormatter_FileLoggerWritesJSONLines");
@@ -553,6 +554,24 @@ void TTest_ASWLog_Formatter::Test_JSONFormatter_EachShowOption()
         "The working set and peak working set should be numbers");
     CheckEquals(std::string(R"({"message":"all fields"})"), noFieldsLine, "With every field off, only the message should remain");
     CheckTrue(IsJSONObjectLine(allLine) && IsJSONObjectLine(memoryLine) && IsJSONObjectLine(noFieldsLine), "Each line should be one JSON object");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_Formatter::Test_JSONFormatter_EmptyScopeLeavesOutTheFields()
+{
+    // Arrange: an entry in a scope without fields
+    const auto config = MakeConfigWithoutFields("unused.log");
+    const ASWLog::TASWLogScope scope{};
+
+    auto record = MakeRecord("msg");
+    record.Scope = &scope;
+
+    const ASWLog::TASWJSONFormatter formatter;
+
+    // Act
+    const auto line = formatter.Format(record, config);
+
+    // Assert
+    CheckEquals(std::string(R"({"message":"msg"})"), line, "A scope without fields should add no \"fields\" object");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_Formatter::Test_JSONFormatter_EntryFields()
