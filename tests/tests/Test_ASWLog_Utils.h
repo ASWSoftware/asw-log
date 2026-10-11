@@ -30,12 +30,12 @@ namespace ASWUnitTests
 ///////////////////////////////////////////////////////////////////////////
 // TTest_ASWLog_Utils
 ///////////////////////////////////////////////////////////////////////////
-class TTest_ASWLog_Utils : public TTestGroupBase
+class TTest_ASWLog_Utils : public TAutoTestGroup<TTest_ASWLog_Utils>
 {
 private:
-    typedef TTestGroupBase inherited;
+    typedef TAutoTestGroup<TTest_ASWLog_Utils> inherited;
 
-private: // Test methods
+public: // Test methods, each defined with ASW_TEST
     void Test_ApplyMultilineMode_EscapeWritesCRAndLFAsText();
     void Test_ApplyMultilineMode_FindsLineBreaksAnywhereInALongText();
     void Test_ApplyMultilineMode_IndentMarksEachLineAfterTheFirst();

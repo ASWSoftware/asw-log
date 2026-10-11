@@ -177,34 +177,6 @@ std::string ReadFileText(const std::filesystem::path& path)
 TTest_ASWLog_Formatter::TTest_ASWLog_Formatter()
     : inherited("ASWLog_Formatter_Tests")
 {
-    RegisterTest(&TTest_ASWLog_Formatter::Test_Format_MatchesFormatLine, "Format_MatchesFormatLine");
-    RegisterTest(&TTest_ASWLog_Formatter::Test_FormatLine_AllFieldsInOrder, "FormatLine_AllFieldsInOrder");
-    RegisterTest(&TTest_ASWLog_Formatter::Test_FormatLine_CategoryOnlyWhenSetAndShown, "FormatLine_CategoryOnlyWhenSetAndShown");
-    RegisterTest(&TTest_ASWLog_Formatter::Test_FormatLine_EntryFieldsBeforeTheMessage, "FormatLine_EntryFieldsBeforeTheMessage");
-    RegisterTest(&TTest_ASWLog_Formatter::Test_FormatLine_LargestIdsAndEachLevel, "FormatLine_LargestIdsAndEachLevel");
-    RegisterTest(&TTest_ASWLog_Formatter::Test_FormatLine_MemoryFields, "FormatLine_MemoryFields");
-    RegisterTest(&TTest_ASWLog_Formatter::Test_FormatLine_NoFields, "FormatLine_NoFields");
-    RegisterTest(&TTest_ASWLog_Formatter::Test_FormatLine_TimestampFollowsZoneAndPrecision, "FormatLine_TimestampFollowsZoneAndPrecision");
-    RegisterTest(&TTest_ASWLog_Formatter::Test_Formatter_RawEntryLeavesOutTheFields, "Formatter_RawEntryLeavesOutTheFields");
-    RegisterTest(&TTest_ASWLog_Formatter::Test_Formatter_ReceivesRecordFromLoggingThread, "Formatter_ReceivesRecordFromLoggingThread");
-    RegisterTest(&TTest_ASWLog_Formatter::Test_Formatter_SharedByTwoLoggers, "Formatter_SharedByTwoLoggers");
-    RegisterTest(&TTest_ASWLog_Formatter::Test_JSONFormatter_DefaultFields, "JSONFormatter_DefaultFields");
-    RegisterTest(&TTest_ASWLog_Formatter::Test_JSONFormatter_EachShowOption, "JSONFormatter_EachShowOption");
-    RegisterTest(&TTest_ASWLog_Formatter::Test_JSONFormatter_EmptyScopeLeavesOutTheFields, "JSONFormatter_EmptyScopeLeavesOutTheFields");
-    RegisterTest(&TTest_ASWLog_Formatter::Test_JSONFormatter_EntryFields, "JSONFormatter_EntryFields");
-    RegisterTest(&TTest_ASWLog_Formatter::Test_JSONFormatter_EscapesTheTexts, "JSONFormatter_EscapesTheTexts");
-    RegisterTest(&TTest_ASWLog_Formatter::Test_JSONFormatter_FileLoggerWritesJSONLines, "JSONFormatter_FileLoggerWritesJSONLines");
-    RegisterTest(&TTest_ASWLog_Formatter::Test_JSONFormatter_RawEntries, "JSONFormatter_RawEntries");
-    RegisterTest(&TTest_ASWLog_Formatter::Test_JSONFormatter_TimeFollowsZoneAndPrecision, "JSONFormatter_TimeFollowsZoneAndPrecision");
-    RegisterTest(&TTest_ASWLog_Formatter::Test_PatternFormatter_AffixesOnlyAroundAValue, "PatternFormatter_AffixesOnlyAroundAValue");
-    RegisterTest(&TTest_ASWLog_Formatter::Test_PatternFormatter_BracesAndPlainText, "PatternFormatter_BracesAndPlainText");
-    RegisterTest(&TTest_ASWLog_Formatter::Test_PatternFormatter_DefaultLayoutMatchesTextFormatter, "PatternFormatter_DefaultLayoutMatchesTextFormatter");
-    RegisterTest(&TTest_ASWLog_Formatter::Test_PatternFormatter_EachPlaceholder, "PatternFormatter_EachPlaceholder");
-    RegisterTest(&TTest_ASWLog_Formatter::Test_PatternFormatter_FieldsPlaceholder, "PatternFormatter_FieldsPlaceholder");
-    RegisterTest(&TTest_ASWLog_Formatter::Test_PatternFormatter_FileLoggerWritesItsLines, "PatternFormatter_FileLoggerWritesItsLines");
-    RegisterTest(&TTest_ASWLog_Formatter::Test_PatternFormatter_InvalidPatternThrows, "PatternFormatter_InvalidPatternThrows");
-    RegisterTest(&TTest_ASWLog_Formatter::Test_PatternFormatter_MemoryFields, "PatternFormatter_MemoryFields");
-    RegisterTest(&TTest_ASWLog_Formatter::Test_PatternFormatter_WidthPadsShortValues, "PatternFormatter_WidthPadsShortValues");
 }
 //---------------------------------------------------------------------------
 TTest_ASWLog_Formatter::~TTest_ASWLog_Formatter()
@@ -239,7 +211,7 @@ void TTest_ASWLog_Formatter::TearDown_Test(ITestCase& testCase)
 // /////// Begin tests after this line ///////////////////////
 
 //---------------------------------------------------------------------------
-void TTest_ASWLog_Formatter::Test_Format_MatchesFormatLine()
+ASW_TEST(TTest_ASWLog_Formatter, Format_MatchesFormatLine)
 {
     // Arrange
     const ASWLog::TASWTextFormatter textFormatter;
@@ -255,7 +227,7 @@ void TTest_ASWLog_Formatter::Test_Format_MatchesFormatLine()
         "A TASWTextFormatter instance should produce the built-in layout");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_Formatter::Test_FormatLine_AllFieldsInOrder()
+ASW_TEST(TTest_ASWLog_Formatter, FormatLine_AllFieldsInOrder)
 {
     // Arrange
     ASWLog::TASWLogConfig config;
@@ -278,7 +250,7 @@ void TTest_ASWLog_Formatter::Test_FormatLine_AllFieldsInOrder()
     CheckEquals(expected, line, "Each field should be written from the record, in the documented order");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_Formatter::Test_FormatLine_CategoryOnlyWhenSetAndShown()
+ASW_TEST(TTest_ASWLog_Formatter, FormatLine_CategoryOnlyWhenSetAndShown)
 {
     // Arrange: the level and the category only
     auto config = MakeConfigWithoutFields("unused.log");
@@ -299,7 +271,7 @@ void TTest_ASWLog_Formatter::Test_FormatLine_CategoryOnlyWhenSetAndShown()
     CheckEquals(std::string("[WARN]: categorized"), hiddenLine, "ShowCategory false should hide the category");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_Formatter::Test_FormatLine_EntryFieldsBeforeTheMessage()
+ASW_TEST(TTest_ASWLog_Formatter, FormatLine_EntryFieldsBeforeTheMessage)
 {
     // Arrange: the level and the fields only; a value of each kind, and a text that needs escaping
     auto config = MakeConfigWithoutFields("unused.log");
@@ -332,7 +304,7 @@ void TTest_ASWLog_Formatter::Test_FormatLine_EntryFieldsBeforeTheMessage()
     CheckEquals(std::string("[WARN]: msg"), hiddenLine, "ShowFields false should hide the fields");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_Formatter::Test_FormatLine_LargestIdsAndEachLevel()
+ASW_TEST(TTest_ASWLog_Formatter, FormatLine_LargestIdsAndEachLevel)
 {
     // Arrange
     auto config = MakeConfigWithoutFields("unused.log");
@@ -357,7 +329,7 @@ void TTest_ASWLog_Formatter::Test_FormatLine_LargestIdsAndEachLevel()
     }
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_Formatter::Test_FormatLine_MemoryFields()
+ASW_TEST(TTest_ASWLog_Formatter, FormatLine_MemoryFields)
 {
     // Arrange
     auto config = MakeConfigWithoutFields("unused.log");
@@ -372,7 +344,7 @@ void TTest_ASWLog_Formatter::Test_FormatLine_MemoryFields()
         "The working set, then the peak working set, each a decimal number, should come before the message");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_Formatter::Test_FormatLine_NoFields()
+ASW_TEST(TTest_ASWLog_Formatter, FormatLine_NoFields)
 {
     // Arrange
     const auto config = MakeConfigWithoutFields("unused.log");
@@ -384,7 +356,7 @@ void TTest_ASWLog_Formatter::Test_FormatLine_NoFields()
     CheckEquals(std::string(": just the message"), line, "With every field off, only the separator and message remain");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_Formatter::Test_FormatLine_TimestampFollowsZoneAndPrecision()
+ASW_TEST(TTest_ASWLog_Formatter, FormatLine_TimestampFollowsZoneAndPrecision)
 {
     // Arrange: FixedTime is 2026-09-21T14:13:20.123Z, during US Eastern daylight time
     auto config = MakeConfigWithoutFields("unused.log");
@@ -400,7 +372,7 @@ void TTest_ASWLog_Formatter::Test_FormatLine_TimestampFollowsZoneAndPrecision()
     CheckEquals(std::string("[2026-09-21T10:13:20.123000-04:00]: local"), line, "The timestamp should be local time with microseconds and the offset");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_Formatter::Test_Formatter_RawEntryLeavesOutTheFields()
+ASW_TEST(TTest_ASWLog_Formatter, Formatter_RawEntryLeavesOutTheFields)
 {
     // Arrange: the level only, and a scope
     auto config = MakeConfigWithoutFields("raw_fields.log");
@@ -424,7 +396,7 @@ void TTest_ASWLog_Formatter::Test_Formatter_RawEntryLeavesOutTheFields()
         "A formatted entry should have its fields; a raw entry is written as is, without them");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_Formatter::Test_Formatter_ReceivesRecordFromLoggingThread()
+ASW_TEST(TTest_ASWLog_Formatter, Formatter_ReceivesRecordFromLoggingThread)
 {
     // Arrange
     std::vector<TCapturedRecord> records;
@@ -463,7 +435,7 @@ void TTest_ASWLog_Formatter::Test_Formatter_ReceivesRecordFromLoggingThread()
         "The file should get the formatter's line plus the line ending");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_Formatter::Test_Formatter_SharedByTwoLoggers()
+ASW_TEST(TTest_ASWLog_Formatter, Formatter_SharedByTwoLoggers)
 {
     // Arrange
     const auto formatter = std::make_shared<TCountingFormatter>();
@@ -501,7 +473,7 @@ void TTest_ASWLog_Formatter::Test_Formatter_SharedByTwoLoggers()
         "Logger B's file should have its 100 lines in the shared format");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_Formatter::Test_JSONFormatter_DefaultFields()
+ASW_TEST(TTest_ASWLog_Formatter, JSONFormatter_DefaultFields)
 {
     // Arrange
     const ASWLog::TASWJSONFormatter formatter;
@@ -521,7 +493,7 @@ void TTest_ASWLog_Formatter::Test_JSONFormatter_DefaultFields()
     CheckTrue(IsJSONObjectLine(line) && IsJSONObjectLine(categorizedLine), "Each line should be one JSON object");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_Formatter::Test_JSONFormatter_EachShowOption()
+ASW_TEST(TTest_ASWLog_Formatter, JSONFormatter_EachShowOption)
 {
     // Arrange: every field but memory use, memory use only, and no fields at all
     ASWLog::TASWLogConfig allConfig;
@@ -556,7 +528,7 @@ void TTest_ASWLog_Formatter::Test_JSONFormatter_EachShowOption()
     CheckTrue(IsJSONObjectLine(allLine) && IsJSONObjectLine(memoryLine) && IsJSONObjectLine(noFieldsLine), "Each line should be one JSON object");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_Formatter::Test_JSONFormatter_EmptyScopeLeavesOutTheFields()
+ASW_TEST(TTest_ASWLog_Formatter, JSONFormatter_EmptyScopeLeavesOutTheFields)
 {
     // Arrange: an entry in a scope without fields
     const auto config = MakeConfigWithoutFields("unused.log");
@@ -574,7 +546,7 @@ void TTest_ASWLog_Formatter::Test_JSONFormatter_EmptyScopeLeavesOutTheFields()
     CheckEquals(std::string(R"({"message":"msg"})"), line, "A scope without fields should add no \"fields\" object");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_Formatter::Test_JSONFormatter_EntryFields()
+ASW_TEST(TTest_ASWLog_Formatter, JSONFormatter_EntryFields)
 {
     // Arrange: a scope and the entry's own fields, which replace the scope's n; a value of each kind, and the doubles
     // a JSON number can't hold
@@ -612,7 +584,7 @@ void TTest_ASWLog_Formatter::Test_JSONFormatter_EntryFields()
     CheckTrue(IsJSONObjectLine(line) && IsJSONObjectLine(rawLine), "Each line should be one JSON object");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_Formatter::Test_JSONFormatter_EscapesTheTexts()
+ASW_TEST(TTest_ASWLog_Formatter, JSONFormatter_EscapesTheTexts)
 {
     // Arrange: quotes, a backslash, control characters and invalid UTF-8 in the category and the message
     const auto config = MakeConfigWithoutFields("unused.log");
@@ -628,7 +600,7 @@ void TTest_ASWLog_Formatter::Test_JSONFormatter_EscapesTheTexts()
     CheckTrue(IsJSONObjectLine(line), "The line should be one JSON object");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_Formatter::Test_JSONFormatter_FileLoggerWritesJSONLines()
+ASW_TEST(TTest_ASWLog_Formatter, JSONFormatter_FileLoggerWritesJSONLines)
 {
     // Arrange: every startup line (on Windows the drive and application info hold backslashes) and the shutdown line
     ASWLog::TASWLogConfig config;
@@ -685,7 +657,7 @@ void TTest_ASWLog_Formatter::Test_JSONFormatter_FileLoggerWritesJSONLines()
     CheckEndsWith(lines.back(), R"(, Bye"})", "The shutdown line should have its banner");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_Formatter::Test_JSONFormatter_RawEntries()
+ASW_TEST(TTest_ASWLog_Formatter, JSONFormatter_RawEntries)
 {
     // Arrange
     const ASWLog::TASWJSONFormatter formatter;
@@ -703,7 +675,7 @@ void TTest_ASWLog_Formatter::Test_JSONFormatter_RawEntries()
     CheckEquals(std::string(R"({"raw":true,"message":"partial "})"), line, "A raw entry should be marked before the message");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_Formatter::Test_JSONFormatter_TimeFollowsZoneAndPrecision()
+ASW_TEST(TTest_ASWLog_Formatter, JSONFormatter_TimeFollowsZoneAndPrecision)
 {
     // Arrange: FixedTime in US Eastern daylight time with microseconds, and a time 1.49975 s before 1970 (the epoch
     // milliseconds round down, like the time's)
@@ -729,7 +701,7 @@ void TTest_ASWLog_Formatter::Test_JSONFormatter_TimeFollowsZoneAndPrecision()
         "A time before 1970 should have negative epoch milliseconds, rounded down");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_Formatter::Test_PatternFormatter_AffixesOnlyAroundAValue()
+ASW_TEST(TTest_ASWLog_Formatter, PatternFormatter_AffixesOnlyAroundAValue)
 {
     // Arrange: one record with a category and a function, one without (a default source location has empty names)
     auto withValues = MakeRecord("msg");
@@ -755,7 +727,7 @@ void TTest_ASWLog_Formatter::Test_PatternFormatter_AffixesOnlyAroundAValue()
     CheckEquals(std::string("[Net]msg|[]msg"), formatBoth("[{category}]{message}"), "Text outside the braces should always be written");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_Formatter::Test_PatternFormatter_BracesAndPlainText()
+ASW_TEST(TTest_ASWLog_Formatter, PatternFormatter_BracesAndPlainText)
 {
     // Arrange
     const ASWLog::TASWLogConfig config;
@@ -772,7 +744,7 @@ void TTest_ASWLog_Formatter::Test_PatternFormatter_BracesAndPlainText()
     CheckEmpty(empty, "An empty pattern should write an empty line");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_Formatter::Test_PatternFormatter_DefaultLayoutMatchesTextFormatter()
+ASW_TEST(TTest_ASWLog_Formatter, PatternFormatter_DefaultLayoutMatchesTextFormatter)
 {
     // Arrange: the patterns spelling the built-in layout, with the default fields and with every field but memory use
     const ASWLog::TASWPatternFormatter defaultFields("[{time}][{level}]{[category]}[P:{pid}][T:{tid}]: {message}");
@@ -816,7 +788,7 @@ void TTest_ASWLog_Formatter::Test_PatternFormatter_DefaultLayoutMatchesTextForma
     }
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_Formatter::Test_PatternFormatter_EachPlaceholder()
+ASW_TEST(TTest_ASWLog_Formatter, PatternFormatter_EachPlaceholder)
 {
     // Arrange
     const std::string pattern = "{time}|{level}|{category}|{pid}|{tid}|{function}|{file}|{line}|{message}";
@@ -835,7 +807,7 @@ void TTest_ASWLog_Formatter::Test_PatternFormatter_EachPlaceholder()
     CheckEquals(pattern, std::string(formatter.GetPattern()), "GetPattern should return the pattern");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_Formatter::Test_PatternFormatter_FieldsPlaceholder()
+ASW_TEST(TTest_ASWLog_Formatter, PatternFormatter_FieldsPlaceholder)
 {
     // Arrange
     const ASWLog::TASWPatternFormatter formatter("{[fields] }{message}");
@@ -856,7 +828,7 @@ void TTest_ASWLog_Formatter::Test_PatternFormatter_FieldsPlaceholder()
     CheckEquals(std::string("msg"), lineWithout, "{fields} should write nothing, affixes included, without fields");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_Formatter::Test_PatternFormatter_FileLoggerWritesItsLines()
+ASW_TEST(TTest_ASWLog_Formatter, PatternFormatter_FileLoggerWritesItsLines)
 {
     // Arrange: CRLF, so the line ending shows that the logger still adds it
     auto config = MakeConfigWithoutFields("pattern.log");
@@ -879,7 +851,7 @@ void TTest_ASWLog_Formatter::Test_PatternFormatter_FileLoggerWritesItsLines()
         "Each line should follow the pattern, then the line ending; a raw entry is written as is");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_Formatter::Test_PatternFormatter_InvalidPatternThrows()
+ASW_TEST(TTest_ASWLog_Formatter, PatternFormatter_InvalidPatternThrows)
 {
     // Arrange: each pattern, and the start of the error message it should give
     struct TCase
@@ -918,7 +890,7 @@ void TTest_ASWLog_Formatter::Test_PatternFormatter_InvalidPatternThrows()
     }
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_Formatter::Test_PatternFormatter_MemoryFields()
+ASW_TEST(TTest_ASWLog_Formatter, PatternFormatter_MemoryFields)
 {
     // Arrange
     const ASWLog::TASWPatternFormatter formatter("{ws} {pws}: {message}");
@@ -930,7 +902,7 @@ void TTest_ASWLog_Formatter::Test_PatternFormatter_MemoryFields()
     CheckMatches(line, "[1-9][0-9]* [1-9][0-9]*: memory", "The working set and peak working set should be read, as decimal numbers");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_Formatter::Test_PatternFormatter_WidthPadsShortValues()
+ASW_TEST(TTest_ASWLog_Formatter, PatternFormatter_WidthPadsShortValues)
 {
     // Arrange
     const ASWLog::TASWLogConfig config;

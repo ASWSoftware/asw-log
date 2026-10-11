@@ -51,9 +51,6 @@ namespace ASWUnitTests
 TTest_ASWLog_Version::TTest_ASWLog_Version()
     : inherited("ASWLog_Version_Tests")
 {
-    RegisterTest(&TTest_ASWLog_Version::Test_GetVersionStr_ReturnsVersion, "GetVersionStr_ReturnsVersion");
-    RegisterTest(&TTest_ASWLog_Version::Test_PreRelease_IsValidSemVer, "PreRelease_IsValidSemVer");
-    RegisterTest(&TTest_ASWLog_Version::Test_VersionString_MatchesParts, "VersionString_MatchesParts");
 }
 //---------------------------------------------------------------------------
 TTest_ASWLog_Version::~TTest_ASWLog_Version()
@@ -80,7 +77,7 @@ void TTest_ASWLog_Version::TearDown_Test(ITestCase& /*testCase*/)
 // /////// Begin tests after this line ///////////////////////
 
 //---------------------------------------------------------------------------
-void TTest_ASWLog_Version::Test_GetVersionStr_ReturnsVersion()
+ASW_TEST(TTest_ASWLog_Version, GetVersionStr_ReturnsVersion)
 {
     // Arrange
     ASWLog::TASWConsoleLog consoleLog;
@@ -94,7 +91,7 @@ void TTest_ASWLog_Version::Test_GetVersionStr_ReturnsVersion()
         "GetVersionStr() should return ASWLOG_VERSION_STRING");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_Version::Test_PreRelease_IsValidSemVer()
+ASW_TEST(TTest_ASWLog_Version, PreRelease_IsValidSemVer)
 {
     // Arrange: a pre-release is empty (a release) or dot-separated identifiers, e.g. "dev.1". An identifier is
     // [0-9A-Za-z-], not empty, and has no leading zero if it is all digits (SemVer 2.0.0).
@@ -108,7 +105,7 @@ void TTest_ASWLog_Version::Test_PreRelease_IsValidSemVer()
         "ASWLOG_VERSION_PRERELEASE should be empty or SemVer pre-release identifiers");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_Version::Test_VersionString_MatchesParts()
+ASW_TEST(TTest_ASWLog_Version, VersionString_MatchesParts)
 {
     // Arrange
     const std::string_view preRelease = ASWLog::VersionPreRelease;

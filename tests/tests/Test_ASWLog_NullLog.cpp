@@ -78,12 +78,6 @@ namespace ASWUnitTests
 TTest_ASWLog_NullLog::TTest_ASWLog_NullLog()
     : inherited("ASWLog_NullLog_Tests")
 {
-    RegisterTest(&TTest_ASWLog_NullLog::Test_Fmt_NeverFormats, "Fmt_NeverFormats");
-    RegisterTest(&TTest_ASWLog_NullLog::Test_GetConfig_IsSafeWhileReconfiguring, "GetConfig_IsSafeWhileReconfiguring");
-    RegisterTest(&TTest_ASWLog_NullLog::Test_GetInstance_ReturnsTheSameLogger, "GetInstance_ReturnsTheSameLogger");
-    RegisterTest(&TTest_ASWLog_NullLog::Test_Lifecycle_SucceedsAndKeepsTheConfig, "Lifecycle_SucceedsAndKeepsTheConfig");
-    RegisterTest(&TTest_ASWLog_NullLog::Test_ShouldLog_IsAlwaysFalse, "ShouldLog_IsAlwaysFalse");
-    RegisterTest(&TTest_ASWLog_NullLog::Test_Wrapped_WritesNothing, "Wrapped_WritesNothing");
 }
 //---------------------------------------------------------------------------
 TTest_ASWLog_NullLog::~TTest_ASWLog_NullLog()
@@ -111,7 +105,7 @@ void TTest_ASWLog_NullLog::TearDown_Test(ITestCase& /*testCase*/)
 // /////// Begin tests after this line ///////////////////////
 
 //---------------------------------------------------------------------------
-void TTest_ASWLog_NullLog::Test_Fmt_NeverFormats()
+ASW_TEST(TTest_ASWLog_NullLog, Fmt_NeverFormats)
 {
     // Arrange: everything a real logger would need to write an entry
     ASWLog::TASWNullLog log;
@@ -130,7 +124,7 @@ void TTest_ASWLog_NullLog::Test_Fmt_NeverFormats()
     CheckEquals(0, NullLogFormatCount, "No *Fmt call should format its message");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_NullLog::Test_GetConfig_IsSafeWhileReconfiguring()
+ASW_TEST(TTest_ASWLog_NullLog, GetConfig_IsSafeWhileReconfiguring)
 {
     // Arrange: two threads reconfigure while two read the config (for ThreadSanitizer)
     ASWLog::TASWNullLog log;
@@ -172,7 +166,7 @@ void TTest_ASWLog_NullLog::Test_GetConfig_IsSafeWhileReconfiguring()
     CheckEquals(0, unexpectedCount.load(), "Every read should see one of the configs whole");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_NullLog::Test_GetInstance_ReturnsTheSameLogger()
+ASW_TEST(TTest_ASWLog_NullLog, GetInstance_ReturnsTheSameLogger)
 {
     // Act
     auto& first = ASWLog::TASWNullLog::GetInstance();
@@ -183,7 +177,7 @@ void TTest_ASWLog_NullLog::Test_GetInstance_ReturnsTheSameLogger()
     CheckFalse(first.ShouldLog(ASWLog::Level::Critical), "The shared instance should write nothing either");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_NullLog::Test_Lifecycle_SucceedsAndKeepsTheConfig()
+ASW_TEST(TTest_ASWLog_NullLog, Lifecycle_SucceedsAndKeepsTheConfig)
 {
     // Arrange
     ASWLog::TASWNullLog log;
@@ -218,7 +212,7 @@ void TTest_ASWLog_NullLog::Test_Lifecycle_SucceedsAndKeepsTheConfig()
     CheckEquals(std::string(ASWLog::Version), std::string(log.GetVersionStr()), "The version should be the library's");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_NullLog::Test_ShouldLog_IsAlwaysFalse()
+ASW_TEST(TTest_ASWLog_NullLog, ShouldLog_IsAlwaysFalse)
 {
     // Arrange
     ASWLog::TASWNullLog log;
@@ -238,7 +232,7 @@ void TTest_ASWLog_NullLog::Test_ShouldLog_IsAlwaysFalse()
     log.LogCritical("not written");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_NullLog::Test_Wrapped_WritesNothing()
+ASW_TEST(TTest_ASWLog_NullLog, Wrapped_WritesNothing)
 {
     // Arrange: a category and a multi-log in front of a null log
     ASWLog::TASWNullLog log;

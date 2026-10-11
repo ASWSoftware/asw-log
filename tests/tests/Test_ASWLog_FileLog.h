@@ -30,12 +30,12 @@ namespace ASWUnitTests
 ///////////////////////////////////////////////////////////////////////////
 // TTest_ASWLog_FileLog
 ///////////////////////////////////////////////////////////////////////////
-class TTest_ASWLog_FileLog : public TTestGroupBase
+class TTest_ASWLog_FileLog : public TAutoTestGroup<TTest_ASWLog_FileLog>
 {
 private:
-    typedef TTestGroupBase inherited;
+    typedef TAutoTestGroup<TTest_ASWLog_FileLog> inherited;
 
-private: // Test methods
+public: // Test methods, each defined with ASW_TEST
     void Test_Async_DropsAnEntryWhileTheFileCantBeOpened();
     void Test_Async_EntryAtWaitAtLevelIsInTheFileWhenTheCallReturns();
     void Test_Async_EveryWriteFlushesEachBatch();

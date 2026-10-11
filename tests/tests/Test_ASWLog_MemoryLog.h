@@ -32,12 +32,12 @@ namespace ASWUnitTests
 ///////////////////////////////////////////////////////////////////////////
 // TTest_ASWLog_MemoryLog
 ///////////////////////////////////////////////////////////////////////////
-class TTest_ASWLog_MemoryLog : public TTestGroupBase
+class TTest_ASWLog_MemoryLog : public TAutoTestGroup<TTest_ASWLog_MemoryLog>
 {
 private:
-    typedef TTestGroupBase inherited;
+    typedef TAutoTestGroup<TTest_ASWLog_MemoryLog> inherited;
 
-private: // Test methods
+public: // Test methods, each defined with ASW_TEST
     void Test_Async_KeepsTheQueuedLines();
     void Test_Clear_ForgetsTheLinesButNotTheSequence();
     void Test_Close_KeepsTheLines();

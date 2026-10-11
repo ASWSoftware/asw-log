@@ -30,12 +30,12 @@ namespace ASWUnitTests
 ///////////////////////////////////////////////////////////////////////////
 // TTest_ASWLog_TextLogBase
 ///////////////////////////////////////////////////////////////////////////
-class TTest_ASWLog_TextLogBase : public TTestGroupBase
+class TTest_ASWLog_TextLogBase : public TAutoTestGroup<TTest_ASWLog_TextLogBase>
 {
 private:
-    typedef TTestGroupBase inherited;
+    typedef TAutoTestGroup<TTest_ASWLog_TextLogBase> inherited;
 
-private: // Test methods
+public: // Test methods, each defined with ASW_TEST
     void Test_ApplicationInfo_WritesTheCommandLineWhenAsked();
     void Test_ApplicationInfo_WritesTheConfiguredVersion();
     void Test_ApplicationInfo_WritesTheExecutablesFileVersionByDefault();

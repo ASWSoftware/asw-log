@@ -183,14 +183,6 @@ public:
 TTest_ASWLog_SyslogLog::TTest_ASWLog_SyslogLog()
     : inherited("ASWLog_SyslogLog_Tests")
 {
-    RegisterTest(&TTest_ASWLog_SyslogLog::Test_GetInstance_ReturnsTheSameLogger, "GetInstance_ReturnsTheSameLogger");
-    RegisterTest(&TTest_ASWLog_SyslogLog::Test_HandleCrash_SendsTheFormattedCrashLineOnly, "HandleCrash_SendsTheFormattedCrashLineOnly");
-    RegisterTest(&TTest_ASWLog_SyslogLog::Test_Initialize_OpensSyslogWithTheIdentAndFacility, "Initialize_OpensSyslogWithTheIdentAndFacility");
-    RegisterTest(&TTest_ASWLog_SyslogLog::Test_Linux_SendsToTheRealSyslog, "Linux_SendsToTheRealSyslog");
-    RegisterTest(&TTest_ASWLog_SyslogLog::Test_Send_FollowsTheMultilineMode, "Send_FollowsTheMultilineMode");
-    RegisterTest(&TTest_ASWLog_SyslogLog::Test_Send_MapsEachLevelToAPriority, "Send_MapsEachLevelToAPriority");
-    RegisterTest(&TTest_ASWLog_SyslogLog::Test_Send_StripsOnlyTheLineEnding, "Send_StripsOnlyTheLineEnding");
-    RegisterTest(&TTest_ASWLog_SyslogLog::Test_ShouldLog_FollowsThePlatform, "ShouldLog_FollowsThePlatform");
 }
 //---------------------------------------------------------------------------
 TTest_ASWLog_SyslogLog::~TTest_ASWLog_SyslogLog()
@@ -218,7 +210,7 @@ void TTest_ASWLog_SyslogLog::TearDown_Test(ITestCase& /*testCase*/)
 // /////// Begin tests after this line ///////////////////////
 
 //---------------------------------------------------------------------------
-void TTest_ASWLog_SyslogLog::Test_GetInstance_ReturnsTheSameLogger()
+ASW_TEST(TTest_ASWLog_SyslogLog, GetInstance_ReturnsTheSameLogger)
 {
     // Act
     auto& first = ASWLog::TASWSyslogLog::GetInstance();
@@ -228,7 +220,7 @@ void TTest_ASWLog_SyslogLog::Test_GetInstance_ReturnsTheSameLogger()
     CheckSame(&first, &second, "GetInstance() should always return the same logger");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_SyslogLog::Test_HandleCrash_SendsTheFormattedCrashLineOnly()
+ASW_TEST(TTest_ASWLog_SyslogLog, HandleCrash_SendsTheFormattedCrashLineOnly)
 {
     // Arrange
     TCapturingSyslogLog log;
@@ -244,7 +236,7 @@ void TTest_ASWLog_SyslogLog::Test_HandleCrash_SendsTheFormattedCrashLineOnly()
     CheckEquals(std::string("[CRITICAL]: Crash: test crash"), log.Messages[0].Text, "The crash line should be sent without its line ending");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_SyslogLog::Test_Initialize_OpensSyslogWithTheIdentAndFacility()
+ASW_TEST(TTest_ASWLog_SyslogLog, Initialize_OpensSyslogWithTheIdentAndFacility)
 {
     // Arrange
     TCapturingSyslogLog log;
@@ -272,7 +264,7 @@ void TTest_ASWLog_SyslogLog::Test_Initialize_OpensSyslogWithTheIdentAndFacility(
     CheckEquals(ASWLog::SyslogFacility::Local3, log.Opens[1].Facility, "Reconfigure should pass the new facility");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_SyslogLog::Test_Linux_SendsToTheRealSyslog()
+ASW_TEST(TTest_ASWLog_SyslogLog, Linux_SendsToTheRealSyslog)
 {
 #if defined(_WIN32)
     Skip("Only Linux has a syslog");
@@ -304,7 +296,7 @@ void TTest_ASWLog_SyslogLog::Test_Linux_SendsToTheRealSyslog()
 #endif
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_SyslogLog::Test_Send_FollowsTheMultilineMode()
+ASW_TEST(TTest_ASWLog_SyslogLog, Send_FollowsTheMultilineMode)
 {
     // Arrange
     TCapturingSyslogLog log;
@@ -328,7 +320,7 @@ void TTest_ASWLog_SyslogLog::Test_Send_FollowsTheMultilineMode()
     CheckEquals(std::string("[INFO]: first\\r\\nsecond"), log.Messages[2].Text, "Escape should write \\r and \\n");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_SyslogLog::Test_Send_MapsEachLevelToAPriority()
+ASW_TEST(TTest_ASWLog_SyslogLog, Send_MapsEachLevelToAPriority)
 {
     // Arrange
     TCapturingSyslogLog log;
@@ -366,7 +358,7 @@ void TTest_ASWLog_SyslogLog::Test_Send_MapsEachLevelToAPriority()
     CheckEquals((3 << 3) | 6, log.Messages[8].Priority, "The facility should be sent with each message (LOG_DAEMON | LOG_INFO)");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_SyslogLog::Test_Send_StripsOnlyTheLineEnding()
+ASW_TEST(TTest_ASWLog_SyslogLog, Send_StripsOnlyTheLineEnding)
 {
     // Arrange
     TCapturingSyslogLog log;
@@ -391,7 +383,7 @@ void TTest_ASWLog_SyslogLog::Test_Send_StripsOnlyTheLineEnding()
     CheckEquals(std::string("[INFO]: ends with LF\n"), log.Messages[4].Text, "With CRLF endings, the message's own LF should stay");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_SyslogLog::Test_ShouldLog_FollowsThePlatform()
+ASW_TEST(TTest_ASWLog_SyslogLog, ShouldLog_FollowsThePlatform)
 {
 #if defined(_WIN32)
     // Arrange: a startup and a shutdown line too, each of which would be formatted

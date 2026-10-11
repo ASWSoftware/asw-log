@@ -64,31 +64,6 @@ std::vector<std::string> DescribeFields(const ASWLog::TASWPendingEntry& entry)
 TTest_ASWLog_Types::TTest_ASWLog_Types()
     : inherited("ASWLog_Types_Tests")
 {
-    RegisterTest(&TTest_ASWLog_Types::Test_AsyncOverflowPolicy_FromString, "AsyncOverflowPolicy_FromString");
-    RegisterTest(&TTest_ASWLog_Types::Test_AsyncOverflowPolicy_ToString, "AsyncOverflowPolicy_ToString");
-    RegisterTest(&TTest_ASWLog_Types::Test_ColorMode_FromString, "ColorMode_FromString");
-    RegisterTest(&TTest_ASWLog_Types::Test_ColorMode_ToString, "ColorMode_ToString");
-    RegisterTest(&TTest_ASWLog_Types::Test_ErrorKind_ToString, "ErrorKind_ToString");
-    RegisterTest(&TTest_ASWLog_Types::Test_FlushMode_FromString, "FlushMode_FromString");
-    RegisterTest(&TTest_ASWLog_Types::Test_FlushMode_ToString, "FlushMode_ToString");
-    RegisterTest(&TTest_ASWLog_Types::Test_Level_FromString, "Level_FromString");
-    RegisterTest(&TTest_ASWLog_Types::Test_Level_ToString, "Level_ToString");
-    RegisterTest(&TTest_ASWLog_Types::Test_LineEnding_FromString, "LineEnding_FromString");
-    RegisterTest(&TTest_ASWLog_Types::Test_LineEnding_ToString, "LineEnding_ToString");
-    RegisterTest(&TTest_ASWLog_Types::Test_LogError_ToString, "LogError_ToString");
-    RegisterTest(&TTest_ASWLog_Types::Test_MultilineMode_FromString, "MultilineMode_FromString");
-    RegisterTest(&TTest_ASWLog_Types::Test_MultilineMode_ToString, "MultilineMode_ToString");
-    RegisterTest(&TTest_ASWLog_Types::Test_PendingEntry_ChangingFieldsWhileVisitingIsSafe, "PendingEntry_ChangingFieldsWhileVisitingIsSafe");
-    RegisterTest(&TTest_ASWLog_Types::Test_PendingEntry_FindsFieldsOfTheEntryAndItsScopes, "PendingEntry_FindsFieldsOfTheEntryAndItsScopes");
-    RegisterTest(&TTest_ASWLog_Types::Test_PendingEntry_RemoveFieldRemovesItForThisEntry, "PendingEntry_RemoveFieldRemovesItForThisEntry");
-    RegisterTest(&TTest_ASWLog_Types::Test_PendingEntry_SetFieldReplacesOrAddsACopy, "PendingEntry_SetFieldReplacesOrAddsACopy");
-    RegisterTest(&TTest_ASWLog_Types::Test_PendingEntry_SetMessageOwnsTheText, "PendingEntry_SetMessageOwnsTheText");
-    RegisterTest(&TTest_ASWLog_Types::Test_SyslogFacility_FromString, "SyslogFacility_FromString");
-    RegisterTest(&TTest_ASWLog_Types::Test_SyslogFacility_ToString, "SyslogFacility_ToString");
-    RegisterTest(&TTest_ASWLog_Types::Test_TimePrecision_FromString, "TimePrecision_FromString");
-    RegisterTest(&TTest_ASWLog_Types::Test_TimePrecision_ToString, "TimePrecision_ToString");
-    RegisterTest(&TTest_ASWLog_Types::Test_TimeZone_FromString, "TimeZone_FromString");
-    RegisterTest(&TTest_ASWLog_Types::Test_TimeZone_ToString, "TimeZone_ToString");
 }
 //---------------------------------------------------------------------------
 TTest_ASWLog_Types::~TTest_ASWLog_Types()
@@ -115,7 +90,7 @@ void TTest_ASWLog_Types::TearDown_Test(ITestCase& /*testCase*/)
 // /////// Begin tests after this line ///////////////////////
 
 //---------------------------------------------------------------------------
-void TTest_ASWLog_Types::Test_AsyncOverflowPolicy_FromString()
+ASW_TEST(TTest_ASWLog_Types, AsyncOverflowPolicy_FromString)
 {
     // Arrange
     const auto block = ASWLog::AsyncOverflowPolicy_FromString("BLOCK");
@@ -133,14 +108,14 @@ void TTest_ASWLog_Types::Test_AsyncOverflowPolicy_FromString()
     CheckEquals(ASWLog::AsyncOverflowPolicy::DropNewest, *dropNewestAlias_mixedCase, "DropNewest should map to DropNewest");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_Types::Test_AsyncOverflowPolicy_ToString()
+ASW_TEST(TTest_ASWLog_Types, AsyncOverflowPolicy_ToString)
 {
     // Arrange / Act / Assert
     CheckEquals(std::string("BLOCK"), std::string(ASWLog::AsyncOverflowPolicy_ToString(ASWLog::AsyncOverflowPolicy::Block)), "Block should stringify as BLOCK");
     CheckEquals(std::string("DROP_NEWEST"), std::string(ASWLog::AsyncOverflowPolicy_ToString(ASWLog::AsyncOverflowPolicy::DropNewest)), "DropNewest should stringify as DROP_NEWEST");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_Types::Test_ColorMode_FromString()
+ASW_TEST(TTest_ASWLog_Types, ColorMode_FromString)
 {
     // Arrange
     const auto autoMode = ASWLog::ColorMode_FromString("AUTO");
@@ -161,7 +136,7 @@ void TTest_ASWLog_Types::Test_ColorMode_FromString()
     CheckEquals(ASWLog::ColorMode::Never, *never_mixedCase, "Never should map to Never");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_Types::Test_ColorMode_ToString()
+ASW_TEST(TTest_ASWLog_Types, ColorMode_ToString)
 {
     // Arrange
     const std::string autoMode = std::string(ASWLog::ColorMode_ToString(ASWLog::ColorMode::Auto));
@@ -174,7 +149,7 @@ void TTest_ASWLog_Types::Test_ColorMode_ToString()
     CheckEquals(std::string("NEVER"), never, "Never should stringify as NEVER");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_Types::Test_ErrorKind_ToString()
+ASW_TEST(TTest_ASWLog_Types, ErrorKind_ToString)
 {
     // Arrange / Act / Assert
     CheckEquals(std::string("OPEN_FAILED"), std::string(ASWLog::ErrorKind_ToString(ASWLog::ErrorKind::OpenFailed)), "OpenFailed should stringify as OPEN_FAILED");
@@ -190,7 +165,7 @@ void TTest_ASWLog_Types::Test_ErrorKind_ToString()
     CheckEquals(static_cast<std::size_t>(ASWLog::ErrorKind::InvalidSetting) + 1, ASWLog::ErrorKindCount, "ErrorKindCount should count every kind (InvalidSetting is the last)");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_Types::Test_FlushMode_FromString()
+ASW_TEST(TTest_ASWLog_Types, FlushMode_FromString)
 {
     // Arrange
     const auto everyWrite = ASWLog::FlushMode_FromString("EVERY_WRITE");
@@ -215,7 +190,7 @@ void TTest_ASWLog_Types::Test_FlushMode_FromString()
     CheckEquals(ASWLog::FlushMode::Periodic, *periodic, "PERIODIC should map to Periodic");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_Types::Test_FlushMode_ToString()
+ASW_TEST(TTest_ASWLog_Types, FlushMode_ToString)
 {
     // Arrange
     const std::string everyWrite = std::string(ASWLog::FlushMode_ToString(ASWLog::FlushMode::EveryWrite));
@@ -230,7 +205,7 @@ void TTest_ASWLog_Types::Test_FlushMode_ToString()
     CheckEquals(std::string("PERIODIC"), periodic, "PERIODIC should stringify as PERIODIC");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_Types::Test_Level_FromString()
+ASW_TEST(TTest_ASWLog_Types, Level_FromString)
 {
     // Arrange
     const auto trace = ASWLog::Level_FromString("TRACE");
@@ -268,7 +243,7 @@ void TTest_ASWLog_Types::Test_Level_FromString()
     CheckTrue(offAlias.has_value() && *offAlias == ASWLog::Level::Off, "none (NONE alias, any case) should map to Off");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_Types::Test_Level_ToString()
+ASW_TEST(TTest_ASWLog_Types, Level_ToString)
 {
     // Arrange
     const std::string trace = std::string(ASWLog::Level_ToString(ASWLog::Level::Trace));
@@ -291,7 +266,7 @@ void TTest_ASWLog_Types::Test_Level_ToString()
         "LevelCount should count the severity levels, which come before Off");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_Types::Test_LineEnding_FromString()
+ASW_TEST(TTest_ASWLog_Types, LineEnding_FromString)
 {
     // Arrange
     const auto lf = ASWLog::LineEnding_FromString("LF");
@@ -314,7 +289,7 @@ void TTest_ASWLog_Types::Test_LineEnding_FromString()
     CheckFalse(ASWLog::LineEnding_FromString("CR").has_value(), "An unknown name should not parse");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_Types::Test_LineEnding_ToString()
+ASW_TEST(TTest_ASWLog_Types, LineEnding_ToString)
 {
     // Arrange
     const std::string lf = std::string(ASWLog::LineEnding_ToString(ASWLog::LineEnding::LF));
@@ -325,7 +300,7 @@ void TTest_ASWLog_Types::Test_LineEnding_ToString()
     CheckEquals(std::string("CRLF"), crlf, "CRLF should stringify as CRLF");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_Types::Test_LogError_ToString()
+ASW_TEST(TTest_ASWLog_Types, LogError_ToString)
 {
     // Arrange
     ASWLog::TASWLogError messageOnly;
@@ -349,7 +324,7 @@ void TTest_ASWLog_Types::Test_LogError_ToString()
     CheckEquals("OPEN_FAILED: Couldn't open the log file 'logs/app.log': " + code.message() + " (3 more not reported)", everyPartText, "Every part should be in the line");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_Types::Test_MultilineMode_FromString()
+ASW_TEST(TTest_ASWLog_Types, MultilineMode_FromString)
 {
     // Arrange
     const auto preserve = ASWLog::MultilineMode_FromString("PRESERVE");
@@ -364,7 +339,7 @@ void TTest_ASWLog_Types::Test_MultilineMode_FromString()
     CheckFalse(unknown.has_value(), "An unknown mode should not parse");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_Types::Test_MultilineMode_ToString()
+ASW_TEST(TTest_ASWLog_Types, MultilineMode_ToString)
 {
     // Act & Assert
     CheckEquals(std::string("PRESERVE"), std::string(ASWLog::MultilineMode_ToString(ASWLog::MultilineMode::Preserve)), "Preserve should stringify as PRESERVE");
@@ -372,7 +347,7 @@ void TTest_ASWLog_Types::Test_MultilineMode_ToString()
     CheckEquals(std::string("ESCAPE"), std::string(ASWLog::MultilineMode_ToString(ASWLog::MultilineMode::Escape)), "Escape should stringify as ESCAPE");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_Types::Test_PendingEntry_ChangingFieldsWhileVisitingIsSafe()
+ASW_TEST(TTest_ASWLog_Types, PendingEntry_ChangingFieldsWhileVisitingIsSafe)
 {
     // Arrange: text fields from a scope, then (after the first change) the entry's own copies
     ASWLog::TASWLogScope scope{ { "a", "1" }, { "b", "2" }, { "c", "3" } };
@@ -399,7 +374,7 @@ void TTest_ASWLog_Types::Test_PendingEntry_ChangingFieldsWhileVisitingIsSafe()
     CheckTrue(DescribeFields(entry) == std::vector<std::string>{ "a=xy", "b=xy", "c=xy" }, "Every change should be kept");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_Types::Test_PendingEntry_FindsFieldsOfTheEntryAndItsScopes()
+ASW_TEST(TTest_ASWLog_Types, PendingEntry_FindsFieldsOfTheEntryAndItsScopes)
 {
     // Arrange: a scope and the entry's own fields, one of which replaces the scope's
     ASWLog::TASWLogScope scope{ { "requestId", "8f3a" }, { "user", "amy" } };
@@ -428,7 +403,7 @@ void TTest_ASWLog_Types::Test_PendingEntry_FindsFieldsOfTheEntryAndItsScopes()
         "ForEachField() should give each key once, as written");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_Types::Test_PendingEntry_RemoveFieldRemovesItForThisEntry()
+ASW_TEST(TTest_ASWLog_Types, PendingEntry_RemoveFieldRemovesItForThisEntry)
 {
     // Arrange
     ASWLog::TASWLogScope scope{ { "user", "amy" }, { "requestId", "8f3a" } };
@@ -453,7 +428,7 @@ void TTest_ASWLog_Types::Test_PendingEntry_RemoveFieldRemovesItForThisEntry()
         "The scope itself should keep the field");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_Types::Test_PendingEntry_SetFieldReplacesOrAddsACopy()
+ASW_TEST(TTest_ASWLog_Types, PendingEntry_SetFieldReplacesOrAddsACopy)
 {
     // Arrange
     ASWLog::TASWLogScope scope{ { "requestId", "8f3a" }, { "user", "amy" } };
@@ -482,7 +457,7 @@ void TTest_ASWLog_Types::Test_PendingEntry_SetFieldReplacesOrAddsACopy()
     CheckEquals(17, ownFields[0].Value.GetInt(), "The caller's fields should be unchanged");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_Types::Test_PendingEntry_SetMessageOwnsTheText()
+ASW_TEST(TTest_ASWLog_Types, PendingEntry_SetMessageOwnsTheText)
 {
     // Arrange
     ASWLog::TASWLogRecord record;
@@ -507,7 +482,7 @@ void TTest_ASWLog_Types::Test_PendingEntry_SetMessageOwnsTheText()
     CheckEquals(std::string("Net"), std::string(entry.GetRecord().Category), "The category should be kept");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_Types::Test_SyslogFacility_FromString()
+ASW_TEST(TTest_ASWLog_Types, SyslogFacility_FromString)
 {
     // Arrange
     const auto user = ASWLog::SyslogFacility_FromString("USER");
@@ -526,7 +501,7 @@ void TTest_ASWLog_Types::Test_SyslogFacility_FromString()
     CheckFalse(kernel.has_value(), "A facility the logger doesn't offer should not parse");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_Types::Test_SyslogFacility_ToString()
+ASW_TEST(TTest_ASWLog_Types, SyslogFacility_ToString)
 {
     // Act & Assert
     CheckEquals(std::string("USER"), std::string(ASWLog::SyslogFacility_ToString(ASWLog::SyslogFacility::User)), "User should stringify as USER");
@@ -538,7 +513,7 @@ void TTest_ASWLog_Types::Test_SyslogFacility_ToString()
     CheckEquals(184, static_cast<int>(ASWLog::SyslogFacility::Local7) << 3, "Local7 should be RFC 5424 facility 23 (LOG_LOCAL7 = 184)");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_Types::Test_TimePrecision_FromString()
+ASW_TEST(TTest_ASWLog_Types, TimePrecision_FromString)
 {
     // Arrange
     const auto milliseconds = ASWLog::TimePrecision_FromString("MILLISECONDS");
@@ -559,7 +534,7 @@ void TTest_ASWLog_Types::Test_TimePrecision_FromString()
     CheckFalse(unknown.has_value(), "An unknown precision should not parse");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_Types::Test_TimePrecision_ToString()
+ASW_TEST(TTest_ASWLog_Types, TimePrecision_ToString)
 {
     // Act & Assert
     CheckEquals(std::string("MILLISECONDS"), std::string(ASWLog::TimePrecision_ToString(ASWLog::TimePrecision::Milliseconds)), "Milliseconds should stringify as MILLISECONDS");
@@ -567,7 +542,7 @@ void TTest_ASWLog_Types::Test_TimePrecision_ToString()
     CheckEquals(std::string("NANOSECONDS"), std::string(ASWLog::TimePrecision_ToString(ASWLog::TimePrecision::Nanoseconds)), "Nanoseconds should stringify as NANOSECONDS");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_Types::Test_TimeZone_FromString()
+ASW_TEST(TTest_ASWLog_Types, TimeZone_FromString)
 {
     // Arrange
     const auto utc = ASWLog::TimeZone_FromString("UTC");
@@ -580,7 +555,7 @@ void TTest_ASWLog_Types::Test_TimeZone_FromString()
     CheckFalse(unknown.has_value(), "A named time zone should not parse");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_Types::Test_TimeZone_ToString()
+ASW_TEST(TTest_ASWLog_Types, TimeZone_ToString)
 {
     // Act & Assert
     CheckEquals(std::string("UTC"), std::string(ASWLog::TimeZone_ToString(ASWLog::TimeZone::UTC)), "UTC should stringify as UTC");

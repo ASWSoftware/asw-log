@@ -30,12 +30,12 @@ namespace ASWUnitTests
 ///////////////////////////////////////////////////////////////////////////
 // TTest_ASWLog_Types
 ///////////////////////////////////////////////////////////////////////////
-class TTest_ASWLog_Types : public TTestGroupBase
+class TTest_ASWLog_Types : public TAutoTestGroup<TTest_ASWLog_Types>
 {
 private:
-    typedef TTestGroupBase inherited;
+    typedef TAutoTestGroup<TTest_ASWLog_Types> inherited;
 
-private: // Test methods
+public: // Test methods, each defined with ASW_TEST
     void Test_AsyncOverflowPolicy_FromString();
     void Test_AsyncOverflowPolicy_ToString();
     void Test_ColorMode_FromString();

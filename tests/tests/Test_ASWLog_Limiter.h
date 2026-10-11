@@ -32,12 +32,12 @@ namespace ASWUnitTests
 ///////////////////////////////////////////////////////////////////////////
 // TTest_ASWLog_Limiter
 ///////////////////////////////////////////////////////////////////////////
-class TTest_ASWLog_Limiter : public TTestGroupBase
+class TTest_ASWLog_Limiter : public TAutoTestGroup<TTest_ASWLog_Limiter>
 {
 private:
-    typedef TTestGroupBase inherited;
+    typedef TAutoTestGroup<TTest_ASWLog_Limiter> inherited;
 
-private: // Test methods
+public: // Test methods, each defined with ASW_TEST
     void Test_EveryInterval_AllowsOneCallPerInterval();
     void Test_EveryInterval_HandlesTheLongestInterval();
     void Test_EveryInterval_ZeroAllowsEveryCall();

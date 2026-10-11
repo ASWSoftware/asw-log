@@ -30,12 +30,12 @@ namespace ASWUnitTests
 ///////////////////////////////////////////////////////////////////////////
 // TTest_ASWLog_Version
 ///////////////////////////////////////////////////////////////////////////
-class TTest_ASWLog_Version : public TTestGroupBase
+class TTest_ASWLog_Version : public TAutoTestGroup<TTest_ASWLog_Version>
 {
 private:
-    typedef TTestGroupBase inherited;
+    typedef TAutoTestGroup<TTest_ASWLog_Version> inherited;
 
-private: // Test methods
+public: // Test methods, each defined with ASW_TEST
     void Test_GetVersionStr_ReturnsVersion();
     void Test_PreRelease_IsValidSemVer();
     void Test_VersionString_MatchesParts();

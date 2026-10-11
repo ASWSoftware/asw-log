@@ -30,12 +30,12 @@ namespace ASWUnitTests
 ///////////////////////////////////////////////////////////////////////////
 // TTest_ASWLog_Formatter
 ///////////////////////////////////////////////////////////////////////////
-class TTest_ASWLog_Formatter : public TTestGroupBase
+class TTest_ASWLog_Formatter : public TAutoTestGroup<TTest_ASWLog_Formatter>
 {
 private:
-    typedef TTestGroupBase inherited;
+    typedef TAutoTestGroup<TTest_ASWLog_Formatter> inherited;
 
-private: // Test methods
+public: // Test methods, each defined with ASW_TEST
     void Test_Format_MatchesFormatLine();
     void Test_FormatLine_AllFieldsInOrder();
     void Test_FormatLine_CategoryOnlyWhenSetAndShown();

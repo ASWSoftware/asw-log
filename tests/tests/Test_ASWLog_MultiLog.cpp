@@ -278,37 +278,6 @@ ASWLog::TASWLogConfig MakeFileConfig(const std::filesystem::path& dir, const std
 TTest_ASWLog_MultiLog::TTest_ASWLog_MultiLog()
     : inherited("ASWLog_MultiLog_Tests")
 {
-    RegisterTest(&TTest_ASWLog_MultiLog::Test_AddLogger_RejectsDuplicateRegistration, "AddLogger_RejectsDuplicateRegistration");
-    RegisterTest(&TTest_ASWLog_MultiLog::Test_AddLogger_RejectsSelfRegistration, "AddLogger_RejectsSelfRegistration");
-    RegisterTest(&TTest_ASWLog_MultiLog::Test_Backtrace_EachLoggerKeepsItsOwn, "Backtrace_EachLoggerKeepsItsOwn");
-    RegisterTest(&TTest_ASWLog_MultiLog::Test_Backtrace_IsNotKeptByTheMultiLog, "Backtrace_IsNotKeptByTheMultiLog");
-    RegisterTest(&TTest_ASWLog_MultiLog::Test_Close_AllowsInitializeAgain, "Close_AllowsInitializeAgain");
-    RegisterTest(&TTest_ASWLog_MultiLog::Test_Close_ReachesEverySinkEvenAfterAFailure, "Close_ReachesEverySinkEvenAfterAFailure");
-    RegisterTest(&TTest_ASWLog_MultiLog::Test_Contains_ReflectsRegistrationState, "Contains_ReflectsRegistrationState");
-    RegisterTest(&TTest_ASWLog_MultiLog::Test_DumpBacktrace_ReachesEverySinkUnlessDisabled, "DumpBacktrace_ReachesEverySinkUnlessDisabled");
-    RegisterTest(&TTest_ASWLog_MultiLog::Test_Flush_ReachesEverySinkEvenAfterAFailure, "Flush_ReachesEverySinkEvenAfterAFailure");
-    RegisterTest(&TTest_ASWLog_MultiLog::Test_Flush_SucceedsWithNoSinks, "Flush_SucceedsWithNoSinks");
-    RegisterTest(&TTest_ASWLog_MultiLog::Test_Flush_WorksWhileDisabled, "Flush_WorksWhileDisabled");
-    RegisterTest(&TTest_ASWLog_MultiLog::Test_Flush_WritesBufferedEntriesOfEveryFileSink, "Flush_WritesBufferedEntriesOfEveryFileSink");
-    RegisterTest(&TTest_ASWLog_MultiLog::Test_GetLoggerCount_ReflectsAddAndRemove, "GetLoggerCount_ReflectsAddAndRemove");
-    RegisterTest(&TTest_ASWLog_MultiLog::Test_GetLoggers_ReturnsSnapshotOfRegisteredSinks, "GetLoggers_ReturnsSnapshotOfRegisteredSinks");
-    RegisterTest(&TTest_ASWLog_MultiLog::Test_Initialize_ConcurrentCallsSucceedOnce, "Initialize_ConcurrentCallsSucceedOnce");
-    RegisterTest(&TTest_ASWLog_MultiLog::Test_Initialize_FailsOnlyForASinkThatIsNotOpen, "Initialize_FailsOnlyForASinkThatIsNotOpen");
-    RegisterTest(&TTest_ASWLog_MultiLog::Test_IsOpen_RequiresAllSinksOpen, "IsOpen_RequiresAllSinksOpen");
-    RegisterTest(&TTest_ASWLog_MultiLog::Test_Log_AtLevelOffIsNotFannedOut, "Log_AtLevelOffIsNotFannedOut");
-    RegisterTest(&TTest_ASWLog_MultiLog::Test_Log_FansOutToAllRegisteredSinks, "Log_FansOutToAllRegisteredSinks");
-    RegisterTest(&TTest_ASWLog_MultiLog::Test_Log_ThrowingSinkDoesNotStopOtherSinks, "Log_ThrowingSinkDoesNotStopOtherSinks");
-    RegisterTest(&TTest_ASWLog_MultiLog::Test_LogFmt_FormatsOnceForAllSinks, "LogFmt_FormatsOnceForAllSinks");
-    RegisterTest(&TTest_ASWLog_MultiLog::Test_LogForce_BypassesCompositeGate, "LogForce_BypassesCompositeGate");
-    RegisterTest(&TTest_ASWLog_MultiLog::Test_OnBeforeWrite_RunsOnceBeforeTheFanOut, "OnBeforeWrite_RunsOnceBeforeTheFanOut");
-    RegisterTest(&TTest_ASWLog_MultiLog::Test_Open_ReachesEverySinkEvenAfterAFailure, "Open_ReachesEverySinkEvenAfterAFailure");
-    RegisterTest(&TTest_ASWLog_MultiLog::Test_Reconfigure_PassesConfigToEverySink, "Reconfigure_PassesConfigToEverySink");
-    RegisterTest(&TTest_ASWLog_MultiLog::Test_RemoveAllLoggers_ClearsRegistrationAndReturnsCount, "RemoveAllLoggers_ClearsRegistrationAndReturnsCount");
-    RegisterTest(&TTest_ASWLog_MultiLog::Test_RemoveLogger_StopsReceivingEntries, "RemoveLogger_StopsReceivingEntries");
-    RegisterTest(&TTest_ASWLog_MultiLog::Test_SetEnabled_FalseStopsFanOut, "SetEnabled_FalseStopsFanOut");
-    RegisterTest(&TTest_ASWLog_MultiLog::Test_SetMinimumLevel_GatesFanOutBeforeSinks, "SetMinimumLevel_GatesFanOutBeforeSinks");
-    RegisterTest(&TTest_ASWLog_MultiLog::Test_ShouldLog_RequiresCompositeGateAndAnySink, "ShouldLog_RequiresCompositeGateAndAnySink");
-    RegisterTest(&TTest_ASWLog_MultiLog::Test_Write_PassesOneStampedRecordToEverySink, "Write_PassesOneStampedRecordToEverySink");
 }
 //---------------------------------------------------------------------------
 TTest_ASWLog_MultiLog::~TTest_ASWLog_MultiLog()
@@ -343,7 +312,7 @@ void TTest_ASWLog_MultiLog::TearDown_Test(ITestCase& testCase)
 // /////// Begin tests after this line ///////////////////////
 
 //---------------------------------------------------------------------------
-void TTest_ASWLog_MultiLog::Test_AddLogger_RejectsDuplicateRegistration()
+ASW_TEST(TTest_ASWLog_MultiLog, AddLogger_RejectsDuplicateRegistration)
 {
     // Arrange
     const auto fileA = TestTempDir / "duplicate_sink.log";
@@ -369,7 +338,7 @@ void TTest_ASWLog_MultiLog::Test_AddLogger_RejectsDuplicateRegistration()
     CheckTrue(secondPos == std::string::npos, "The message should not be duplicated in the sink");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_MultiLog::Test_AddLogger_RejectsSelfRegistration()
+ASW_TEST(TTest_ASWLog_MultiLog, AddLogger_RejectsSelfRegistration)
 {
     // Arrange
     ASWLog::TASWMultiLog multiLog;
@@ -385,7 +354,7 @@ void TTest_ASWLog_MultiLog::Test_AddLogger_RejectsSelfRegistration()
     multiLog.LogInfo("no_recursion_expected");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_MultiLog::Test_Backtrace_EachLoggerKeepsItsOwn()
+ASW_TEST(TTest_ASWLog_MultiLog, Backtrace_EachLoggerKeepsItsOwn)
 {
     // Arrange: the multi-log lets every level through; each sink keeps what is below its own minimum level
     const auto config = MakeBacktraceConfig(ASWLog::Level::Trace);
@@ -417,7 +386,7 @@ void TTest_ASWLog_MultiLog::Test_Backtrace_EachLoggerKeepsItsOwn()
     CheckTrue(warnSink.Calls == expectedWarn, "The Warn sink should keep the Debug and Info entries");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_MultiLog::Test_Backtrace_IsNotKeptByTheMultiLog()
+ASW_TEST(TTest_ASWLog_MultiLog, Backtrace_IsNotKeptByTheMultiLog)
 {
     // Arrange: the multi-log's own minimum level is Info, and its config asks for a backtrace
     const auto config = MakeBacktraceConfig(ASWLog::Level::Info);
@@ -438,7 +407,7 @@ void TTest_ASWLog_MultiLog::Test_Backtrace_IsNotKeptByTheMultiLog()
     CheckTrue(sink.Calls == std::vector<std::string>{ "Log:error_1" }, "Neither the multi-log nor the sink should keep the Debug entry");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_MultiLog::Test_Close_AllowsInitializeAgain()
+ASW_TEST(TTest_ASWLog_MultiLog, Close_AllowsInitializeAgain)
 {
     // Arrange
     const auto fileA = TestTempDir / "reinitialize_sink.log";
@@ -461,7 +430,7 @@ void TTest_ASWLog_MultiLog::Test_Close_AllowsInitializeAgain()
     CheckContains(ReadFileText(fileA), "after_reinitialize", "Initialize after Close should initialize the sinks again");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_MultiLog::Test_Close_ReachesEverySinkEvenAfterAFailure()
+ASW_TEST(TTest_ASWLog_MultiLog, Close_ReachesEverySinkEvenAfterAFailure)
 {
     // Arrange: the first sink's close fails
     TRecordingLogger failingSink;
@@ -484,7 +453,7 @@ void TTest_ASWLog_MultiLog::Test_Close_ReachesEverySinkEvenAfterAFailure()
     CheckEquals(2, sink.CloseCount, "A sink's failed close should not stop the other sinks from being closed");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_MultiLog::Test_Contains_ReflectsRegistrationState()
+ASW_TEST(TTest_ASWLog_MultiLog, Contains_ReflectsRegistrationState)
 {
     // Arrange
     const auto fileA = TestTempDir / "contains_sink.log";
@@ -505,7 +474,7 @@ void TTest_ASWLog_MultiLog::Test_Contains_ReflectsRegistrationState()
     sinkA.Close();
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_MultiLog::Test_DumpBacktrace_ReachesEverySinkUnlessDisabled()
+ASW_TEST(TTest_ASWLog_MultiLog, DumpBacktrace_ReachesEverySinkUnlessDisabled)
 {
     // Arrange
     const auto config = MakeBacktraceConfig(ASWLog::Level::Trace);
@@ -540,7 +509,7 @@ void TTest_ASWLog_MultiLog::Test_DumpBacktrace_ReachesEverySinkUnlessDisabled()
     CheckTrue(sinkB.Calls == expected, "The second sink should write its backtrace");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_MultiLog::Test_Flush_ReachesEverySinkEvenAfterAFailure()
+ASW_TEST(TTest_ASWLog_MultiLog, Flush_ReachesEverySinkEvenAfterAFailure)
 {
     // Arrange: the first sink's flush fails
     TRecordingLogger failingSink;
@@ -564,7 +533,7 @@ void TTest_ASWLog_MultiLog::Test_Flush_ReachesEverySinkEvenAfterAFailure()
     CheckTrue(sink.Calls == twoFlushes, "A sink's failed flush should not stop the other sinks from being flushed");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_MultiLog::Test_Flush_SucceedsWithNoSinks()
+ASW_TEST(TTest_ASWLog_MultiLog, Flush_SucceedsWithNoSinks)
 {
     // Arrange
     ASWLog::TASWMultiLog multiLog;
@@ -573,7 +542,7 @@ void TTest_ASWLog_MultiLog::Test_Flush_SucceedsWithNoSinks()
     CheckTrue(multiLog.Flush(), "Flush() with no registered sinks should succeed, like IsOpen()");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_MultiLog::Test_Flush_WorksWhileDisabled()
+ASW_TEST(TTest_ASWLog_MultiLog, Flush_WorksWhileDisabled)
 {
     // Arrange
     TRecordingLogger sink;
@@ -589,7 +558,7 @@ void TTest_ASWLog_MultiLog::Test_Flush_WorksWhileDisabled()
     CheckTrue(sink.Calls == std::vector<std::string>{ "Flush" }, "A disabled composite should still flush its sinks; disabling only stops new entries");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_MultiLog::Test_Flush_WritesBufferedEntriesOfEveryFileSink()
+ASW_TEST(TTest_ASWLog_MultiLog, Flush_WritesBufferedEntriesOfEveryFileSink)
 {
     // Arrange: FlushMode::Manual keeps each entry in the file's buffer until Flush()
     const auto fileA = TestTempDir / "flush_sink_a.log";
@@ -628,7 +597,7 @@ void TTest_ASWLog_MultiLog::Test_Flush_WritesBufferedEntriesOfEveryFileSink()
     CheckContains(contentsAfterB, "buffered_entry", "Flush() should write sinkB's buffered entry to its file");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_MultiLog::Test_GetLoggerCount_ReflectsAddAndRemove()
+ASW_TEST(TTest_ASWLog_MultiLog, GetLoggerCount_ReflectsAddAndRemove)
 {
     // Arrange
     const auto fileA = TestTempDir / "count_a.log";
@@ -660,7 +629,7 @@ void TTest_ASWLog_MultiLog::Test_GetLoggerCount_ReflectsAddAndRemove()
     sinkB.Close();
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_MultiLog::Test_GetLoggers_ReturnsSnapshotOfRegisteredSinks()
+ASW_TEST(TTest_ASWLog_MultiLog, GetLoggers_ReturnsSnapshotOfRegisteredSinks)
 {
     // Arrange
     const auto fileA = TestTempDir / "loggers_a.log";
@@ -687,7 +656,7 @@ void TTest_ASWLog_MultiLog::Test_GetLoggers_ReturnsSnapshotOfRegisteredSinks()
     sinkB.Close();
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_MultiLog::Test_Initialize_ConcurrentCallsSucceedOnce()
+ASW_TEST(TTest_ASWLog_MultiLog, Initialize_ConcurrentCallsSucceedOnce)
 {
     // Arrange
     constexpr int roundCount = 200;
@@ -729,7 +698,7 @@ void TTest_ASWLog_MultiLog::Test_Initialize_ConcurrentCallsSucceedOnce()
     CheckEquals(roundCount, roundsWithOneSuccess, "Exactly one of the concurrent Initialize calls should succeed");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_MultiLog::Test_Initialize_FailsOnlyForASinkThatIsNotOpen()
+ASW_TEST(TTest_ASWLog_MultiLog, Initialize_FailsOnlyForASinkThatIsNotOpen)
 {
     // Arrange: the first sink's Initialize() fails, as it does for a logger that is already initialized
     TRecordingLogger failingSink;
@@ -753,7 +722,7 @@ void TTest_ASWLog_MultiLog::Test_Initialize_FailsOnlyForASinkThatIsNotOpen()
     CheckTrue(sink.WasInitialized, "A sink's failed Initialize() should not stop the other sinks from being initialized");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_MultiLog::Test_IsOpen_RequiresAllSinksOpen()
+ASW_TEST(TTest_ASWLog_MultiLog, IsOpen_RequiresAllSinksOpen)
 {
     // Arrange
     const auto fileA = TestTempDir / "open_a.log";
@@ -778,7 +747,7 @@ void TTest_ASWLog_MultiLog::Test_IsOpen_RequiresAllSinksOpen()
     sinkA.Close();
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_MultiLog::Test_Log_AtLevelOffIsNotFannedOut()
+ASW_TEST(TTest_ASWLog_MultiLog, Log_AtLevelOffIsNotFannedOut)
 {
     // Arrange
     TRecordingLogger sink;
@@ -805,7 +774,7 @@ void TTest_ASWLog_MultiLog::Test_Log_AtLevelOffIsNotFannedOut()
         "With the composite's minimum level at Off, only forced entries should be fanned out");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_MultiLog::Test_Log_FansOutToAllRegisteredSinks()
+ASW_TEST(TTest_ASWLog_MultiLog, Log_FansOutToAllRegisteredSinks)
 {
     // Arrange
     const auto fileA = TestTempDir / "sink_a.log";
@@ -830,7 +799,7 @@ void TTest_ASWLog_MultiLog::Test_Log_FansOutToAllRegisteredSinks()
     CheckContains(ReadFileText(fileB), "fanned_out_message", "sinkB should receive the fanned-out message");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_MultiLog::Test_Log_ThrowingSinkDoesNotStopOtherSinks()
+ASW_TEST(TTest_ASWLog_MultiLog, Log_ThrowingSinkDoesNotStopOtherSinks)
 {
     // Arrange: the throwing sink is registered first, so it's called before the file sink
     const auto file = TestTempDir / "after_throwing_sink.log";
@@ -869,7 +838,7 @@ void TTest_ASWLog_MultiLog::Test_Log_ThrowingSinkDoesNotStopOtherSinks()
     CheckEquals(4, reportCount, "The failing sink should report each entry it dropped, through its own OnError");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_MultiLog::Test_LogFmt_FormatsOnceForAllSinks()
+ASW_TEST(TTest_ASWLog_MultiLog, LogFmt_FormatsOnceForAllSinks)
 {
     // Arrange: two sinks at the default minimum level (Info), and a composite that lets everything through
     TRecordingLogger sinkA;
@@ -892,7 +861,7 @@ void TTest_ASWLog_MultiLog::Test_LogFmt_FormatsOnceForAllSinks()
         "Both sinks should get the formatted entry");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_MultiLog::Test_LogForce_BypassesCompositeGate()
+ASW_TEST(TTest_ASWLog_MultiLog, LogForce_BypassesCompositeGate)
 {
     // Arrange
     const auto fileA = TestTempDir / "force_sink.log";
@@ -912,7 +881,7 @@ void TTest_ASWLog_MultiLog::Test_LogForce_BypassesCompositeGate()
     CheckContains(ReadFileText(fileA), "forced_past_composite_gate", "LogForce should bypass the composite's own MinimumLevel gate");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_MultiLog::Test_OnBeforeWrite_RunsOnceBeforeTheFanOut()
+ASW_TEST(TTest_ASWLog_MultiLog, OnBeforeWrite_RunsOnceBeforeTheFanOut)
 {
     // Arrange: the second sink has a hook of its own, set directly
     TRecordingLogger first;
@@ -956,7 +925,7 @@ void TTest_ASWLog_MultiLog::Test_OnBeforeWrite_RunsOnceBeforeTheFanOut()
         "A sink's own hook should run after the multi-log's, until the multi-log's Reconfigure() replaces its config");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_MultiLog::Test_Open_ReachesEverySinkEvenAfterAFailure()
+ASW_TEST(TTest_ASWLog_MultiLog, Open_ReachesEverySinkEvenAfterAFailure)
 {
     // Arrange: the first sink's open fails
     TRecordingLogger failingSink;
@@ -979,7 +948,7 @@ void TTest_ASWLog_MultiLog::Test_Open_ReachesEverySinkEvenAfterAFailure()
     CheckEquals(2, sink.OpenCount, "A sink's failed open should not stop the other sinks from being opened");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_MultiLog::Test_Reconfigure_PassesConfigToEverySink()
+ASW_TEST(TTest_ASWLog_MultiLog, Reconfigure_PassesConfigToEverySink)
 {
     // Arrange: the first sink's Reconfigure() fails
     TRecordingLogger failingSink;
@@ -1013,7 +982,7 @@ void TTest_ASWLog_MultiLog::Test_Reconfigure_PassesConfigToEverySink()
     CheckEquals(std::string("reconfigured"), multiLog.GetConfig()->Startup.Banner, "The multi-log should keep the new config");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_MultiLog::Test_RemoveAllLoggers_ClearsRegistrationAndReturnsCount()
+ASW_TEST(TTest_ASWLog_MultiLog, RemoveAllLoggers_ClearsRegistrationAndReturnsCount)
 {
     // Arrange
     const auto fileA = TestTempDir / "remove_all_a.log";
@@ -1041,7 +1010,7 @@ void TTest_ASWLog_MultiLog::Test_RemoveAllLoggers_ClearsRegistrationAndReturnsCo
     CheckNotContains(ReadFileText(fileB), "should_not_reach_any_sink", "sinkB should not receive entries after RemoveAllLoggers");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_MultiLog::Test_RemoveLogger_StopsReceivingEntries()
+ASW_TEST(TTest_ASWLog_MultiLog, RemoveLogger_StopsReceivingEntries)
 {
     // Arrange
     const auto fileA = TestTempDir / "remove_sink.log";
@@ -1068,7 +1037,7 @@ void TTest_ASWLog_MultiLog::Test_RemoveLogger_StopsReceivingEntries()
     CheckNotContains(contents, "after_removal", "Message logged after removal should not reach the sink");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_MultiLog::Test_SetEnabled_FalseStopsFanOut()
+ASW_TEST(TTest_ASWLog_MultiLog, SetEnabled_FalseStopsFanOut)
 {
     // Arrange
     TRecordingLogger sink;
@@ -1094,7 +1063,7 @@ void TTest_ASWLog_MultiLog::Test_SetEnabled_FalseStopsFanOut()
     CheckTrue(sink.Calls == std::vector<std::string>{ "Log:enabled_again" }, "Fan-out should resume once enabled again");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_MultiLog::Test_SetMinimumLevel_GatesFanOutBeforeSinks()
+ASW_TEST(TTest_ASWLog_MultiLog, SetMinimumLevel_GatesFanOutBeforeSinks)
 {
     // Arrange
     const auto fileA = TestTempDir / "gate_sink.log";
@@ -1118,7 +1087,7 @@ void TTest_ASWLog_MultiLog::Test_SetMinimumLevel_GatesFanOutBeforeSinks()
     CheckContains(contents, "passes_composite_gate", "Entries at or above the composite level should still reach the sink");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_MultiLog::Test_ShouldLog_RequiresCompositeGateAndAnySink()
+ASW_TEST(TTest_ASWLog_MultiLog, ShouldLog_RequiresCompositeGateAndAnySink)
 {
     // Arrange
     TRecordingLogger errorSink;
@@ -1156,7 +1125,7 @@ void TTest_ASWLog_MultiLog::Test_ShouldLog_RequiresCompositeGateAndAnySink()
     CheckFalse(shouldLogErrorWithCompositeDisabled, "A disabled composite should log nothing");
 }
 //---------------------------------------------------------------------------
-void TTest_ASWLog_MultiLog::Test_Write_PassesOneStampedRecordToEverySink()
+ASW_TEST(TTest_ASWLog_MultiLog, Write_PassesOneStampedRecordToEverySink)
 {
     // Arrange: sinks on the system clock behind a composite with a fixed clock; sinkB only takes Error and above
     TRecordingLogger sinkA;

@@ -30,12 +30,12 @@ namespace ASWUnitTests
 ///////////////////////////////////////////////////////////////////////////
 // TTest_ASWLog_MultiLog
 ///////////////////////////////////////////////////////////////////////////
-class TTest_ASWLog_MultiLog : public TTestGroupBase
+class TTest_ASWLog_MultiLog : public TAutoTestGroup<TTest_ASWLog_MultiLog>
 {
 private:
-    typedef TTestGroupBase inherited;
+    typedef TAutoTestGroup<TTest_ASWLog_MultiLog> inherited;
 
-private: // Test methods
+public: // Test methods, each defined with ASW_TEST
     void Test_AddLogger_RejectsDuplicateRegistration();
     void Test_AddLogger_RejectsSelfRegistration();
     void Test_Backtrace_EachLoggerKeepsItsOwn();

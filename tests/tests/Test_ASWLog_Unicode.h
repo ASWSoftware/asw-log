@@ -32,12 +32,12 @@ namespace ASWUnitTests
 ///////////////////////////////////////////////////////////////////////////
 // TTest_ASWLog_Unicode
 ///////////////////////////////////////////////////////////////////////////
-class TTest_ASWLog_Unicode : public TTestGroupBase
+class TTest_ASWLog_Unicode : public TAutoTestGroup<TTest_ASWLog_Unicode>
 {
 private:
-    typedef TTestGroupBase inherited;
+    typedef TAutoTestGroup<TTest_ASWLog_Unicode> inherited;
 
-private: // Test methods
+public: // Test methods, each defined with ASW_TEST
     void Test_Formatters_ConvertTheWrappedText();
     void Test_LogFmt_NarrowFormatTakesWideArguments();
     void Test_LogFmt_WideFormatSkipsFilteredEntries();
