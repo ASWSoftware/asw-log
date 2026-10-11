@@ -60,6 +60,7 @@ private: // Test methods
     void Test_DeleteOldLogs_KeepsNonMatchingFilesAndSubfolders();
     void Test_DeleteOldLogs_MatchesNonASCIIFileNames();
     void Test_DeleteOldLogs_RemovesOldFiles();
+    void Test_FailedOpen_TriesOpenRetryCountTimes();
     void Test_FailedReopen_RetriesAndResumesLogging();
     void Test_FailedReopen_ZeroResetDelayRetriesOnNextWrite();
     void Test_FailedSizeRotation_WaitsBeforeRetrying();
@@ -102,6 +103,7 @@ private: // Test methods
     void Test_OnError_ReportsFullDisk();
     void Test_OnLogEntry_FiresForQualifyingLevelsOnly();
     void Test_OnLogEntry_ReentrantCallbackDoesNotDeadlock();
+    void Test_Open_KeepsAnOpenFile();
     void Test_Periodic_CloseStopsAndOpenRestartsTheThread();
     void Test_Periodic_CloseStopsTheThreadWithoutWaitingForTheInterval();
     void Test_Periodic_ConcurrentLoggingAndReconfigure();
@@ -116,6 +118,7 @@ private: // Test methods
     void Test_Reconfigure_UnopenableFileFailsButLoggerStaysInitialized();
     void Test_RetentionMaxAge_DefaultDisabledPreservesOldBackups();
     void Test_RetentionMaxAge_DeletesExpiredBackupsAfterRotation();
+    void Test_RotateLogFiles_FailsWhenEveryBackupNameIsTaken();
     void Test_RotateLogFiles_KeepsEveryBackup();
     void Test_RotateLogFiles_NamesBackupInLocalTime();
     void Test_SetEnabled_FalseStopsAutoOpenCloseLogging();

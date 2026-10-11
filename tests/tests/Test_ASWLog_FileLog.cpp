@@ -388,6 +388,7 @@ TTest_ASWLog_FileLog::TTest_ASWLog_FileLog()
     RegisterTest(&TTest_ASWLog_FileLog::Test_DeleteOldLogs_KeepsNonMatchingFilesAndSubfolders, "DeleteOldLogs_KeepsNonMatchingFilesAndSubfolders");
     RegisterTest(&TTest_ASWLog_FileLog::Test_DeleteOldLogs_MatchesNonASCIIFileNames, "DeleteOldLogs_MatchesNonASCIIFileNames");
     RegisterTest(&TTest_ASWLog_FileLog::Test_DeleteOldLogs_RemovesOldFiles, "DeleteOldLogs_RemovesOldFiles");
+    RegisterTest(&TTest_ASWLog_FileLog::Test_FailedOpen_TriesOpenRetryCountTimes, "FailedOpen_TriesOpenRetryCountTimes");
     RegisterTest(&TTest_ASWLog_FileLog::Test_FailedReopen_RetriesAndResumesLogging, "FailedReopen_RetriesAndResumesLogging");
     RegisterTest(&TTest_ASWLog_FileLog::Test_FailedReopen_ZeroResetDelayRetriesOnNextWrite, "FailedReopen_ZeroResetDelayRetriesOnNextWrite");
     RegisterTest(&TTest_ASWLog_FileLog::Test_FailedSizeRotation_WaitsBeforeRetrying, "FailedSizeRotation_WaitsBeforeRetrying");
@@ -430,6 +431,7 @@ TTest_ASWLog_FileLog::TTest_ASWLog_FileLog()
     RegisterTest(&TTest_ASWLog_FileLog::Test_OnError_ReportsFullDisk, "OnError_ReportsFullDisk");
     RegisterTest(&TTest_ASWLog_FileLog::Test_OnLogEntry_FiresForQualifyingLevelsOnly, "OnLogEntry_FiresForQualifyingLevelsOnly");
     RegisterTest(&TTest_ASWLog_FileLog::Test_OnLogEntry_ReentrantCallbackDoesNotDeadlock, "OnLogEntry_ReentrantCallbackDoesNotDeadlock");
+    RegisterTest(&TTest_ASWLog_FileLog::Test_Open_KeepsAnOpenFile, "Open_KeepsAnOpenFile");
     RegisterTest(&TTest_ASWLog_FileLog::Test_Periodic_CloseStopsAndOpenRestartsTheThread, "Periodic_CloseStopsAndOpenRestartsTheThread");
     RegisterTest(&TTest_ASWLog_FileLog::Test_Periodic_CloseStopsTheThreadWithoutWaitingForTheInterval, "Periodic_CloseStopsTheThreadWithoutWaitingForTheInterval");
     RegisterTest(&TTest_ASWLog_FileLog::Test_Periodic_ConcurrentLoggingAndReconfigure, "Periodic_ConcurrentLoggingAndReconfigure");
@@ -444,6 +446,7 @@ TTest_ASWLog_FileLog::TTest_ASWLog_FileLog()
     RegisterTest(&TTest_ASWLog_FileLog::Test_Reconfigure_UnopenableFileFailsButLoggerStaysInitialized, "Reconfigure_UnopenableFileFailsButLoggerStaysInitialized");
     RegisterTest(&TTest_ASWLog_FileLog::Test_RetentionMaxAge_DefaultDisabledPreservesOldBackups, "RetentionMaxAge_DefaultDisabledPreservesOldBackups");
     RegisterTest(&TTest_ASWLog_FileLog::Test_RetentionMaxAge_DeletesExpiredBackupsAfterRotation, "RetentionMaxAge_DeletesExpiredBackupsAfterRotation");
+    RegisterTest(&TTest_ASWLog_FileLog::Test_RotateLogFiles_FailsWhenEveryBackupNameIsTaken, "RotateLogFiles_FailsWhenEveryBackupNameIsTaken");
     RegisterTest(&TTest_ASWLog_FileLog::Test_RotateLogFiles_KeepsEveryBackup, "RotateLogFiles_KeepsEveryBackup");
     RegisterTest(&TTest_ASWLog_FileLog::Test_RotateLogFiles_NamesBackupInLocalTime, "RotateLogFiles_NamesBackupInLocalTime");
     RegisterTest(&TTest_ASWLog_FileLog::Test_SetEnabled_FalseStopsAutoOpenCloseLogging, "SetEnabled_FalseStopsAutoOpenCloseLogging");
@@ -1238,6 +1241,34 @@ void TTest_ASWLog_FileLog::Test_DeleteOldLogs_RemovesOldFiles()
     CheckEquals(1, deletedCount, "DeleteOldLogs should remove the stale matching file");
     CheckFalse(std::filesystem::exists(oldFile), "Old log file should be removed");
     CheckTrue(std::filesystem::exists(newFile), "Recent log file should remain");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_FileLog::Test_FailedOpen_TriesOpenRetryCountTimes()
+{
+    // Arrange: a "folder" that is a file can't hold the log, on any OS and for any user
+    using namespace std::chrono_literals;
+    const auto notAFolder = TestTempDir / "retry_not_a_folder";
+    std::ofstream(notAFolder) << "file";
+
+    auto config = MakeRotationTestConfig(notAFolder / "unopenable.log");
+    config.File.OpenRetryCount = 3;
+    config.File.OpenRetryDelay = 50ms;
+    std::vector<ASWLog::TASWLogError> reports;
+    config.OnError = [&reports](const ASWLog::TASWLogError& error) {
+            reports.push_back(error);
+        };
+
+    ASWLog::TASWFileLog logger;
+
+    // Act
+    const auto start = std::chrono::steady_clock::now();
+    const bool initialized = logger.Initialize(config);
+    const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - start);
+
+    // Assert: three tries, with File.OpenRetryDelay between them
+    CheckFalse(initialized, "Initialize should fail");
+    CheckGreaterThanOrEqual(elapsed.count(), 100, "Each try after the first should wait File.OpenRetryDelay");
+    CheckEquals(1, reports.size(), "The failed open should be reported once, after the last try");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_FileLog::Test_FailedReopen_RetriesAndResumesLogging()
@@ -2722,6 +2753,29 @@ void TTest_ASWLog_FileLog::Test_OnLogEntry_ReentrantCallbackDoesNotDeadlock()
     CheckContains(contents, "reentrant_message", "Re-entrant Log call from the callback should complete and be written");
 }
 //---------------------------------------------------------------------------
+void TTest_ASWLog_FileLog::Test_Open_KeepsAnOpenFile()
+{
+    // Arrange
+    const auto logFile = TestTempDir / "open_again.log";
+    const auto config = MakeRotationTestConfig(logFile);
+
+    ASWLog::TASWFileLog logger;
+
+    // Act
+    const bool initialized = logger.Initialize(config);
+    logger.LogInfo("before_open");
+    const bool opened = logger.Open();
+    const bool openAfterOpen = logger.IsOpen();
+    logger.LogInfo("after_open");
+    logger.Close();
+
+    // Assert
+    CheckTrue(initialized, "Initialize should succeed");
+    CheckTrue(opened, "Open() on an open logger should succeed");
+    CheckTrue(openAfterOpen, "The logger should still report open");
+    CheckEquals(std::string(": before_open\n: after_open\n"), ReadFileText(logFile), "The logger should go on writing to its file");
+}
+//---------------------------------------------------------------------------
 void TTest_ASWLog_FileLog::Test_Periodic_CloseStopsAndOpenRestartsTheThread()
 {
     // Arrange
@@ -3183,6 +3237,47 @@ void TTest_ASWLog_FileLog::Test_RetentionMaxAge_DeletesExpiredBackupsAfterRotati
     CheckTrue(rotated, "RotateLogFiles should succeed");
     CheckFalse(std::filesystem::exists(staleBackup), "Stale backup older than File.RetentionMaxAge should be deleted automatically after rotation");
     CheckTrue(std::filesystem::exists(logFile), "Log file should be recreated after rotation");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_FileLog::Test_RotateLogFiles_FailsWhenEveryBackupNameIsTaken()
+{
+    // Arrange: every name the rotation could use (the plain one, then "_1" to "_1000") is taken
+    using namespace std::chrono_literals;
+    const auto logFile = TestTempDir / "taken.log";
+    auto config = MakeRotationTestConfig(logFile);
+    std::vector<ASWLog::TASWLogError> reports;
+    config.OnError = [&reports](const ASWLog::TASWLogError& error) {
+            reports.push_back(error);
+        };
+
+    const std::string backupName = "taken.manual.2026-01-15_103005_250";
+    std::ofstream(TestTempDir / (backupName + ".bak")) << "kept";
+    for (int suffix = 1; suffix <= 1000; ++suffix)
+        std::ofstream(TestTempDir / std::format("{}_{}.bak", backupName, suffix)) << "kept";
+
+    TFixedClockFileLog logger;
+    logger.CurrentTime = std::chrono::sys_days{ 2026y / 1 / 15 } + 10h + 30min + 5s + 250ms;
+
+    // Act
+    const bool initialized = logger.Initialize(config);
+    logger.LogInfo("before_rotation");
+    const bool rotated = logger.RotateLogFiles("manual");
+    logger.LogInfo("after_rotation");
+    logger.Close();
+
+    // Assert
+    CheckTrue(initialized, "Initialize should succeed");
+    CheckFalse(rotated, "RotateLogFiles should fail when every backup name is taken");
+    CheckEquals(1, reports.size(), "The failed rotation should be reported");
+    if (reports.size() == 1)
+    {
+        CheckEquals(ASWLog::ErrorKind::RotationFailed, reports[0].Kind, "The failure should be reported as RotationFailed");
+        CheckTrue(reports[0].Code == std::errc::file_exists, "The report should say that the names are taken: " + reports[0].Code.message());
+    }
+
+    CheckEquals(std::string(": before_rotation\n: after_rotation\n"), ReadFileText(logFile), "The log should stay in place and take the next entries");
+    CheckEquals(std::string("kept"), ReadFileText(TestTempDir / (backupName + ".bak")), "The first backup name should not be replaced");
+    CheckEquals(std::string("kept"), ReadFileText(TestTempDir / (backupName + "_1000.bak")), "The last backup name should not be replaced");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_FileLog::Test_RotateLogFiles_KeepsEveryBackup()
