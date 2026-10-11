@@ -36,11 +36,11 @@ limitations under the License.
 // pre-release such as "dev.1", which comes before that release in version order (e.g. 1.1.0-dev.1 < 1.1.0).
 // ASWLOG_VERSION_STRING is "MAJOR.MINOR.PATCH", followed by "-PRERELEASE" if the pre-release isn't empty; change
 // them together (a unit test checks that they match).
-#define ASWLOG_VERSION_MAJOR 0
-#define ASWLOG_VERSION_MINOR 85
+#define ASWLOG_VERSION_MAJOR 1
+#define ASWLOG_VERSION_MINOR 0
 #define ASWLOG_VERSION_PATCH 0
-#define ASWLOG_VERSION_PRERELEASE "dev.3"
-#define ASWLOG_VERSION_STRING "0.85.0-dev.3"
+#define ASWLOG_VERSION_PRERELEASE "dev.1"
+#define ASWLOG_VERSION_STRING "1.0.0-dev.1"
 
 namespace ASWLog
 {
