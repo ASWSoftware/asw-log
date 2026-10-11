@@ -25,7 +25,8 @@ config.Line.ShowThreadId = false;
 log.Reconfigure(config);
 ```
 
-`Reconfigure()` doesn't change the minimum level (use `SetMinimumLevel()`) and doesn't write the startup lines again.
+`Reconfigure()` doesn't change the minimum level (use `SetMinimumLevel()`) and doesn't write the startup lines again,
+except in the new file of a file logger moved to a new path (see `File.WriteStartupLinesInNewFiles`).
 
 The header comments in `ASWLog_Config.h` have the full details of each setting; this page is the overview.
 
@@ -82,6 +83,8 @@ The `Show*` settings are read by the built-in layout and by `TASWJSONFormatter`;
 
 ## `Startup`: the lines `Initialize()` writes (`TASWStartupConfig`)
 
+A file logger also writes them at the top of each new file it starts (see `File.WriteStartupLinesInNewFiles`).
+
 | Setting | Default | What it does |
 |---|---|---|
 | `ApplicationVersion` | empty | The application's version, written on the application line as `app_version='...'`. Empty: on Windows, the executable's file version from its version resource (e.g. `2.3.1.45`, set in RAD Studio under Project > Options > Application > Version Info), if it has one; nothing on Linux. |
@@ -121,6 +124,7 @@ The `Show*` settings are read by the built-in layout and by `TASWJSONFormatter`;
 | `MaxFileSizeBytes` | 10 MB | The size that triggers a rotation. |
 | `RotationRetryDelay` | 500 ms | After a failed rotation, entries go on to the current file, and rotating isn't tried again until this long after the failure. |
 | `EnableDailyRolling` | `false` | Rotates the file at midnight (in `Line.TimestampZone`), and at `Initialize()` if the file was last written on an earlier day. |
+| `WriteStartupLinesInNewFiles` | `true` | Starts each file the logger begins after `Initialize()` (size rotation, daily rolling, `RotateLogFiles()`, `Reconfigure()` to a new path) with a line saying where the log continues from, e.g. `Log continued from myapp.size.2026-10-10_143005_123.bak (size)` or `Log continued from logs\old.txt (reconfigure)`, then the startup lines (see [`Startup`](#startup-the-lines-initialize-writes-taswstartupconfig), whose settings apply). They are Info lines, written before the entry that started the file. Not after a failed rotation; with `AutoOpenClosePerWrite`, only by the process that rotated the shared log. |
 | `OnBackupCreated` | empty | Called for each backup a rotation makes, with its path and reason, e.g. to compress, upload or move it. Runs outside the logger's lock, on the thread whose call rotated the log. |
 | `RetentionMaxAge` | 0 (off) | After each rotation, deletes this log's backups older than this. |
 | `MaxBackupFiles` | 0 (unlimited) | After each rotation, keeps only the newest this many backups. |

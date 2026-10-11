@@ -261,22 +261,8 @@ bool TASWTextLogBase::Initialize(const TASWLogConfig& config) noexcept
 
         Detail::TCrashHandling::Register(*this);
 
-        // The output is ready, so the startup lines are best effort: if one throws (e.g. a formatter that throws, or
-        // out of memory while gathering the system info), the rest are skipped but the logger is still initialized
-        try
-        {
-            if (!GetConfigUnlocked().Startup.Banner.empty())
-            {
-                WriteInfoLine(GetConfigUnlocked().Startup.Banner);
-            }
-
-            WriteInitializationInfo();
-        }
-        catch (...)
-        {
-            ReportCurrentExceptionUnlocked("Skipped the startup lines");
-        }
-
+        // The output is ready, so the startup lines are best effort: a failed one doesn't fail Initialize()
+        WriteStartupLinesUnlocked();
         AfterEntryUnlocked();
 
         return true;
@@ -1186,6 +1172,31 @@ void TASWTextLogBase::WriteRecord(const TASWLogRecord& record)
 
     if (callbackConfig != nullptr)
         DispatchLogCallback(*callbackConfig, record, writtenLine);
+}
+
+//---------------------------------------------------------------------------
+void TASWTextLogBase::WriteStartupLinesUnlocked(std::string_view firstLine) noexcept
+{
+    m_IsWritingStartupLines = true;
+
+    // If a line throws (e.g. a formatter that throws, or out of memory while gathering the system info), the rest are
+    // skipped
+    try
+    {
+        if (!firstLine.empty())
+            WriteInfoLine(firstLine);
+
+        if (!GetConfigUnlocked().Startup.Banner.empty())
+            WriteInfoLine(GetConfigUnlocked().Startup.Banner);
+
+        WriteInitializationInfo();
+    }
+    catch (...)
+    {
+        ReportCurrentExceptionUnlocked("Skipped the startup lines");
+    }
+
+    m_IsWritingStartupLines = false;
 }
 
 //---------------------------------------------------------------------------

@@ -177,6 +177,13 @@ struct TASWFileConfig
     // Rolls the file over at midnight, and at Initialize() if the file was last written on an earlier day, both in
     // Line.TimestampZone (UTC by default). The backup is named for the day it holds.
     bool EnableDailyRolling   = false;
+    // Starts each file the logger begins after Initialize() (by rotation, daily rolling or Reconfigure() to a new path)
+    // with a line saying where the log continues from, e.g. "Log continued from aswlog.size.2026-10-10_143005_123.bak
+    // (size)" or "Log continued from logs\old.txt (reconfigure)", followed by the startup lines as Initialize() writes
+    // them (see TASWStartupConfig, whose settings still apply), so each file says what wrote it. They are Info lines,
+    // written before the entry that started the file. Not after a failed rotation, and with AutoOpenClosePerWrite, only
+    // by the process that rotated the shared log.
+    bool WriteStartupLinesInNewFiles = true;
 
     // --- Backup Event ---
     // Called once for each backup that rotation makes, e.g. to compress it, upload it or move it elsewhere. Called

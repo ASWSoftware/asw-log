@@ -482,8 +482,8 @@ TASWFileLog::~TASWFileLog()
 //---------------------------------------------------------------------------
 void TASWFileLog::AfterEntryUnlocked()
 {
-    // In this mode the file is only open while an entry (or Initialize()'s startup lines) is written. Unlike Close(),
-    // this leaves the logger initialized.
+    // In this mode the file is only open while an entry (or the startup lines) is written. Unlike Close(), this leaves
+    // the logger initialized.
     if (GetConfigUnlocked().File.AutoOpenClosePerWrite)
         CloseFileUnlocked();
 }
@@ -704,6 +704,9 @@ bool TASWFileLog::InitializeUnlocked()
     if (GetConfigUnlocked().File.EnableDailyRolling)
         RotateDailyLogFromEarlierDayUnlocked();
 
+    // Initialize() writes the startup lines itself, and Reconfigure() its own continuation line
+    m_PendingContinuationLine.clear();
+
     if (!OpenUnlocked())
     {
         return false;
@@ -792,6 +795,9 @@ bool TASWFileLog::OpenUnlocked()
 
     m_IsOpen.store(true, std::memory_order_release);
     m_IsInitialized.store(true, std::memory_order_release);
+
+    WriteNewFileStartupLinesUnlocked();
+
     return true;
 }
 
@@ -799,8 +805,9 @@ bool TASWFileLog::OpenUnlocked()
 /*
     TASWFileLog::PrepareWriteUnlocked
 
-    Rotates the log file if the day has changed or the file has reached its maximum size, as configured. Returns false
-    if the file isn't open (e.g. it couldn't be reopened after a rotation), which drops the line.
+    Rotates the log file if the day has changed or the file has reached its maximum size, as configured, but not while
+    the startup lines are written (the new file's own, or Initialize()'s): the next entry rotates it. Returns false if
+    the file isn't open (e.g. it couldn't be reopened after a rotation), which drops the line.
 */
 bool TASWFileLog::PrepareWriteUnlocked(std::chrono::system_clock::time_point now)
 {
@@ -809,7 +816,7 @@ bool TASWFileLog::PrepareWriteUnlocked(std::chrono::system_clock::time_point now
         // Only rolls forward (ISO dates compare as text): an entry stamped just before midnight can get the lock after
         // another thread's entry has rolled the log over, and then goes into the new day's log
         const auto currentDateStr = Time::ToDateString(now, GetConfigUnlocked().Line.TimestampZone);
-        if (currentDateStr > m_LastLogDateStr)
+        if (currentDateStr > m_LastLogDateStr && !IsWritingStartupLinesUnlocked())
         {
             // Name the backup for the day its content is from, not the day that just started. A log shared with other
             // processes may already have been rolled over by one of them, so there the file's last write decides.
@@ -825,7 +832,8 @@ bool TASWFileLog::PrepareWriteUnlocked(std::chrono::system_clock::time_point now
     // Uses the size tracked by the stream, since on Windows the size read through the path isn't current while open.
     // After a failed rotation (e.g. another program holds the file), waits RotationRetryDelay before trying again.
     if (GetConfigUnlocked().File.EnableRotation && m_FileStream.IsOpen() && m_FileStream.GetSize() >= GetConfigUnlocked().File.MaxFileSizeBytes &&
-        IsRetryDue(m_LastRotationFailure, now, GetConfigUnlocked().File.RotationRetryDelay))
+        IsRetryDue(m_LastRotationFailure, now, GetConfigUnlocked().File.RotationRetryDelay) &&
+        !IsWritingStartupLinesUnlocked())
     {
         RotateLogFilesUnlocked("size", ToBackupTimeLabel(now, GetConfigUnlocked().Line.TimestampZone));
     }
@@ -838,9 +846,11 @@ bool TASWFileLog::PrepareWriteUnlocked(std::chrono::system_clock::time_point now
     TASWFileLog::ReconfigureUnlocked
 
     If the file path or AutoOpenClosePerWrite changed, closes the old file and starts on the new one as Initialize()
-    does (rolling over a file from an earlier day, if daily rolling is on, then opening it). With AutoOpenClosePerWrite
-    the new file is closed again until the next entry, but opening it here reports a file that can't be opened. A
-    failed open keeps the logger initialized, so later entries try again (see EnsureReadyUnlocked()).
+    does (rolling over a file from an earlier day, if daily rolling is on, then opening it). A new path starts with
+    the startup lines (see WriteNewFileStartupLinesUnlocked()). With AutoOpenClosePerWrite the new file is closed again
+    until the next entry, but opening it here reports a file that can't be opened. A failed open keeps the logger
+    initialized, so later entries try again (see EnsureReadyUnlocked()), and the first one that opens the file writes
+    the startup lines.
 
     Otherwise the file stays open: flushes what the previous flush mode may have buffered, and the other settings take
     effect with the next entry (a FlushMode::Periodic thread is started, stopped or given its new interval after the
@@ -853,8 +863,9 @@ bool TASWFileLog::ReconfigureUnlocked(const TASWLogConfig& previous)
     const auto& file = config.File;
     m_SyncsCrashLine.store(Level::Critical >= file.SyncToDiskAtLevel, std::memory_order_relaxed);
 
-    if (file.ResolvePath() == previous.File.ResolvePath() &&
-        file.AutoOpenClosePerWrite == previous.File.AutoOpenClosePerWrite)
+    const auto previousPath = previous.File.ResolvePath();
+    const bool isNewPath = file.ResolvePath() != previousPath;
+    if (!isNewPath && file.AutoOpenClosePerWrite == previous.File.AutoOpenClosePerWrite)
     {
         if (config.Line.TimestampZone != previous.Line.TimestampZone)
             m_LastLogDateStr = Time::ToDateString(NowUTC(), config.Line.TimestampZone);
@@ -867,6 +878,13 @@ bool TASWFileLog::ReconfigureUnlocked(const TASWLogConfig& previous)
 
     CloseFileUnlocked();
     const bool isOpen = InitializeUnlocked();
+
+    if (isNewPath && file.WriteStartupLinesInNewFiles)
+    {
+        m_PendingContinuationLine = std::format("Log continued from {} (reconfigure)", PathToUTF8String(previousPath));
+        WriteNewFileStartupLinesUnlocked();
+    }
+
     AfterEntryUnlocked();
 
     return isOpen;
@@ -913,7 +931,18 @@ bool TASWFileLog::RotateLogFiles(std::string_view reasonTag)
 {
     TDeferredWorkRunner deferredWorkRunner(*this);
     std::lock_guard<std::mutex> lock(m_Mutex);
-    return RotateLogFilesUnlocked(reasonTag, ToBackupTimeLabel(NowUTC(), GetConfigUnlocked().Line.TimestampZone));
+    const auto timeLabel = ToBackupTimeLabel(NowUTC(), GetConfigUnlocked().Line.TimestampZone);
+    const bool isRotated = RotateLogFilesUnlocked(reasonTag, timeLabel);
+
+    // A file that is closed between entries (AutoOpenClosePerWrite) is opened for its startup lines now, so they come
+    // first even if another process writes to it next
+    if (isRotated && !m_PendingContinuationLine.empty() && m_IsInitialized.load(std::memory_order_acquire) &&
+        EnsureReadyUnlocked())
+    {
+        AfterEntryUnlocked();
+    }
+
+    return isRotated;
 }
 
 //---------------------------------------------------------------------------
@@ -994,6 +1023,13 @@ bool TASWFileLog::RotateLogFilesUnlocked(std::string_view reasonTag, std::string
         return false;
     }
 
+    // The next file starts with the startup lines, written once it is open (see WriteNewFileStartupLinesUnlocked())
+    if (!backupPath.empty() && GetConfigUnlocked().File.WriteStartupLinesInNewFiles)
+    {
+        m_PendingContinuationLine = std::format("Log continued from {} ({})", PathToUTF8String(backupPath.filename()),
+            reasonTag);
+    }
+
     const bool isOpen = wasOpen ? OpenUnlocked() : true;
 
     // OnBackupCreated calls into the application and the cleanup scans the folder, so both run after the lock is
@@ -1058,6 +1094,25 @@ void TASWFileLog::WriteLineUnlocked(Level level, std::string_view line, bool end
     }
 
     MaybeFlush(level, endsLine);
+}
+
+//---------------------------------------------------------------------------
+/*
+    TASWFileLog::WriteNewFileStartupLinesUnlocked
+
+    Starts a file the logger began after Initialize() (see TASWFileConfig::WriteStartupLinesInNewFiles), once it is
+    open: writes the line saying where the log continues from, then the startup lines. Called by OpenUnlocked(), so a
+    rotation writes them before the entry that triggered it, and a file that couldn't be opened right away gets them
+    from the open that succeeds. Does nothing if no new file is waiting for them.
+*/
+void TASWFileLog::WriteNewFileStartupLinesUnlocked()
+{
+    if (m_PendingContinuationLine.empty() || !m_FileStream.IsOpen())
+        return;
+
+    // Taken first, so that the lines are written once even if they fail
+    const auto continuationLine = std::exchange(m_PendingContinuationLine, std::string());
+    WriteStartupLinesUnlocked(continuationLine);
 }
 
 //---------------------------------------------------------------------------

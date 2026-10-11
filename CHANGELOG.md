@@ -267,6 +267,19 @@ see [0.26.1](#0261---2026-09-17) for the initial versioned baseline.
   The new `ASWLog::GetFileVersionString(path)` reads any file's version
   (Windows; empty on Linux). It loads `version.dll` at run time, so no
   project needs a new library to link.
+- The startup lines at the top of each new log file: a file logger now starts
+  every file it begins after `Initialize()` (size rotation, daily rolling,
+  `RotateLogFiles()`, `Reconfigure()` to a new path) with a line saying where
+  the log continues from, e.g. `Log continued from
+  myapp.size.2026-10-10_143005_123.bak (size)` or `Log continued from
+  logs\old.txt (reconfigure)`, followed by the startup lines as
+  `Initialize()` writes them (the banner and each line its `Startup` setting
+  turns on), so a rotated log still says which version and system wrote it.
+  They come before the entry that started the file. On by default; the new
+  `File.WriteStartupLinesInNewFiles = false` keeps the old output, in which a
+  new file starts with that entry. A rotation no longer happens in the middle
+  of the startup lines: if they reach `File.MaxFileSizeBytes`, the next entry
+  rotates the file.
 
 ### Changed
 

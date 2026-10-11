@@ -128,6 +128,9 @@ private:
     std::string m_LastLogDateStr; // Stores YYYY-MM-DD state to detect structural calendar shifts
     std::chrono::system_clock::time_point m_LastOpenFailure{}; // NowUTC() when opening the file last failed
     std::chrono::system_clock::time_point m_LastRotationFailure{}; // NowUTC() when a rotation last failed
+    // The first line of a new file the logger started (see TASWFileConfig::WriteStartupLinesInNewFiles), waiting for
+    // the file to be open; empty if none
+    std::string m_PendingContinuationLine;
 
     // File.SyncToDiskAtLevel is Critical or lower, for WriteCrashLineDirect(), which may run without m_Mutex
     std::atomic<bool> m_SyncsCrashLine{ false };
@@ -142,6 +145,7 @@ private:
     void RotateDailyLogFromEarlierDayUnlocked();
     bool RotateLogFilesUnlocked(std::string_view reasonTag, std::string_view timeLabel);
     void SyncToDiskUnlocked();
+    void WriteNewFileStartupLinesUnlocked();
 
 protected: // TASWTextLogBase hooks
     void AfterEntryUnlocked() override;
@@ -186,8 +190,9 @@ public:
 
     // Renames the log file to "<stem>.<reasonTag>.<YYYY-MM-DD_HHMMSS_mmm>.bak" (the time in Line.TimestampZone, UTC by
     // default), adding "_1", "_2", ... to the time if that name is taken, so an existing backup is never replaced. Then
-    // reopens the log if it was open. A 'reasonTag' that contains '.' makes a backup that TASWFileConfig's backup
-    // cleanup doesn't recognize, so it is kept.
+    // reopens the log if it was open, and starts the new file with the startup lines (see
+    // TASWFileConfig::WriteStartupLinesInNewFiles; with AutoOpenClosePerWrite it is opened for them). A 'reasonTag'
+    // that contains '.' makes a backup that TASWFileConfig's backup cleanup doesn't recognize, so it is kept.
     bool RotateLogFiles(std::string_view reasonTag = "manual");
 };
 

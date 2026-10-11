@@ -590,6 +590,7 @@ void TTest_ASWLog_Config::Test_Defaults_MatchDocumentedValues()
     CheckTrue(config.File.RotationRetryDelay == std::chrono::milliseconds(500),
         "File.RotationRetryDelay should default to 500 ms");
     CheckFalse(config.File.EnableDailyRolling, "File.EnableDailyRolling should default to false");
+    CheckTrue(config.File.WriteStartupLinesInNewFiles, "File.WriteStartupLinesInNewFiles should default to true");
     CheckTrue(config.File.RetentionMaxAge == std::chrono::hours(0), "File.RetentionMaxAge should default to 0 (disabled)");
     CheckNull(config.File.OnBackupCreated, "File.OnBackupCreated should default to unset");
     CheckEquals(0, config.File.MaxBackupFiles, "File.MaxBackupFiles should default to 0 (unlimited)");

@@ -77,6 +77,17 @@ private: // Test methods
     void Test_LogRawOptions();
     void Test_MultiThreadedStress_WritesAllMessagesToDisk();
     void Test_MultiThreadedStress_WritesAllMessagesToDisk_OpenClose();
+    void Test_NewFile_AsyncWorkerWritesTheStartupLinesBeforeTheEntry();
+    void Test_NewFile_DailyRollingStartsWithTheStartupLines();
+    void Test_NewFile_FailedRotationWritesNoStartupLines();
+    void Test_NewFile_InitializeWritesItsStartupLinesOnce();
+    void Test_NewFile_ManualRotationOpensASharedLogForTheStartupLines();
+    void Test_NewFile_MinimumLevelAboveInfoLeavesOutTheStartupLines();
+    void Test_NewFile_ReconfigureToANewPathStartsWithTheStartupLines();
+    void Test_NewFile_RotationWaitsUntilTheStartupLinesAreWritten();
+    void Test_NewFile_SharedLogGetsTheStartupLinesOnce();
+    void Test_NewFile_SizeRotationStartsWithTheStartupLines();
+    void Test_NewFile_UnopenedFileGetsTheStartupLinesWhenItOpens();
     void Test_OnBackupCreated_IsNotCalledWhenRotationFails();
     void Test_OnBackupCreated_LeavesARenamedBackupToTheApp();
     void Test_OnBackupCreated_ReportsDailyBackupAtInitialize();
