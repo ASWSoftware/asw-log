@@ -35,6 +35,7 @@ limitations under the License.
 #include <fstream>
 #include <iterator>
 #include <ratio>
+#include <regex>
 #include <string>
 #include <string_view>
 #include <system_error>
@@ -113,6 +114,8 @@ TTest_ASWLog_Utils::TTest_ASWLog_Utils()
     RegisterTest(&TTest_ASWLog_Utils::Test_GenerateLogFileName_PrefixAndPostfixAreOptional, "GenerateLogFileName_PrefixAndPostfixAreOptional");
     RegisterTest(&TTest_ASWLog_Utils::Test_GetCurrentOSProcessId_MatchesOS, "GetCurrentOSProcessId_MatchesOS");
     RegisterTest(&TTest_ASWLog_Utils::Test_GetCurrentOSThreadId_IdentifiesCallingThread, "GetCurrentOSThreadId_IdentifiesCallingThread");
+    RegisterTest(&TTest_ASWLog_Utils::Test_GetFileVersionString_IsEmptyWithoutAVersionResource, "GetFileVersionString_IsEmptyWithoutAVersionResource");
+    RegisterTest(&TTest_ASWLog_Utils::Test_GetFileVersionString_ReadsTheFileVersion, "GetFileVersionString_ReadsTheFileVersion");
     RegisterTest(&TTest_ASWLog_Utils::Test_GetOSInfoString_ContainsEdition, "GetOSInfoString_ContainsEdition");
     RegisterTest(&TTest_ASWLog_Utils::Test_GetTimeInfoString_ReportsCurrentOffset, "GetTimeInfoString_ReportsCurrentOffset");
     RegisterTest(&TTest_ASWLog_Utils::Test_GetWindowsEditionName_ProductTypes, "GetWindowsEditionName_ProductTypes");
@@ -367,6 +370,73 @@ void TTest_ASWLog_Utils::Test_GetCurrentOSThreadId_IdentifiesCallingThread()
     // Each of this process's threads has a /proc/self/task/<id> folder
     std::error_code errorCode;
     CheckTrue(std::filesystem::is_directory("/proc/self/task/" + std::to_string(mainThreadId), errorCode), "The id should name a thread of this process");
+#endif
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_Utils::Test_GetFileVersionString_IsEmptyWithoutAVersionResource()
+{
+    // Arrange: a text file, and a file that doesn't exist
+    const auto folder = std::filesystem::temp_directory_path() / "aswlog_utils_version_test";
+    std::filesystem::remove_all(folder);
+    std::filesystem::create_directories(folder);
+
+    const auto textFile = folder / "plain.txt";
+    {
+        std::ofstream stream(textFile);
+        stream << "no version resource";
+    }
+
+    // Act
+    const std::string textVersion = ASWLog::GetFileVersionString(textFile);
+    const std::string missingVersion = ASWLog::GetFileVersionString(folder / "missing.dll");
+
+    // Assert
+    CheckEmpty(textVersion, "A file without a version resource should have no version");
+    CheckEmpty(missingVersion, "A file that doesn't exist should have no version");
+
+    std::error_code errorCode;
+    std::filesystem::remove_all(folder, errorCode);
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_Utils::Test_GetFileVersionString_ReadsTheFileVersion()
+{
+#if defined(_WIN32)
+    // Arrange: kernel32.dll, e.g. "10.0.19041.5794" on Windows 10. To an executable without a compatibility manifest,
+    // Windows reports its system files' version as 6.2 (e.g. "6.2.19041.5794"), so the exact version isn't known here.
+    wchar_t systemFolder[MAX_PATH]{};
+    const UINT folderLength = GetSystemDirectoryW(systemFolder, MAX_PATH);
+    // Not named "kernel32", which the VCL's Windows header declares
+    const auto kernel32Path = std::filesystem::path(std::wstring(systemFolder, folderLength)) / L"kernel32.dll";
+
+    // The Windows build, e.g. 19045, from the registry rather than an API that a compatibility shim could change
+    wchar_t osBuildText[16]{};
+    DWORD osBuildTextSize = sizeof(osBuildText);
+    const bool hasOSBuild = RegGetValueW(HKEY_LOCAL_MACHINE, L"SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion",
+        L"CurrentBuildNumber", RRF_RT_REG_SZ, nullptr, osBuildText, &osBuildTextSize) == ERROR_SUCCESS;
+
+    // Act
+    const std::string version = ASWLog::GetFileVersionString(kernel32Path);
+
+    // Assert: four numbers in the right order: a Windows major version (6 or more) above its minor version (6.2, 10.0),
+    // then the build of the Windows release the file came from: at most the Windows build, and less than 1000 below it
+    // (an enablement update raises the Windows build, e.g. 19041 to 19045, or 26100 to 26200). The revision can be any
+    // number, also above the build (e.g. 6.2.26100.33438 on Windows Server 2025).
+    std::smatch parts;
+    const bool isFourNumbers = std::regex_match(version, parts, std::regex(R"((\d+)\.(\d+)\.(\d+)\.(\d+))"));
+    CheckTrue(isFourNumbers, "The file version should be four numbers: " + version);
+    CheckTrue(hasOSBuild, "The Windows build should be in the registry");
+    if (isFourNumbers && hasOSBuild)
+    {
+        const auto major = std::stoul(parts[1].str());
+        const auto build = std::stoul(parts[3].str());
+        const auto osBuild = std::stoul(std::wstring(osBuildText));
+        CheckGreaterThanOrEqual(major, 6ul, "The major version should be a Windows version: " + version);
+        CheckGreaterThan(major, std::stoul(parts[2].str()), "The major version should come before the minor: " + version);
+        CheckLessThanOrEqual(build, osBuild, "The third number should be a Windows build, at most this one: " + version);
+        CheckLessThan(osBuild - build, 1000ul, "The third number should be this Windows release's build: " + version);
+    }
+#else
+    Skip("Only Windows files have version resources");
 #endif
 }
 //---------------------------------------------------------------------------

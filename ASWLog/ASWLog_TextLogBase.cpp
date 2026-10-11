@@ -863,7 +863,18 @@ void TASWTextLogBase::WaitForQueuedEntries()
 //---------------------------------------------------------------------------
 void TASWTextLogBase::WriteApplicationInfo()
 {
-    auto applicationInfo = std::format("app_exe='{}', app_target=", PathToUTF8String(GetExecutablePath()));
+    const auto executablePath = GetExecutablePath();
+    auto applicationInfo = std::format("app_exe='{}'", PathToUTF8String(executablePath));
+
+    // The configured version, or else the executable's file version (Windows)
+    auto applicationVersion = GetConfigUnlocked().Startup.ApplicationVersion;
+    if (applicationVersion.empty())
+        applicationVersion = GetFileVersionString(executablePath);
+
+    if (!applicationVersion.empty())
+        applicationInfo += std::format(", app_version='{}'", applicationVersion);
+
+    applicationInfo += ", app_target=";
 
 #if defined(_WIN64)
     applicationInfo += "Win64";

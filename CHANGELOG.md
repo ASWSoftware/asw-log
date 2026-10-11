@@ -259,6 +259,14 @@ see [0.26.1](#0261---2026-09-17) for the initial versioned baseline.
   from the field says which ASWLog (and which logger) wrote it. On by
   default; `Startup.WriteLoggerVersion = false` leaves it out, which code that
   turns off every startup line one by one must now add.
+- The application's version in the startup lines: the "App:" line now has
+  `app_version='...'` after the executable's path, from the new
+  `Startup.ApplicationVersion`, or, when that is empty, on Windows, from the
+  executable's file version in its version resource (e.g. `2.3.1.45`, as
+  RAD Studio's Version Info sets it). Without either, the line is as before.
+  The new `ASWLog::GetFileVersionString(path)` reads any file's version
+  (Windows; empty on Linux). It loads `version.dll` at run time, so no
+  project needs a new library to link.
 
 ### Changed
 

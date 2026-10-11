@@ -84,9 +84,10 @@ The `Show*` settings are read by the built-in layout and by `TASWJSONFormatter`;
 
 | Setting | Default | What it does |
 |---|---|---|
+| `ApplicationVersion` | empty | The application's version, written on the application line as `app_version='...'`. Empty: on Windows, the executable's file version from its version resource (e.g. `2.3.1.45`, set in RAD Studio under Project > Options > Application > Version Info), if it has one; nothing on Linux. |
 | `Banner` | empty | A line written first, if set. |
 | `WriteLoggerVersion` | `true` | The ASWLog version and the logger's class, right after the banner, e.g. `ASWLog: version=1.0.0, logger=TASWFileLog`, so a log says which ASWLog wrote it. |
-| `WriteApplicationInfo` | `true` | The executable's path and build target, e.g. `App: app_exe='C:\MyApp\MyApp.exe', app_target=Win64`. |
+| `WriteApplicationInfo` | `true` | The executable's path, the application's version (see `ApplicationVersion`) and the build target, e.g. `App: app_exe='C:\MyApp\MyApp.exe', app_version='2.3.1.45', app_target=Win64`. |
 | `WriteCommandLine` | `false` | The command line, added to the application line. |
 | `WriteDriveInfo` | `true` | The disk's total, free and used space. |
 | `WriteMemoryUsage` | `true` | The process's memory use (working set and peak). |

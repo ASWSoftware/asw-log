@@ -30,18 +30,22 @@ limitations under the License.
 #include <charconv>
 #include <chrono>
 #include <climits>
+#include <cstddef>
 #include <cstdlib>
 #include <cstring>
 #include <ctime>
 #include <filesystem>
 #include <format>
 #include <fstream>
+#include <memory>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
 #if defined(_WIN32)
 #include <windows.h>
 #include <psapi.h>
+#include <winver.h>
 #else
 #include <sys/syscall.h>
 #include <sys/sysinfo.h>
@@ -204,6 +208,62 @@ std::filesystem::path GetExecutablePath()
 #endif
 
     return std::filesystem::path("unknown");
+}
+
+//---------------------------------------------------------------------------
+std::string GetFileVersionString(const std::filesystem::path& file)
+{
+#if defined(_WIN32)
+    // version.dll is loaded only for this call, from the system folder, so that no project has to link it
+    using FreeLibraryFunction = BOOL(WINAPI*)(HMODULE);
+    using GetFileVersionInfoFunction = BOOL(WINAPI*)(LPCWSTR, DWORD, DWORD, LPVOID);
+    using GetFileVersionInfoSizeFunction = DWORD(WINAPI*)(LPCWSTR, LPDWORD);
+    using VerQueryValueFunction = BOOL(WINAPI*)(LPCVOID, LPCWSTR, LPVOID*, PUINT);
+
+    const HMODULE versionLibrary = LoadLibraryExW(L"version.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+    if (versionLibrary == nullptr)
+        return {};
+
+    const std::unique_ptr<std::remove_pointer_t<HMODULE>, FreeLibraryFunction> libraryOwner(versionLibrary, &FreeLibrary);
+
+    // Through void (*)() so that GCC doesn't warn about casting between function types
+    const auto getVersionInfoSize = reinterpret_cast<GetFileVersionInfoSizeFunction>(
+        reinterpret_cast<void (*)()>(GetProcAddress(versionLibrary, "GetFileVersionInfoSizeW")));
+    const auto getVersionInfo = reinterpret_cast<GetFileVersionInfoFunction>(
+        reinterpret_cast<void (*)()>(GetProcAddress(versionLibrary, "GetFileVersionInfoW")));
+    const auto queryVersionValue = reinterpret_cast<VerQueryValueFunction>(
+        reinterpret_cast<void (*)()>(GetProcAddress(versionLibrary, "VerQueryValueW")));
+    if (getVersionInfoSize == nullptr || getVersionInfo == nullptr || queryVersionValue == nullptr)
+        return {};
+
+    const std::wstring path = file.wstring();
+    DWORD handle = 0;
+    const DWORD size = getVersionInfoSize(path.c_str(), &handle);
+    if (size == 0)
+        return {};
+
+    std::vector<std::byte> versionInfo(size);
+    void* fixedInfo = nullptr;
+    UINT fixedInfoSize = 0;
+    if (!getVersionInfo(path.c_str(), 0, size, versionInfo.data()) ||
+        !queryVersionValue(versionInfo.data(), L"\\", &fixedInfo, &fixedInfoSize) || fixedInfo == nullptr ||
+        fixedInfoSize < sizeof(VS_FIXEDFILEINFO))
+    {
+        return {};
+    }
+
+    VS_FIXEDFILEINFO fileInfo{};
+    std::memcpy(&fileInfo, fixedInfo, sizeof(fileInfo));
+    if (fileInfo.dwSignature != VS_FFI_SIGNATURE)
+        return {};
+
+    return std::format("{}.{}.{}.{}", HIWORD(fileInfo.dwFileVersionMS), LOWORD(fileInfo.dwFileVersionMS),
+        HIWORD(fileInfo.dwFileVersionLS), LOWORD(fileInfo.dwFileVersionLS));
+#else
+    static_cast<void>(file);
+
+    return {};
+#endif
 }
 
 //---------------------------------------------------------------------------

@@ -24,8 +24,8 @@ pattern formatters, crash handlers, and the other extras below) is opt-in.
   against their arguments at compile time; wrap one built at run time in `ASWLog::RuntimeFormat()`.
 - Runtime `Open()`, `Close()`, `Flush()` and log rotation controls, and `Reconfigure()` to change settings safely
   while other threads log.
-- Optional startup diagnostics: the ASWLog version, application and system memory, OS, drive, time, and the command
-  line.
+- Optional startup diagnostics: the ASWLog and application versions (on Windows, the application's is read from its
+  version resource unless set), application and system memory, OS, drive, time, and the command line.
 - Retry handling for temporary file access conflicts and Windows reader-sharing support.
 - Crash durability: every entry is flushed by default, and with buffered flushing Error and Critical entries still
   are (`File.FlushImmediatelyAtLevel`). Entries at a chosen level can also be synced to disk to survive a power loss

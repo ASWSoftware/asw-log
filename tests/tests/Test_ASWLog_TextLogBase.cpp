@@ -49,6 +49,7 @@ limitations under the License.
 #include "ASWLog_FileLog.h"
 #include "ASWLog_Formatter.h"
 #include "ASWLog_TextLogBase.h"
+#include "ASWLog_Utils.h"
 #include "ASWLog_Version.h"
 //---------------------------------------------------------------------------
 
@@ -401,6 +402,8 @@ bool WaitUntil(const std::function<bool()>& condition)
 TTest_ASWLog_TextLogBase::TTest_ASWLog_TextLogBase()
     : inherited("ASWLog_TextLogBase_Tests")
 {
+    RegisterTest(&TTest_ASWLog_TextLogBase::Test_ApplicationInfo_WritesTheConfiguredVersion, "ApplicationInfo_WritesTheConfiguredVersion");
+    RegisterTest(&TTest_ASWLog_TextLogBase::Test_ApplicationInfo_WritesTheExecutablesFileVersionByDefault, "ApplicationInfo_WritesTheExecutablesFileVersionByDefault");
     RegisterTest(&TTest_ASWLog_TextLogBase::Test_Async_BacktraceIsTakenWhenTheTriggerIsLogged, "Async_BacktraceIsTakenWhenTheTriggerIsLogged");
     RegisterTest(&TTest_ASWLog_TextLogBase::Test_Async_BlockWaitsForRoomInTheQueue, "Async_BlockWaitsForRoomInTheQueue");
     RegisterTest(&TTest_ASWLog_TextLogBase::Test_Async_CallReturnsBeforeTheEntryIsWritten, "Async_CallReturnsBeforeTheEntryIsWritten");
@@ -474,6 +477,59 @@ void TTest_ASWLog_TextLogBase::TearDown_Test(ITestCase& testCase)
 
 // /////// Begin tests after this line ///////////////////////
 
+//---------------------------------------------------------------------------
+void TTest_ASWLog_TextLogBase::Test_ApplicationInfo_WritesTheConfiguredVersion()
+{
+    // Arrange
+    TMemoryOutput output;
+    TMemoryTextLog log(output);
+    auto config = MakeQuietConfig();
+    config.Startup.WriteApplicationInfo = true;
+    config.Startup.ApplicationVersion = "2.3.1 beta";
+
+    // Act
+    const bool initialized = log.Initialize(config);
+
+    // Assert
+    CheckTrue(initialized, "Initialize should succeed");
+    CheckEquals(1, output.Lines.size(), "Initialize should write the App line");
+    if (output.Lines.size() == 1)
+    {
+        CheckStartsWith(output.Lines[0], "[INFO]: App: app_exe='", "The App line should start with the executable's path");
+        CheckContains(output.Lines[0], "', app_version='2.3.1 beta', app_target=",
+            "The configured version should follow the executable's path: " + output.Lines[0]);
+    }
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_TextLogBase::Test_ApplicationInfo_WritesTheExecutablesFileVersionByDefault()
+{
+    // Arrange: no configured version. The test executable has a version resource in some builds (e.g. the VCL GUI
+    // runner's 1.0.0.0) and none in others (e.g. MinGW's), where no version is written.
+    TMemoryOutput output;
+    TMemoryTextLog log(output);
+    auto config = MakeQuietConfig();
+    config.Startup.WriteApplicationInfo = true;
+    const std::string fileVersion = ASWLog::GetFileVersionString(ASWLog::GetExecutablePath());
+
+    // Act
+    const bool initialized = log.Initialize(config);
+
+    // Assert
+    CheckTrue(initialized, "Initialize should succeed");
+    CheckEquals(1, output.Lines.size(), "Initialize should write the App line");
+    if (output.Lines.size() == 1)
+    {
+        if (fileVersion.empty())
+        {
+            CheckNotContains(output.Lines[0], "app_version=", "Without a version resource, no version should be written: " + output.Lines[0]);
+        }
+        else
+        {
+            CheckContains(output.Lines[0], std::format("', app_version='{}', app_target=", fileVersion),
+                "The executable's file version should follow its path: " + output.Lines[0]);
+        }
+    }
+}
 //---------------------------------------------------------------------------
 void TTest_ASWLog_TextLogBase::Test_Async_BlockWaitsForRoomInTheQueue()
 {

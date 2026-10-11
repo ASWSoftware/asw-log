@@ -36,6 +36,8 @@ private:
     typedef TTestGroupBase inherited;
 
 private: // Test methods
+    void Test_ApplicationInfo_WritesTheConfiguredVersion();
+    void Test_ApplicationInfo_WritesTheExecutablesFileVersionByDefault();
     void Test_Async_BacktraceIsTakenWhenTheTriggerIsLogged();
     void Test_Async_BlockWaitsForRoomInTheQueue();
     void Test_Async_CallReturnsBeforeTheEntryIsWritten();

@@ -301,6 +301,9 @@ struct TASWShutdownConfig
 /////////////////////////////////////////////////////////////////////////////
 struct TASWStartupConfig
 {
+    // The application's version, written on the "App:" line as app_version='...' (see WriteApplicationInfo). Empty: on
+    // Windows, the executable's file version from its version resource, if it has one (see GetFileVersionString()).
+    std::string ApplicationVersion;
     std::string Banner; // Written first, if set
     bool WriteApplicationInfo  = true;
     bool WriteCommandLine      = false; // Added to the application info line

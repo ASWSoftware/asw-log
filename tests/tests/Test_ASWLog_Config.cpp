@@ -552,6 +552,7 @@ void TTest_ASWLog_Config::Test_Defaults_MatchDocumentedValues()
     CheckFalse(config.Line.ShowSourceLine, "Line.ShowSourceLine should default to false");
 
     // Assert: Startup
+    CheckEmpty(config.Startup.ApplicationVersion, "Startup.ApplicationVersion should default to empty");
     CheckEmpty(config.Startup.Banner, "Startup.Banner should default to empty");
     CheckTrue(config.Startup.WriteApplicationInfo, "Startup.WriteApplicationInfo should default to true");
     CheckFalse(config.Startup.WriteCommandLine, "Startup.WriteCommandLine should default to false");
