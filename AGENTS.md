@@ -15,7 +15,8 @@ ASWLog is a thread-safe, dependency-free C++20 logging library for Windows and L
 - `.github/workflows/ci.yml` builds and runs the unit tests on Windows (MSVC, MinGW) and Linux (GCC, Clang), plus Linux Clang builds with ThreadSanitizer and with AddressSanitizer + UBSan (`ASWLOG_SANITIZE`); the non-sanitizer jobs also check the installed CMake package (`tests/package/`).
 - `example/` contains example app that uses the logger.
 - `example/rad370/` contains the RAD Studio 13.1 project and Windows build scripts.
-- `README.md` contains repo details.
+- `README.md` contains repo details: features, quick start, project setup, API overview, versions and tests.
+- `docs/` contains the reference documentation: `Configuration.md` (every `TASWLogConfig` setting, its default and which loggers use it, and the environment variables), `Guarantees.md` (thread safety, order, callback threads, lifetimes, crash durability) and `CustomLoggers.md` (custom formatters and loggers).
 - `CHANGELOG.md` records notable changes per release (see Changelog below).
 - `CONTRIBUTING.md` contains the guidelines for contributors (issues, branches, commit history, pull requests, and bug reports); it defers to this file for coding rules, so keep the two consistent.
 - `.uncrustify.cfg` and `.githooks/` define the repository formatting workflow.
@@ -54,6 +55,7 @@ Prefer standard C++ and portable library facilities. Avoid compiler-, IDE-, or o
 - Follow the surrounding naming, indentation, brace, include, and comment style. Avoid unrelated formatting changes.
 - Keep declarations and definitions consistent, and update all relevant project or build files when adding source files.
 - Add or update focused tests for behavior changes, including error and platform-specific cases where applicable.
+- Keep the documentation in step: a new or changed `TASWLogConfig` setting or environment key goes in `docs/Configuration.md`, a new logger in the README's API overview, and a change to threading, lifetimes or durability in `docs/Guarantees.md`. Add a new docs file to `Deploy.bat`.
 
 ## Building and Testing
 
