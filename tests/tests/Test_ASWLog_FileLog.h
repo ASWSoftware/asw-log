@@ -65,6 +65,8 @@ private: // Test methods
     void Test_FailedReopen_ZeroResetDelayRetriesOnNextWrite();
     void Test_FailedSizeRotation_WaitsBeforeRetrying();
     void Test_FileStream_FlushWorksAfterFailedWrite();
+    void Test_FileStream_InsertionIntoAClosedStreamFails();
+    void Test_FileStream_InsertionWritesAndCountsTheSize();
     void Test_FlushImmediatelyAtLevel_FlushesEntriesAtOrAboveTheLevel();
     void Test_FlushImmediatelyAtLevel_OffLeavesFlushingToFlushMode();
     void Test_Flush_WritesBufferedManualModeEntries();

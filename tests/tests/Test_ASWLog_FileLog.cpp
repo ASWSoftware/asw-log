@@ -393,6 +393,8 @@ TTest_ASWLog_FileLog::TTest_ASWLog_FileLog()
     RegisterTest(&TTest_ASWLog_FileLog::Test_FailedReopen_ZeroResetDelayRetriesOnNextWrite, "FailedReopen_ZeroResetDelayRetriesOnNextWrite");
     RegisterTest(&TTest_ASWLog_FileLog::Test_FailedSizeRotation_WaitsBeforeRetrying, "FailedSizeRotation_WaitsBeforeRetrying");
     RegisterTest(&TTest_ASWLog_FileLog::Test_FileStream_FlushWorksAfterFailedWrite, "FileStream_FlushWorksAfterFailedWrite");
+    RegisterTest(&TTest_ASWLog_FileLog::Test_FileStream_InsertionIntoAClosedStreamFails, "FileStream_InsertionIntoAClosedStreamFails");
+    RegisterTest(&TTest_ASWLog_FileLog::Test_FileStream_InsertionWritesAndCountsTheSize, "FileStream_InsertionWritesAndCountsTheSize");
     RegisterTest(&TTest_ASWLog_FileLog::Test_FlushImmediatelyAtLevel_FlushesEntriesAtOrAboveTheLevel, "FlushImmediatelyAtLevel_FlushesEntriesAtOrAboveTheLevel");
     RegisterTest(&TTest_ASWLog_FileLog::Test_FlushImmediatelyAtLevel_OffLeavesFlushingToFlushMode, "FlushImmediatelyAtLevel_OffLeavesFlushingToFlushMode");
     RegisterTest(&TTest_ASWLog_FileLog::Test_Flush_WritesBufferedManualModeEntries, "Flush_WritesBufferedManualModeEntries");
@@ -1428,6 +1430,45 @@ void TTest_ASWLog_FileLog::Test_FileStream_FlushWorksAfterFailedWrite()
     CheckTrue(written, "Write should succeed");
     CheckTrue(flushed, "Flush should succeed after an earlier failure");
     CheckEquals(std::string("buffered"), contents, "Flush should write the buffered data to the file");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_FileLog::Test_FileStream_InsertionIntoAClosedStreamFails()
+{
+    // Arrange
+    ASWLog::TASWFileStream textStream;
+    ASWLog::TASWFileStream characterStream;
+
+    // Act: a text goes through xsputn(), a single character through overflow()
+    textStream << "text";
+    characterStream.put('x');
+
+    // Assert
+    CheckTrue(textStream.bad(), "Inserting a text into a stream that isn't open should fail");
+    CheckTrue(characterStream.bad(), "Inserting a character into a stream that isn't open should fail");
+    CheckEquals(0, textStream.GetSize() + characterStream.GetSize(), "Nothing should be counted");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_FileLog::Test_FileStream_InsertionWritesAndCountsTheSize()
+{
+    // Arrange: a file that already holds 4 bytes
+    const auto file = TestTempDir / "insertion.log";
+    std::ofstream(file, std::ios::binary) << "old\n";
+    ASWLog::TASWFileStream stream;
+    const bool opened = stream.Open(file);
+
+    // Act: a text goes through xsputn(), a single character through overflow()
+    stream << "count=" << 42;
+    stream.put('\n');
+    const bool flushed = stream.Flush();
+    const auto size = stream.GetSize();
+    stream.Close();
+
+    // Assert
+    CheckTrue(opened, "Open should succeed");
+    CheckFalse(stream.fail(), "The insertions should succeed");
+    CheckTrue(flushed, "Flush should succeed");
+    CheckEquals(std::string("old\ncount=42\n"), ReadFileText(file), "operator<< and put() should append to the file");
+    CheckEquals(13, size, "GetSize() should count the file's bytes and every inserted one");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_FileLog::Test_FlushImmediatelyAtLevel_FlushesEntriesAtOrAboveTheLevel()
