@@ -323,6 +323,10 @@ cmake --build tests/cmake/build-tsan
 
 CI runs both with Clang. `ASWLOG_SANITIZE` applies to the library and everything that links to it.
 
+CI also measures which lines of the library the tests run (a Linux GCC build with `--coverage`, read by gcovr): the
+"Linux (GCC, coverage)" job shows a table on its summary page and keeps an HTML report as the `coverage-report`
+artifact. It is informational and never fails the run.
+
 On Windows with RAD Studio, the tests can also run in the ASWUnitTests VCL GUI runner, a window for choosing tests and
 reading their results: build `tests/vcl/gui/rad370/ASWLogTests_VCL_GUI.cbproj` (or its `Build_Win64x_*.bat` scripts),
 which writes `ASWLogTests_VCL_GUI.exe` to `tests/build/bin/<Config>`. `ASWLogTests_Group.groupproj` in the same folder
