@@ -57,6 +57,7 @@ private: // Test methods
     void Test_DailyRolling_SharedLogRollsOverOnce();
     void Test_DeleteOldLogs_AcceptsShortRelativeFolder();
     void Test_DeleteOldLogs_EmptyPatternDeletesNothing();
+    void Test_DeleteOldLogs_KeepsNonMatchingFilesAndSubfolders();
     void Test_DeleteOldLogs_MatchesNonASCIIFileNames();
     void Test_DeleteOldLogs_RemovesOldFiles();
     void Test_FailedReopen_RetriesAndResumesLogging();

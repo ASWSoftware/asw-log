@@ -385,6 +385,7 @@ TTest_ASWLog_FileLog::TTest_ASWLog_FileLog()
     RegisterTest(&TTest_ASWLog_FileLog::Test_DailyRolling_SharedLogRollsOverOnce, "DailyRolling_SharedLogRollsOverOnce");
     RegisterTest(&TTest_ASWLog_FileLog::Test_DeleteOldLogs_AcceptsShortRelativeFolder, "DeleteOldLogs_AcceptsShortRelativeFolder");
     RegisterTest(&TTest_ASWLog_FileLog::Test_DeleteOldLogs_EmptyPatternDeletesNothing, "DeleteOldLogs_EmptyPatternDeletesNothing");
+    RegisterTest(&TTest_ASWLog_FileLog::Test_DeleteOldLogs_KeepsNonMatchingFilesAndSubfolders, "DeleteOldLogs_KeepsNonMatchingFilesAndSubfolders");
     RegisterTest(&TTest_ASWLog_FileLog::Test_DeleteOldLogs_MatchesNonASCIIFileNames, "DeleteOldLogs_MatchesNonASCIIFileNames");
     RegisterTest(&TTest_ASWLog_FileLog::Test_DeleteOldLogs_RemovesOldFiles, "DeleteOldLogs_RemovesOldFiles");
     RegisterTest(&TTest_ASWLog_FileLog::Test_FailedReopen_RetriesAndResumesLogging, "FailedReopen_RetriesAndResumesLogging");
@@ -1157,6 +1158,27 @@ void TTest_ASWLog_FileLog::Test_DeleteOldLogs_EmptyPatternDeletesNothing()
     CheckTrue(existsAfterEmptyPattern, "An empty pattern should leave the old file");
     CheckEquals(1, starPatternCount, "The \"*\" pattern should delete every old file");
     CheckFalse(std::filesystem::exists(oldFile), "The \"*\" pattern should remove the old file");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_FileLog::Test_DeleteOldLogs_KeepsNonMatchingFilesAndSubfolders()
+{
+    // Arrange: an empty subfolder whose name matches the pattern, besides a matching and a non-matching file
+    const auto matchingFile = TestTempDir / "old_example.log";
+    const auto otherFile = TestTempDir / "old_example.txt";
+    const auto subfolder = TestTempDir / "sub_example.log";
+    std::ofstream(matchingFile) << "old";
+    std::ofstream(otherFile) << "old";
+    std::filesystem::create_directory(subfolder);
+
+    // Act: a negative age puts the cutoff an hour from now, so every entry counts as old, also the subfolder (Windows
+    // can't set a folder's last write time through std::filesystem)
+    const auto deletedCount = ASWLog::TASWFileLog::DeleteOldLogs(TestTempDir, "*example.log", std::chrono::hours(-1));
+
+    // Assert
+    CheckEquals(1, deletedCount, "DeleteOldLogs should delete only the old file matching the pattern");
+    CheckFalse(std::filesystem::exists(matchingFile), "The old file matching the pattern should be deleted");
+    CheckTrue(std::filesystem::exists(otherFile), "An old file that doesn't match the pattern should be kept");
+    CheckTrue(std::filesystem::is_directory(subfolder), "A subfolder should be kept, even if its name matches the pattern");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_FileLog::Test_DeleteOldLogs_MatchesNonASCIIFileNames()

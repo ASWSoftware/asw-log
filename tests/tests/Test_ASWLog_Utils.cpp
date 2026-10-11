@@ -686,6 +686,11 @@ void TTest_ASWLog_Utils::Test_MatchesWildcard_Patterns()
     CheckTrue(ASWLog::MatchesWildcard(fileName2, "n?tes.*"), "Question mark wildcard should match a single character");
     CheckFalse(ASWLog::MatchesWildcard(fileName, "*.txt"), "Wildcard should reject non-matching files");
     CheckTrue(ASWLog::MatchesWildcard("no_extension", "*"), "A lone '*' should match any name, with or without a dot");
+    CheckFalse(ASWLog::MatchesWildcard(fileName, "app_123.txt"), "A pattern without wildcards should reject a different name");
+    CheckFalse(ASWLog::MatchesWildcard(fileName, "app_123.lo"), "A pattern without wildcards should reject a name that goes on past it");
+    CheckFalse(ASWLog::MatchesWildcard(fileName, "app_123.log.bak"), "A pattern without wildcards should reject a name that ends before it");
+    CheckTrue(ASWLog::MatchesWildcard(fileName, "app_123.log**"), "Trailing '*'s should also match nothing");
+    CheckFalse(ASWLog::MatchesWildcard("", "?"), "'?' should need a character");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_Utils::Test_ReadEnvironmentVariable_ReadsUTF8Values()
