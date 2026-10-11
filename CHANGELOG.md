@@ -10,6 +10,8 @@ see [0.26.1](#0261---2026-09-17) for the initial versioned baseline.
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-10-11
+
 ### Added
 
 - Local-time and finer timestamps: `Line.TimestampZone` (`TimeZone::UTC`,
@@ -929,7 +931,8 @@ Everything already present in the logger at this point (`TASWFileLog`,
 and CMake example projects, unit tests, `Deploy.bat`, etc.) is treated as the
 baseline and is not itemized commit-by-commit.
 
-[Unreleased]: https://github.com/ASWSoftware/asw-log/compare/v0.75.0...HEAD
+[Unreleased]: https://github.com/ASWSoftware/asw-log/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/ASWSoftware/asw-log/compare/v0.75.0...v1.0.0
 [0.75.0]: https://github.com/ASWSoftware/asw-log/compare/v0.66.0...v0.75.0
 [0.66.0]: https://github.com/ASWSoftware/asw-log/compare/v0.65.0...v0.66.0
 [0.65.0]: https://github.com/ASWSoftware/asw-log/compare/v0.45.0...v0.65.0
