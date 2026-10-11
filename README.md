@@ -162,7 +162,7 @@ or let CMake download it with `FetchContent`:
 include(FetchContent)
 FetchContent_Declare(ASWLog
     GIT_REPOSITORY https://github.com/ASWSoftware/asw-log.git
-    GIT_TAG v0.75.0     # A release tag, 0.45.0 or later
+    GIT_TAG v1.0.0      # A release tag
     GIT_SUBMODULES ""   # Skip the unit-test framework submodule
 )
 FetchContent_MakeAvailable(ASWLog)
