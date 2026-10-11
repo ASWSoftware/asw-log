@@ -295,6 +295,14 @@ see [0.26.1](#0261---2026-09-17) for the initial versioned baseline.
   custom formatter. A time before 1970 is now written as the day and
   millisecond it falls in, instead of a malformed time.
 
+### Removed
+
+- `GetApplicationInfoString()` (from `ASWLog_Utils.h`). It was an older form
+  of the startup "App:" line and nothing in ASWLog used it. Breaking for code
+  that called it: build the text from `GetExecutablePath()` (with
+  `PathToUTF8String()`) and `GetCommandLineString()`, which it combined as
+  `application_exe='<path>', command_line='<command line>'`.
+
 ## [0.75.0] - 2026-10-06
 
 ### Added

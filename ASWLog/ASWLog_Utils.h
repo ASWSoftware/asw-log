@@ -76,7 +76,6 @@ struct TSystemMemoryUsage
 */
 [[nodiscard]] std::string GenerateLogFileName(std::string_view prefix, std::string_view customPostfix);
 
-[[nodiscard]] std::string GetApplicationInfoString();
 [[nodiscard]] std::string GetCommandLineString();
 
 // The operating system's id for the current process, as shown by Task Manager, ps, and debuggers.

@@ -118,13 +118,6 @@ std::string GenerateLogFileName(std::string_view prefix, std::string_view custom
 }
 
 //---------------------------------------------------------------------------
-std::string GetApplicationInfoString()
-{
-    auto exePath = GetExecutablePath();
-    return std::format("application_exe='{}', command_line='{}'", PathToUTF8String(exePath), GetCommandLineString());
-}
-
-//---------------------------------------------------------------------------
 std::string GetCommandLineString()
 {
 #if defined(_WIN32)
