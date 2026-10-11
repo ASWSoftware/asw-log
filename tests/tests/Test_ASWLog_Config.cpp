@@ -341,6 +341,7 @@ void TTest_ASWLog_Config::Test_ApplyEnvironment_SeedsTheLevelAtInitialize()
     config.Startup.WriteMemoryUsage = false;
     config.Startup.WriteOSInfo = false;
     config.Startup.WriteSystemMemoryInfo = false;
+    config.Startup.WriteLoggerVersion = false;
     config.Startup.WriteTimeInfo = false;
     config.Shutdown.WriteLine = false;
     ASWLog::TASWMemoryLog log;
@@ -551,10 +552,12 @@ void TTest_ASWLog_Config::Test_Defaults_MatchDocumentedValues()
     CheckFalse(config.Line.ShowSourceLine, "Line.ShowSourceLine should default to false");
 
     // Assert: Startup
+    CheckEmpty(config.Startup.ApplicationVersion, "Startup.ApplicationVersion should default to empty");
     CheckEmpty(config.Startup.Banner, "Startup.Banner should default to empty");
     CheckTrue(config.Startup.WriteApplicationInfo, "Startup.WriteApplicationInfo should default to true");
     CheckFalse(config.Startup.WriteCommandLine, "Startup.WriteCommandLine should default to false");
     CheckTrue(config.Startup.WriteDriveInfo, "Startup.WriteDriveInfo should default to true");
+    CheckTrue(config.Startup.WriteLoggerVersion, "Startup.WriteLoggerVersion should default to true");
     CheckTrue(config.Startup.WriteMemoryUsage, "Startup.WriteMemoryUsage should default to true");
     CheckTrue(config.Startup.WriteOSInfo, "Startup.WriteOSInfo should default to true");
     CheckTrue(config.Startup.WriteSystemMemoryInfo, "Startup.WriteSystemMemoryInfo should default to true");
@@ -587,6 +590,7 @@ void TTest_ASWLog_Config::Test_Defaults_MatchDocumentedValues()
     CheckTrue(config.File.RotationRetryDelay == std::chrono::milliseconds(500),
         "File.RotationRetryDelay should default to 500 ms");
     CheckFalse(config.File.EnableDailyRolling, "File.EnableDailyRolling should default to false");
+    CheckTrue(config.File.WriteStartupLinesInNewFiles, "File.WriteStartupLinesInNewFiles should default to true");
     CheckTrue(config.File.RetentionMaxAge == std::chrono::hours(0), "File.RetentionMaxAge should default to 0 (disabled)");
     CheckNull(config.File.OnBackupCreated, "File.OnBackupCreated should default to unset");
     CheckEquals(0, config.File.MaxBackupFiles, "File.MaxBackupFiles should default to 0 (unlimited)");

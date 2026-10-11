@@ -254,6 +254,32 @@ see [0.26.1](#0261---2026-09-17) for the initial versioned baseline.
   the library is now named `ASWLogd` (e.g. `ASWLogd.lib`), so Debug and
   Release can share an install prefix; nothing changes for code that links to
   the `ASWLog::ASWLog` target.
+- The ASWLog version in the startup lines: right after the banner, a text
+  logger writes e.g. `ASWLog: version=1.0.0, logger=TASWFileLog`, so a log
+  from the field says which ASWLog (and which logger) wrote it. On by
+  default; `Startup.WriteLoggerVersion = false` leaves it out, which code that
+  turns off every startup line one by one must now add.
+- The application's version in the startup lines: the "App:" line now has
+  `app_version='...'` after the executable's path, from the new
+  `Startup.ApplicationVersion`, or, when that is empty, on Windows, from the
+  executable's file version in its version resource (e.g. `2.3.1.45`, as
+  RAD Studio's Version Info sets it). Without either, the line is as before.
+  The new `ASWLog::GetFileVersionString(path)` reads any file's version
+  (Windows; empty on Linux). It loads `version.dll` at run time, so no
+  project needs a new library to link.
+- The startup lines at the top of each new log file: a file logger now starts
+  every file it begins after `Initialize()` (size rotation, daily rolling,
+  `RotateLogFiles()`, `Reconfigure()` to a new path) with a line saying where
+  the log continues from, e.g. `Log continued from
+  myapp.size.2026-10-10_143005_123.bak (size)` or `Log continued from
+  logs\old.txt (reconfigure)`, followed by the startup lines as
+  `Initialize()` writes them (the banner and each line its `Startup` setting
+  turns on), so a rotated log still says which version and system wrote it.
+  They come before the entry that started the file. On by default; the new
+  `File.WriteStartupLinesInNewFiles = false` keeps the old output, in which a
+  new file starts with that entry. A rotation no longer happens in the middle
+  of the startup lines: if they reach `File.MaxFileSizeBytes`, the next entry
+  rotates the file.
 
 ### Changed
 
@@ -268,6 +294,14 @@ see [0.26.1](#0261---2026-09-17) for the initial versioned baseline.
   `Time::ISO8601BufferSize` characters without allocating, e.g. for a
   custom formatter. A time before 1970 is now written as the day and
   millisecond it falls in, instead of a malformed time.
+
+### Removed
+
+- `GetApplicationInfoString()` (from `ASWLog_Utils.h`). It was an older form
+  of the startup "App:" line and nothing in ASWLog used it. Breaking for code
+  that called it: build the text from `GetExecutablePath()` (with
+  `PathToUTF8String()`) and `GetCommandLineString()`, which it combined as
+  `application_exe='<path>', command_line='<command line>'`.
 
 ## [0.75.0] - 2026-10-06
 

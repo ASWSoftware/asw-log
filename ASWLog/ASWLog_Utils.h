@@ -2,9 +2,10 @@
 ASWLog_Utils.h
 Author: Anthony S. West - ASW Software
 
-A light-weight logging tool.
+A logging library.
 
-Source for the ASWLog utility functions, etc.
+Helpers the loggers use, which an application can use too: log file names,
+process and system information, paths, time formatting and JSON escaping.
 
 Requires C++ 20 or higher.
 
@@ -75,7 +76,6 @@ struct TSystemMemoryUsage
 */
 [[nodiscard]] std::string GenerateLogFileName(std::string_view prefix, std::string_view customPostfix);
 
-[[nodiscard]] std::string GetApplicationInfoString();
 [[nodiscard]] std::string GetCommandLineString();
 
 // The operating system's id for the current process, as shown by Task Manager, ps, and debuggers.
@@ -87,6 +87,13 @@ struct TSystemMemoryUsage
 
 [[nodiscard]] std::string GetDriveInfoString();
 [[nodiscard]] std::filesystem::path GetExecutablePath();
+
+// The file version in the version resource of 'file' (e.g. an executable or DLL), as four numbers, e.g. "2.3.1.45",
+// what Explorer shows as "File version". Empty if the file has no version resource or can't be read, and always on
+// Linux, which has no version resources. Windows may report its own system files' version differently (e.g. 6.2 for
+// 10.0) to an application without a compatibility manifest. Throws std::bad_alloc if out of memory.
+[[nodiscard]] std::string GetFileVersionString(const std::filesystem::path& file);
+
 [[nodiscard]] TMemoryUsage GetMemoryUsage();
 [[nodiscard]] std::string GetMemoryUsageString();
 [[nodiscard]] std::string GetOSInfoString();

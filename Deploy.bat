@@ -67,6 +67,13 @@ if errorlevel 1 exit /b 1
 call :CopyFile "cmake\ASWLogConfig.cmake.in" "%TARGET_DIR%\cmake\ASWLogConfig.cmake.in"
 if errorlevel 1 exit /b 1
 
+call :CopyFile "docs\Configuration.md" "%TARGET_DIR%\docs\Configuration.md"
+if errorlevel 1 exit /b 1
+call :CopyFile "docs\CustomLoggers.md" "%TARGET_DIR%\docs\CustomLoggers.md"
+if errorlevel 1 exit /b 1
+call :CopyFile "docs\Guarantees.md" "%TARGET_DIR%\docs\Guarantees.md"
+if errorlevel 1 exit /b 1
+
 call :CopyFile "ASWLog\ASWLog_Base.cpp" "%TARGET_DIR%\ASWLog\ASWLog_Base.cpp"
 if errorlevel 1 exit /b 1
 call :CopyFile "ASWLog\ASWLog_Base.h" "%TARGET_DIR%\ASWLog\ASWLog_Base.h"

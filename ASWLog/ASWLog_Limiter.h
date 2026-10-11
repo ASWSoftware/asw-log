@@ -4,6 +4,9 @@ Author: Anthony S. West - ASW Software
 
 A logging library.
 
+Rate-limited logging for entries that can repeat often: the ASWLOG_ONCE,
+ASWLOG_EVERY_N and ASWLOG_EVERY_INTERVAL macros, and TASWLogLimiter.
+
 Requires C++ 20 or higher.
 
 Copyright 2026 ASW Software

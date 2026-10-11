@@ -2,9 +2,10 @@
 ASWLog_Fields.h
 Author: Anthony S. West - ASW Software
 
-A light-weight logging tool.
+A logging library.
 
-Source for the ASWLog structured fields and scoped context.
+Structured fields: TASWLogField, a named value attached to one entry, and
+TASWLogScope, context that every entry logged on the thread carries.
 
 Requires C++ 20 or higher.
 

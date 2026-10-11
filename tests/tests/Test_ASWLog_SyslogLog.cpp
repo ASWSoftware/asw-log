@@ -89,6 +89,7 @@ ASWLog::TASWLogConfig MakeSyslogConfig()
     config.Line.ShowProcessId = false;
     config.Line.ShowThreadId = false;
     config.Shutdown.WriteLine = false;
+    config.Startup.WriteLoggerVersion = false;
     config.Startup.WriteTimeInfo = false;
     config.Startup.WriteOSInfo = false;
     config.Startup.WriteDriveInfo = false;

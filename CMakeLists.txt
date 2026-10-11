@@ -13,6 +13,8 @@ endforeach()
 
 project(ASWLog
     VERSION ${ASWLOG_VERSION_MAJOR}.${ASWLOG_VERSION_MINOR}.${ASWLOG_VERSION_PATCH}
+    DESCRIPTION "A thread-safe, dependency-free C++20 logging library for Windows and Linux"
+    HOMEPAGE_URL "https://github.com/ASWSoftware/asw-log"
     LANGUAGES CXX
 )
 

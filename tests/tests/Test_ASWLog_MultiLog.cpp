@@ -103,8 +103,14 @@ protected:
 public:
     std::vector<std::string> Calls;
     std::vector<ASWLog::TASWLogRecord> Records; // Every field but Message
+    bool CloseResult = true; // Returned by Close()
     bool FlushResult = true; // Returned by Flush()
+    bool InitializeResult = true; // Returned by Initialize()
+    bool IsOpenResult = true; // Returned by IsOpen()
+    bool OpenResult = true; // Returned by Open()
     bool ReconfigureResult = true; // Returned by Reconfigure()
+    int CloseCount = 0; // How often Close() was called
+    int OpenCount = 0; // How often Open() was called
     bool WasInitialized = false; // Initialize() was called
     bool InitializeHadBeforeWrite = false; // The config passed to Initialize() had an OnBeforeWrite hook
 
@@ -112,7 +118,7 @@ public:
     {
         WasInitialized = true;
         InitializeHadBeforeWrite = config.OnBeforeWrite != nullptr;
-        return true;
+        return InitializeResult;
     }
 
     bool Reconfigure(const ASWLog::TASWLogConfig& config) noexcept override
@@ -124,12 +130,14 @@ public:
 
     bool Open() noexcept override
     {
-        return true;
+        ++OpenCount;
+        return OpenResult;
     }
 
     bool Close() noexcept override
     {
-        return true;
+        ++CloseCount;
+        return CloseResult;
     }
 
     bool Flush() noexcept override
@@ -140,7 +148,7 @@ public:
 
     bool IsOpen() const noexcept override
     {
-        return true;
+        return IsOpenResult;
     }
 };
 
@@ -248,6 +256,7 @@ ASWLog::TASWLogConfig MakeFileConfig(const std::filesystem::path& dir, const std
     config.Line.ShowSourceLine = false;
     config.File.OpenRetryCount = 1;
     config.Shutdown.WriteLine = false;
+    config.Startup.WriteLoggerVersion = false;
     config.Startup.WriteTimeInfo = false;
     config.Startup.WriteOSInfo = false;
     config.Startup.WriteDriveInfo = false;
@@ -274,6 +283,7 @@ TTest_ASWLog_MultiLog::TTest_ASWLog_MultiLog()
     RegisterTest(&TTest_ASWLog_MultiLog::Test_Backtrace_EachLoggerKeepsItsOwn, "Backtrace_EachLoggerKeepsItsOwn");
     RegisterTest(&TTest_ASWLog_MultiLog::Test_Backtrace_IsNotKeptByTheMultiLog, "Backtrace_IsNotKeptByTheMultiLog");
     RegisterTest(&TTest_ASWLog_MultiLog::Test_Close_AllowsInitializeAgain, "Close_AllowsInitializeAgain");
+    RegisterTest(&TTest_ASWLog_MultiLog::Test_Close_ReachesEverySinkEvenAfterAFailure, "Close_ReachesEverySinkEvenAfterAFailure");
     RegisterTest(&TTest_ASWLog_MultiLog::Test_Contains_ReflectsRegistrationState, "Contains_ReflectsRegistrationState");
     RegisterTest(&TTest_ASWLog_MultiLog::Test_DumpBacktrace_ReachesEverySinkUnlessDisabled, "DumpBacktrace_ReachesEverySinkUnlessDisabled");
     RegisterTest(&TTest_ASWLog_MultiLog::Test_Flush_ReachesEverySinkEvenAfterAFailure, "Flush_ReachesEverySinkEvenAfterAFailure");
@@ -283,6 +293,7 @@ TTest_ASWLog_MultiLog::TTest_ASWLog_MultiLog()
     RegisterTest(&TTest_ASWLog_MultiLog::Test_GetLoggerCount_ReflectsAddAndRemove, "GetLoggerCount_ReflectsAddAndRemove");
     RegisterTest(&TTest_ASWLog_MultiLog::Test_GetLoggers_ReturnsSnapshotOfRegisteredSinks, "GetLoggers_ReturnsSnapshotOfRegisteredSinks");
     RegisterTest(&TTest_ASWLog_MultiLog::Test_Initialize_ConcurrentCallsSucceedOnce, "Initialize_ConcurrentCallsSucceedOnce");
+    RegisterTest(&TTest_ASWLog_MultiLog::Test_Initialize_FailsOnlyForASinkThatIsNotOpen, "Initialize_FailsOnlyForASinkThatIsNotOpen");
     RegisterTest(&TTest_ASWLog_MultiLog::Test_IsOpen_RequiresAllSinksOpen, "IsOpen_RequiresAllSinksOpen");
     RegisterTest(&TTest_ASWLog_MultiLog::Test_Log_AtLevelOffIsNotFannedOut, "Log_AtLevelOffIsNotFannedOut");
     RegisterTest(&TTest_ASWLog_MultiLog::Test_Log_FansOutToAllRegisteredSinks, "Log_FansOutToAllRegisteredSinks");
@@ -290,6 +301,7 @@ TTest_ASWLog_MultiLog::TTest_ASWLog_MultiLog()
     RegisterTest(&TTest_ASWLog_MultiLog::Test_LogFmt_FormatsOnceForAllSinks, "LogFmt_FormatsOnceForAllSinks");
     RegisterTest(&TTest_ASWLog_MultiLog::Test_LogForce_BypassesCompositeGate, "LogForce_BypassesCompositeGate");
     RegisterTest(&TTest_ASWLog_MultiLog::Test_OnBeforeWrite_RunsOnceBeforeTheFanOut, "OnBeforeWrite_RunsOnceBeforeTheFanOut");
+    RegisterTest(&TTest_ASWLog_MultiLog::Test_Open_ReachesEverySinkEvenAfterAFailure, "Open_ReachesEverySinkEvenAfterAFailure");
     RegisterTest(&TTest_ASWLog_MultiLog::Test_Reconfigure_PassesConfigToEverySink, "Reconfigure_PassesConfigToEverySink");
     RegisterTest(&TTest_ASWLog_MultiLog::Test_RemoveAllLoggers_ClearsRegistrationAndReturnsCount, "RemoveAllLoggers_ClearsRegistrationAndReturnsCount");
     RegisterTest(&TTest_ASWLog_MultiLog::Test_RemoveLogger_StopsReceivingEntries, "RemoveLogger_StopsReceivingEntries");
@@ -447,6 +459,29 @@ void TTest_ASWLog_MultiLog::Test_Close_AllowsInitializeAgain()
     CheckTrue(secondInitialize, "Initialize after Close should succeed");
     CheckEquals(ASWLog::Level::Error, levelAfterSecondInitialize, "Initialize after Close should seed the level from the new config");
     CheckContains(ReadFileText(fileA), "after_reinitialize", "Initialize after Close should initialize the sinks again");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_MultiLog::Test_Close_ReachesEverySinkEvenAfterAFailure()
+{
+    // Arrange: the first sink's close fails
+    TRecordingLogger failingSink;
+    failingSink.CloseResult = false;
+    TRecordingLogger sink;
+
+    ASWLog::TASWMultiLog multiLog;
+    multiLog.AddLogger(failingSink);
+    multiLog.AddLogger(sink);
+
+    // Act
+    const bool closedWithFailure = multiLog.Close();
+    failingSink.CloseResult = true;
+    const bool closed = multiLog.Close();
+
+    // Assert
+    CheckFalse(closedWithFailure, "Close() should return false if any sink's close fails");
+    CheckTrue(closed, "Close() should return true once every sink's close succeeds");
+    CheckEquals(2, failingSink.CloseCount, "Each Close() should reach the failing sink");
+    CheckEquals(2, sink.CloseCount, "A sink's failed close should not stop the other sinks from being closed");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_MultiLog::Test_Contains_ReflectsRegistrationState()
@@ -694,6 +729,30 @@ void TTest_ASWLog_MultiLog::Test_Initialize_ConcurrentCallsSucceedOnce()
     CheckEquals(roundCount, roundsWithOneSuccess, "Exactly one of the concurrent Initialize calls should succeed");
 }
 //---------------------------------------------------------------------------
+void TTest_ASWLog_MultiLog::Test_Initialize_FailsOnlyForASinkThatIsNotOpen()
+{
+    // Arrange: the first sink's Initialize() fails, as it does for a logger that is already initialized
+    TRecordingLogger failingSink;
+    failingSink.InitializeResult = false;
+    failingSink.IsOpenResult = false;
+    TRecordingLogger sink;
+
+    ASWLog::TASWMultiLog multiLog;
+    multiLog.AddLogger(failingSink);
+    multiLog.AddLogger(sink);
+
+    // Act: first the sink isn't open, then it is (initialized earlier on its own)
+    const bool initializedWithClosedSink = multiLog.Initialize(ASWLog::TASWLogConfig());
+    multiLog.Close();
+    failingSink.IsOpenResult = true;
+    const bool initializedWithOpenSink = multiLog.Initialize(ASWLog::TASWLogConfig());
+
+    // Assert
+    CheckFalse(initializedWithClosedSink, "Initialize() should return false if a sink fails and isn't open");
+    CheckTrue(initializedWithOpenSink, "A sink that fails Initialize() but is open (initialized already) should count as ready");
+    CheckTrue(sink.WasInitialized, "A sink's failed Initialize() should not stop the other sinks from being initialized");
+}
+//---------------------------------------------------------------------------
 void TTest_ASWLog_MultiLog::Test_IsOpen_RequiresAllSinksOpen()
 {
     // Arrange
@@ -895,6 +954,29 @@ void TTest_ASWLog_MultiLog::Test_OnBeforeWrite_RunsOnceBeforeTheFanOut()
         "The sinks should get the entries as the multi-log's hook changed them, not the dropped one");
     CheckTrue(second.Calls == std::vector<std::string>{ "Reconfigure", "Log:multi:entry+second", "Reconfigure", "Log:multi:after" },
         "A sink's own hook should run after the multi-log's, until the multi-log's Reconfigure() replaces its config");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_MultiLog::Test_Open_ReachesEverySinkEvenAfterAFailure()
+{
+    // Arrange: the first sink's open fails
+    TRecordingLogger failingSink;
+    failingSink.OpenResult = false;
+    TRecordingLogger sink;
+
+    ASWLog::TASWMultiLog multiLog;
+    multiLog.AddLogger(failingSink);
+    multiLog.AddLogger(sink);
+
+    // Act
+    const bool openedWithFailure = multiLog.Open();
+    failingSink.OpenResult = true;
+    const bool opened = multiLog.Open();
+
+    // Assert
+    CheckFalse(openedWithFailure, "Open() should return false if any sink's open fails");
+    CheckTrue(opened, "Open() should return true once every sink's open succeeds");
+    CheckEquals(2, failingSink.OpenCount, "Each Open() should reach the failing sink");
+    CheckEquals(2, sink.OpenCount, "A sink's failed open should not stop the other sinks from being opened");
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_MultiLog::Test_Reconfigure_PassesConfigToEverySink()

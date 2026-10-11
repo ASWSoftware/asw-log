@@ -256,6 +256,7 @@ void TTest_ASWLog_Fields::Test_Async_OnLogEntryGetsTheFieldsAfterTheScopeEnds()
     config.File.FilePath = "async.log";
     config.File.OpenRetryCount = 1;
     config.Async.Enabled = true;
+    config.Startup.WriteLoggerVersion = false;
     config.Startup.WriteTimeInfo = false;
     config.Startup.WriteOSInfo = false;
     config.Startup.WriteDriveInfo = false;

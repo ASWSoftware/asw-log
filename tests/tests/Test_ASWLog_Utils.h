@@ -45,6 +45,8 @@ private: // Test methods
     void Test_GenerateLogFileName_PrefixAndPostfixAreOptional();
     void Test_GetCurrentOSProcessId_MatchesOS();
     void Test_GetCurrentOSThreadId_IdentifiesCallingThread();
+    void Test_GetFileVersionString_IsEmptyWithoutAVersionResource();
+    void Test_GetFileVersionString_ReadsTheFileVersion();
     void Test_GetOSInfoString_ContainsEdition();
     void Test_GetTimeInfoString_ReportsCurrentOffset();
     void Test_GetWindowsEditionName_ProductTypes();
@@ -65,6 +67,7 @@ private: // Test methods
     void Test_Time_WriteISO8601_CalendarEdges();
     void Test_Time_WriteISO8601_LocalTimeWithEachPrecision();
     void Test_Time_WriteISO8601_UTCWithEachPrecision();
+    void Test_Time_WriteISO8601_YearPast9999IsWrittenInFull();
     void Test_TrimSpaces_RemovesOuterSpacesAndTabs();
 
 public:

@@ -2,7 +2,10 @@
 ASWLog_SyslogLog.h
 Author: Anthony S. West - ASW Software
 
-A light-weight logging tool.
+A logging library.
+
+TASWSyslogLog, a text logger that sends its lines to the Linux system log
+(and the systemd journal); it writes nothing on Windows.
 
 Requires C++ 20 or higher.
 

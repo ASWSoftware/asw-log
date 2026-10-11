@@ -60,6 +60,7 @@ ASWLog::TASWLogConfig MakeMemoryConfig(std::size_t maxLines = 1000, std::size_t 
     config.Line.ShowProcessId = false;
     config.Line.ShowThreadId = false;
     config.Shutdown.WriteLine = false;
+    config.Startup.WriteLoggerVersion = false;
     config.Startup.WriteTimeInfo = false;
     config.Startup.WriteOSInfo = false;
     config.Startup.WriteDriveInfo = false;

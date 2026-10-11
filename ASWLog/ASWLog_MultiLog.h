@@ -2,7 +2,10 @@
 ASWLog_MultiLog.h
 Author: Anthony S. West - ASW Software
 
-A light-weight logging tool.
+A logging library.
+
+TASWMultiLog, which passes each entry on to several loggers, e.g. a file
+logger and a console logger.
 
 Requires C++ 20 or higher.
 

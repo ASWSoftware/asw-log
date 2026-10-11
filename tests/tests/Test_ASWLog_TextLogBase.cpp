@@ -49,6 +49,8 @@ limitations under the License.
 #include "ASWLog_FileLog.h"
 #include "ASWLog_Formatter.h"
 #include "ASWLog_TextLogBase.h"
+#include "ASWLog_Utils.h"
+#include "ASWLog_Version.h"
 //---------------------------------------------------------------------------
 
 namespace ASWUnitTests
@@ -342,6 +344,7 @@ ASWLog::TASWLogConfig MakeQuietConfig()
     config.Line.ShowSourceLine = false;
     config.File.OpenRetryCount = 1;
     config.Shutdown.WriteLine = false;
+    config.Startup.WriteLoggerVersion = false;
     config.Startup.WriteTimeInfo = false;
     config.Startup.WriteOSInfo = false;
     config.Startup.WriteDriveInfo = false;
@@ -399,6 +402,9 @@ bool WaitUntil(const std::function<bool()>& condition)
 TTest_ASWLog_TextLogBase::TTest_ASWLog_TextLogBase()
     : inherited("ASWLog_TextLogBase_Tests")
 {
+    RegisterTest(&TTest_ASWLog_TextLogBase::Test_ApplicationInfo_WritesTheCommandLineWhenAsked, "ApplicationInfo_WritesTheCommandLineWhenAsked");
+    RegisterTest(&TTest_ASWLog_TextLogBase::Test_ApplicationInfo_WritesTheConfiguredVersion, "ApplicationInfo_WritesTheConfiguredVersion");
+    RegisterTest(&TTest_ASWLog_TextLogBase::Test_ApplicationInfo_WritesTheExecutablesFileVersionByDefault, "ApplicationInfo_WritesTheExecutablesFileVersionByDefault");
     RegisterTest(&TTest_ASWLog_TextLogBase::Test_Async_BacktraceIsTakenWhenTheTriggerIsLogged, "Async_BacktraceIsTakenWhenTheTriggerIsLogged");
     RegisterTest(&TTest_ASWLog_TextLogBase::Test_Async_BlockWaitsForRoomInTheQueue, "Async_BlockWaitsForRoomInTheQueue");
     RegisterTest(&TTest_ASWLog_TextLogBase::Test_Async_CallReturnsBeforeTheEntryIsWritten, "Async_CallReturnsBeforeTheEntryIsWritten");
@@ -418,6 +424,7 @@ TTest_ASWLog_TextLogBase::TTest_ASWLog_TextLogBase()
     RegisterTest(&TTest_ASWLog_TextLogBase::Test_Flush_ThrowingHookDoesNotEscape, "Flush_ThrowingHookDoesNotEscape");
     RegisterTest(&TTest_ASWLog_TextLogBase::Test_Formatter_FormatsEveryFileLine, "Formatter_FormatsEveryFileLine");
     RegisterTest(&TTest_ASWLog_TextLogBase::Test_Initialize_ThrowingFormatterStillInitializes, "Initialize_ThrowingFormatterStillInitializes");
+    RegisterTest(&TTest_ASWLog_TextLogBase::Test_Initialize_WritesLoggerVersionAfterTheBanner, "Initialize_WritesLoggerVersionAfterTheBanner");
     RegisterTest(&TTest_ASWLog_TextLogBase::Test_Initialize_WritesStartupLinesThenCallsAfterEntry, "Initialize_WritesStartupLinesThenCallsAfterEntry");
     RegisterTest(&TTest_ASWLog_TextLogBase::Test_Log_AtLevelOffIsNeverWritten, "Log_AtLevelOffIsNeverWritten");
     RegisterTest(&TTest_ASWLog_TextLogBase::Test_Log_DroppedWhenNotReadyOrNotPrepared, "Log_DroppedWhenNotReadyOrNotPrepared");
@@ -471,6 +478,87 @@ void TTest_ASWLog_TextLogBase::TearDown_Test(ITestCase& testCase)
 
 // /////// Begin tests after this line ///////////////////////
 
+//---------------------------------------------------------------------------
+void TTest_ASWLog_TextLogBase::Test_ApplicationInfo_WritesTheCommandLineWhenAsked()
+{
+    // Arrange
+    TMemoryOutput defaultOutput;
+    TMemoryTextLog defaultLog(defaultOutput);
+    TMemoryOutput commandLineOutput;
+    TMemoryTextLog commandLineLog(commandLineOutput);
+    auto config = MakeQuietConfig();
+    config.Startup.WriteApplicationInfo = true;
+    auto commandLineConfig = config;
+    commandLineConfig.Startup.WriteCommandLine = true;
+
+    // Act
+    const bool defaultInitialized = defaultLog.Initialize(config);
+    const bool commandLineInitialized = commandLineLog.Initialize(commandLineConfig);
+
+    // Assert
+    CheckTrue(defaultInitialized && commandLineInitialized, "Initialize should succeed");
+    CheckEquals(1, defaultOutput.Lines.size(), "Initialize should write the App line");
+    CheckEquals(1, commandLineOutput.Lines.size(), "Initialize should write the App line");
+    if (defaultOutput.Lines.size() == 1 && commandLineOutput.Lines.size() == 1)
+    {
+        CheckNotContains(defaultOutput.Lines[0], "command_line=", "By default the App line should leave out the command line");
+        CheckEndsWith(commandLineOutput.Lines[0], std::format(", command_line='{}'\n", ASWLog::GetCommandLineString()),
+            "Startup.WriteCommandLine should add the command line at the end of the App line");
+    }
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_TextLogBase::Test_ApplicationInfo_WritesTheConfiguredVersion()
+{
+    // Arrange
+    TMemoryOutput output;
+    TMemoryTextLog log(output);
+    auto config = MakeQuietConfig();
+    config.Startup.WriteApplicationInfo = true;
+    config.Startup.ApplicationVersion = "2.3.1 beta";
+
+    // Act
+    const bool initialized = log.Initialize(config);
+
+    // Assert
+    CheckTrue(initialized, "Initialize should succeed");
+    CheckEquals(1, output.Lines.size(), "Initialize should write the App line");
+    if (output.Lines.size() == 1)
+    {
+        CheckStartsWith(output.Lines[0], "[INFO]: App: app_exe='", "The App line should start with the executable's path");
+        CheckContains(output.Lines[0], "', app_version='2.3.1 beta', app_target=",
+            "The configured version should follow the executable's path: " + output.Lines[0]);
+    }
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_TextLogBase::Test_ApplicationInfo_WritesTheExecutablesFileVersionByDefault()
+{
+    // Arrange: no configured version. The test executable has a version resource in some builds (e.g. the VCL GUI
+    // runner's 1.0.0.0) and none in others (e.g. MinGW's), where no version is written.
+    TMemoryOutput output;
+    TMemoryTextLog log(output);
+    auto config = MakeQuietConfig();
+    config.Startup.WriteApplicationInfo = true;
+    const std::string fileVersion = ASWLog::GetFileVersionString(ASWLog::GetExecutablePath());
+
+    // Act
+    const bool initialized = log.Initialize(config);
+
+    // Assert
+    CheckTrue(initialized, "Initialize should succeed");
+    CheckEquals(1, output.Lines.size(), "Initialize should write the App line");
+    if (output.Lines.size() == 1)
+    {
+        if (fileVersion.empty())
+        {
+            CheckNotContains(output.Lines[0], "app_version=", "Without a version resource, no version should be written: " + output.Lines[0]);
+        }
+        else
+        {
+            CheckContains(output.Lines[0], std::format("', app_version='{}', app_target=", fileVersion),
+                "The executable's file version should follow its path: " + output.Lines[0]);
+        }
+    }
+}
 //---------------------------------------------------------------------------
 void TTest_ASWLog_TextLogBase::Test_Async_BlockWaitsForRoomInTheQueue()
 {
@@ -1094,6 +1182,31 @@ void TTest_ASWLog_TextLogBase::Test_Initialize_ThrowingFormatterStillInitializes
     CheckEquals(2, output.AfterEntryCount, "AfterEntryUnlocked should still run after the startup lines, and after the raw entry");
     CheckTrue(reportedMessages == std::vector<std::string>{ "Skipped the startup lines: format failed", "Dropped an entry: format failed" },
         "The skipped startup lines and the dropped entry should be reported");
+}
+//---------------------------------------------------------------------------
+void TTest_ASWLog_TextLogBase::Test_Initialize_WritesLoggerVersionAfterTheBanner()
+{
+    // Arrange
+    TMemoryOutput output;
+    TMemoryTextLog log(output);
+    auto config = MakeQuietConfig();
+    config.Startup.Banner = "starting";
+    config.Startup.WriteLoggerVersion = true;
+    config.Startup.WriteTimeInfo = true;
+
+    // Act
+    const bool initialized = log.Initialize(config);
+
+    // Assert
+    CheckTrue(initialized, "Initialize should succeed");
+    CheckEquals(3, output.Lines.size(), "Initialize should write the banner, the version line and the time line");
+    if (output.Lines.size() == 3)
+    {
+        CheckEquals(std::string("[INFO]: starting\n"), output.Lines[0], "The banner should come first");
+        CheckEquals(std::format("[INFO]: ASWLog: version={}, logger=TMemoryTextLog\n", ASWLog::Version), output.Lines[1],
+            "The version line should follow the banner, with the version and the logger's class");
+        CheckStartsWith(output.Lines[2], "[INFO]: Time: ", "The other startup lines should follow: " + output.Lines[2]);
+    }
 }
 //---------------------------------------------------------------------------
 void TTest_ASWLog_TextLogBase::Test_Initialize_WritesStartupLinesThenCallsAfterEntry()

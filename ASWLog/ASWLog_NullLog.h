@@ -2,7 +2,10 @@
 ASWLog_NullLog.h
 Author: Anthony S. West - ASW Software
 
-A light-weight logging tool.
+A logging library.
+
+TASWNullLog, a logger that writes nothing, e.g. to turn logging off without
+changing the code that logs, or to pass to code under test.
 
 Requires C++ 20 or higher.
 

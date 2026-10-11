@@ -2,9 +2,10 @@
 ASWLog_Types.h
 Author: Anthony S. West - ASW Software
 
-A light-weight logging tool.
+A logging library.
 
-Source for the ASWLog types.
+The basic types: Level and the other enums, TASWLogRecord (an entry as a
+logger receives it) and TASWLogError (a logger's internal failure).
 
 Requires C++ 20 or higher.
 

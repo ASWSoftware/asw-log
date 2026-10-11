@@ -2,7 +2,10 @@
 ASWLog_Version.h
 Author: Anthony S. West - ASW Software
 
-Single source for the ASWLog semantic version (https://semver.org).
+A logging library.
+
+The ASWLog version (https://semver.org), as macros and constants: the only
+place where the version is set.
 
 Requires C++ 20 or higher.
 

@@ -31,6 +31,7 @@ limitations under the License.
 //---------------------------------------------------------------------------
 #include "ASWLog_CrashHandler.h"
 #include "ASWLog_Utils.h"
+#include "ASWLog_Version.h"
 //---------------------------------------------------------------------------
 
 namespace ASWLog
@@ -260,22 +261,8 @@ bool TASWTextLogBase::Initialize(const TASWLogConfig& config) noexcept
 
         Detail::TCrashHandling::Register(*this);
 
-        // The output is ready, so the startup lines are best effort: if one throws (e.g. a formatter that throws, or
-        // out of memory while gathering the system info), the rest are skipped but the logger is still initialized
-        try
-        {
-            if (!GetConfigUnlocked().Startup.Banner.empty())
-            {
-                WriteInfoLine(GetConfigUnlocked().Startup.Banner);
-            }
-
-            WriteInitializationInfo();
-        }
-        catch (...)
-        {
-            ReportCurrentExceptionUnlocked("Skipped the startup lines");
-        }
-
+        // The output is ready, so the startup lines are best effort: a failed one doesn't fail Initialize()
+        WriteStartupLinesUnlocked();
         AfterEntryUnlocked();
 
         return true;
@@ -862,7 +849,18 @@ void TASWTextLogBase::WaitForQueuedEntries()
 //---------------------------------------------------------------------------
 void TASWTextLogBase::WriteApplicationInfo()
 {
-    auto applicationInfo = std::format("app_exe='{}', app_target=", PathToUTF8String(GetExecutablePath()));
+    const auto executablePath = GetExecutablePath();
+    auto applicationInfo = std::format("app_exe='{}'", PathToUTF8String(executablePath));
+
+    // The configured version, or else the executable's file version (Windows)
+    auto applicationVersion = GetConfigUnlocked().Startup.ApplicationVersion;
+    if (applicationVersion.empty())
+        applicationVersion = GetFileVersionString(executablePath);
+
+    if (!applicationVersion.empty())
+        applicationInfo += std::format(", app_version='{}'", applicationVersion);
+
+    applicationInfo += ", app_target=";
 
 #if defined(_WIN64)
     applicationInfo += "Win64";
@@ -977,6 +975,9 @@ void TASWTextLogBase::WriteInfoLine(std::string_view message, std::source_locati
 //---------------------------------------------------------------------------
 void TASWTextLogBase::WriteInitializationInfo()
 {
+    if (GetConfigUnlocked().Startup.WriteLoggerVersion)
+        WriteLoggerVersionInfo();
+
     if (GetConfigUnlocked().Startup.WriteTimeInfo)
         WriteTimeInfo();
 
@@ -1017,6 +1018,12 @@ std::string TASWTextLogBase::WriteLogEntry(const TASWLogRecord& record)
     WriteLineUnlocked(record.LogLevel, line, IsFormatted(record, config));
 
     return line;
+}
+
+//---------------------------------------------------------------------------
+void TASWTextLogBase::WriteLoggerVersionInfo()
+{
+    WriteInfoLine(std::format("ASWLog: version={}, logger={}", Version, GetLoggerClassName()));
 }
 
 //---------------------------------------------------------------------------
@@ -1165,6 +1172,31 @@ void TASWTextLogBase::WriteRecord(const TASWLogRecord& record)
 
     if (callbackConfig != nullptr)
         DispatchLogCallback(*callbackConfig, record, writtenLine);
+}
+
+//---------------------------------------------------------------------------
+void TASWTextLogBase::WriteStartupLinesUnlocked(std::string_view firstLine) noexcept
+{
+    m_IsWritingStartupLines = true;
+
+    // If a line throws (e.g. a formatter that throws, or out of memory while gathering the system info), the rest are
+    // skipped
+    try
+    {
+        if (!firstLine.empty())
+            WriteInfoLine(firstLine);
+
+        if (!GetConfigUnlocked().Startup.Banner.empty())
+            WriteInfoLine(GetConfigUnlocked().Startup.Banner);
+
+        WriteInitializationInfo();
+    }
+    catch (...)
+    {
+        ReportCurrentExceptionUnlocked("Skipped the startup lines");
+    }
+
+    m_IsWritingStartupLines = false;
 }
 
 //---------------------------------------------------------------------------

@@ -1,6 +1,14 @@
 # ASWLog - https://github.com/ASWSoftware/asw-log
 
-ASWLog is a thread-safe light-weight C++ logging tool for Windows and Linux projects.
+ASWLog is a thread-safe, dependency-free C++20 logging library for Windows and Linux.
+
+## Design
+
+ASWLog is a folder of standard C++ sources, or one CMake target, with no third-party code. Its defaults put crash
+durability first: a logging call is synchronous and every entry is flushed before the call returns, so the last
+entries before a crash are in the file. A call below the logger's level costs a few nanoseconds, so Debug and Trace
+calls can stay in release builds and be turned on at run time. The rest (asynchronous writing, backtrace, JSON and
+pattern formatters, crash handlers, and the other extras below) is opt-in.
 
 ## Features
 
@@ -16,7 +24,9 @@ ASWLog is a thread-safe light-weight C++ logging tool for Windows and Linux proj
   against their arguments at compile time; wrap one built at run time in `ASWLog::RuntimeFormat()`.
 - Runtime `Open()`, `Close()`, `Flush()` and log rotation controls, and `Reconfigure()` to change settings safely
   while other threads log.
-- Optional application and system memory, OS, drive, time, and command-line diagnostics.
+- Optional startup diagnostics: the ASWLog and application versions (on Windows, the application's is read from its
+  version resource unless set), application and system memory, OS, drive, time, and the command line, written again
+  at the top of each new file after a rotation, saying which file the log continues from.
 - Retry handling for temporary file access conflicts and Windows reader-sharing support.
 - Crash durability: every entry is flushed by default, and with buffered flushing Error and Critical entries still
   are (`File.FlushImmediatelyAtLevel`). Entries at a chosen level can also be synced to disk to survive a power loss
@@ -47,6 +57,10 @@ ASWLog is a thread-safe light-weight C++ logging tool for Windows and Linux proj
 - Rate-limited logging for entries that can repeat often: `ASWLOG_ONCE`, `ASWLOG_EVERY_N` and `ASWLOG_EVERY_INTERVAL`
   (`ASWLog_Limiter.h`), e.g. `ASWLOG_EVERY_INTERVAL(log, std::chrono::seconds(5), ASWLog::Level::Warn, "Retrying {}",
   host);`, which counts the skipped entries in a `suppressed` field.
+- Settings from environment variables (`TASWLogConfig::ApplyEnvironment()`), e.g. `ASWLOG_LEVEL=Trace` to see
+  everything a deployed release build logs, without rebuilding it.
+- Wide-string messages: every logging method also takes `wchar_t` or `char16_t` text (e.g. `L"..."`, a
+  `std::wstring`, or C++Builder's `UnicodeString::c_str()`), converted to UTF-8 only if the entry is written.
 - A hook to drop or change entries before they are written (`TASWLogConfig::OnBeforeWrite`), e.g. to redact secrets
   or drop noisy entries by content, category or field.
 - Structured fields per entry, e.g. `logger.LogInfo("Order placed", {{"orderId", 17}})`, and scoped context that every
@@ -67,7 +81,7 @@ ASWLog is a thread-safe light-weight C++ logging tool for Windows and Linux proj
 
 # Donations:
 
-If you find this tool helpful, donations are always appreciated:
+If you find this library helpful, donations are always appreciated:
 
 PayPal:
 donate@aswsoftware.com
@@ -77,13 +91,65 @@ Bitcoin:
 
 # How to Use
 
-Add the source in `ASWLog` to your C++ project.
+## Quick start
 
-## CMake
+```cpp
+#include "ASWLog_CrashHandler.h"
+#include "ASWLog_FileLog.h"
+
+int main()
+{
+    ASWLog::TASWLogConfig config;
+    config.File.FilePath = "myapp.txt"; // In the "logs" folder
+    config.ApplyEnvironment(); // Optional: e.g. ASWLOG_LEVEL=Debug overrides the level
+
+    auto& log = ASWLog::TASWFileLog::GetInstance();
+    if (!log.Initialize(config))
+        return 1;
+
+    ASWLog::InstallCrashHandlers(); // Flushes the log and adds a "Crash:" line if the application crashes
+
+    log.LogInfo("Started");
+    log.LogWarnFmt("Disk {} is {}% full", "C:", 93); // Checked against its arguments at compile time
+    log.LogInfo("Order placed", { { "orderId", 17 }, { "total", 9.99 } });
+    log.LogDebug("Not written: below the minimum level (Info by default)");
+
+    return 0;
+}
+```
+
+writes `logs/myapp.txt`, after the startup lines (ASWLog version, time, OS, drive, memory, application; see
+`TASWLogConfig::Startup`):
+
+```text
+[2026-10-11T00:24:25.089Z][INFO][P:6180][T:6648]: Started
+[2026-10-11T00:24:25.089Z][WARN][P:6180][T:6648]: Disk C: is 93% full
+[2026-10-11T00:24:25.089Z][INFO][P:6180][T:6648][orderId=17 total=9.99]: Order placed
+[2026-10-11T00:24:25.089Z][INFO][P:6180][T:6648]: Logger shutdown: 2026-10-11T00:24:25.089Z
+```
+
+The `example/src/main.cpp` app shows more: console, multi-log, categories, scopes, rate limiting and wide text.
+
+## Adding ASWLog to a project
+
+### Copied sources (any build system)
+
+Add every `.cpp` file in `ASWLog/` to the project, and the `ASWLog` folder to its include path, and compile as C++20.
+On Windows, link `psapi` and `advapi32` (RAD Studio links them by default); on Linux, the threads library
+(`-pthread`). `Deploy.bat <folder>` copies the library sources, the examples and the docs to a folder, e.g. for a
+release package.
+
+### RAD Studio
+
+Add the `ASWLog/*.cpp` files to the project (Project > Add to Project) and the `ASWLog` folder to the include path
+(Project > Options > Building > C++ Shared Options > Include path). RAD Studio 13.1 or later with the modern Clang
+toolchain (Win64x). `example/rad370/ASWLogExample.cbproj` is a working project to copy settings from.
+
+### CMake
 
 The repository's root `CMakeLists.txt` defines the static library target `ASWLog::ASWLog`. Linking to it adds the
-`ASWLog` include folder, C++20, and the system libraries the logger needs (the threads library, and `psapi` on
-Windows). Add it from a copy of the repository, such as a git submodule:
+`ASWLog` include folder, C++20, and the system libraries the logger needs (the threads library, and `psapi` and
+`advapi32` on Windows). Add it from a copy of the repository, such as a git submodule:
 
 ```
 add_subdirectory(third_party/asw-log)
@@ -138,6 +204,60 @@ cmake --build example/cmake/build --config Release
 
 The executable is written to `example/build/bin/Release/ASWLogExample.exe`, alongside RAD Studio output.
 
+## API overview
+
+**Loggers.** Each implements `ASWLog::IASWLog` (`ASWLog_Interface.h`), so code that logs can take an `IASWLog&` and
+not care where the entries go. Most have a `GetInstance()` singleton, and any of them can also be created as an
+ordinary object.
+
+| Class | Header | Writes to |
+|---|---|---|
+| `TASWFileLog` | `ASWLog_FileLog.h` | A file, with rotation, daily rolling and backup cleanup |
+| `TASWConsoleLog` | `ASWLog_ConsoleLog.h` | stdout, and stderr for Warn and above, in color on a terminal |
+| `TASWDebuggerLog` | `ASWLog_DebuggerLog.h` | The debugger's output (Windows) |
+| `TASWMemoryLog` | `ASWLog_MemoryLog.h` | Memory: the newest lines, e.g. for an in-app log viewer |
+| `TASWSyslogLog` | `ASWLog_SyslogLog.h` | The system log and the systemd journal (Linux) |
+| `TASWWindowsEventLog` | `ASWLog_WindowsEventLog.h` | The Windows Event Log (Windows) |
+| `TASWNullLog` | `ASWLog_NullLog.h` | Nothing |
+| `TASWMultiLog` | `ASWLog_MultiLog.h` | Several loggers at once, e.g. a file and the console |
+| `TASWCategoryLog` | `ASWLog_CategoryLog.h` | Another logger, marking the entries with a category (e.g. `[Net]`) that can have a level of its own |
+
+The loggers that write to only one platform build on both and write nothing on the other, so the same code can add
+them everywhere.
+
+**Logging.** On any logger:
+
+- `LogTrace()`, `LogDebug()`, `LogInfo()`, `LogWarn()`, `LogError()`, `LogCritical()`, and `Log(level, ...)`.
+- `LogInfoFmt("Opened {} in {} ms", name, ms)` and the other `*Fmt` methods: `std::format`, with the format string
+  checked against its arguments at compile time (wrap a format string built at run time in `ASWLog::RuntimeFormat()`).
+  An entry below the minimum level isn't formatted.
+- `LogRaw()` writes the message as it is, without the line layout; `LogForce()` and `LogForceRaw()` write it whatever
+  the minimum level.
+- Fields: `LogInfo("Order placed", {{"orderId", 17}})`, `LogInfoFmt({{"orderId", id}}, "Order {} placed", id)`, and
+  `ASWLog::TASWLogScope scope{{"requestId", id}};` for fields that every entry on the thread carries while it exists
+  (`ASWLog_Fields.h`).
+- Wide text: `LogInfo(L"...")`, `LogInfoFmt(L"... {}", ...)`, and `ASWLog::Wide(text)` / `ASWLog::UTF8(text)` for
+  arguments (`ASWLog_Unicode.h`).
+- The caller's function and source line are captured automatically (shown with `Line.ShowFunctionName` and
+  `Line.ShowSourceLine`).
+
+**Control.** `Initialize(config)`, `Reconfigure(config)`, `GetConfig()`, `SetMinimumLevel()`, `ShouldLog(level)` (to
+skip building an expensive message), `SetEnabled()`, `Flush()`, `Open()`, `Close()` and `DumpBacktrace()`; a file
+logger also has `RotateLogFiles()` and `DeleteOldLogs()`.
+
+**More.** `ASWLog::InstallCrashHandlers()` (`ASWLog_CrashHandler.h`), the `ASWLOG_ONCE`, `ASWLOG_EVERY_N` and
+`ASWLOG_EVERY_INTERVAL` macros (`ASWLog_Limiter.h`), `TASWLogConfig::ApplyEnvironment()`, the formatters
+(`ASWLog_Formatter.h`), and the version (`ASWLog_Version.h`). The header comments document every class and method.
+
+## Documentation
+
+- [docs/Configuration.md](docs/Configuration.md): every setting, its default, and which loggers use it, plus the
+  environment variables.
+- [docs/Guarantees.md](docs/Guarantees.md): thread safety, the order of entries, which thread runs each callback,
+  object lifetimes, and choosing settings for crash durability.
+- [docs/CustomLoggers.md](docs/CustomLoggers.md): writing a formatter or a logger of your own.
+- [CHANGELOG.md](CHANGELOG.md): the changes in each release.
+
 ## Versions
 
 ASWLog follows [Semantic Versioning](https://semver.org). Releases are tagged on `main` (e.g. `v1.1.0`). Between
@@ -152,6 +272,15 @@ and as constants in the `ASWLog` namespace:
     // Uses something added in 1.1 (also present in 1.1.0-dev.N builds)
 #endif
 ```
+
+### Upgrading from 0.x
+
+1.0.0 is the first release with a stable interface; the 0.x releases changed it as the design settled. The releases
+that can need changes in code that uses ASWLog are 0.43.0, 0.45.0, 0.65.0, 0.75.0 (only for a class that implements
+`IASWLog` directly) and 1.0.0. In [CHANGELOG.md](CHANGELOG.md), read the **Changed** and **Removed** sections, and
+the entries marked "Breaking", of every release after the one you use: each says what existing code must change.
+Projects that list the ASWLog sources must also add the files that new releases added (the CHANGELOG names them, e.g.
+`ASWLog_Unicode.cpp`).
 
 # Unit Tests
 
@@ -193,6 +322,10 @@ cmake --build tests/cmake/build-tsan
 ```
 
 CI runs both with Clang. `ASWLOG_SANITIZE` applies to the library and everything that links to it.
+
+CI also measures which lines of the library the tests run (a Linux GCC build with `--coverage`, read by gcovr): the
+"Linux (GCC, coverage)" job shows a table on its summary page and keeps an HTML report as the `coverage-report`
+artifact. It is informational and never fails the run.
 
 On Windows with RAD Studio, the tests can also run in the ASWUnitTests VCL GUI runner, a window for choosing tests and
 reading their results: build `tests/vcl/gui/rad370/ASWLogTests_VCL_GUI.cbproj` (or its `Build_Win64x_*.bat` scripts),

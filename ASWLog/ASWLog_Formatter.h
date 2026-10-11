@@ -2,9 +2,11 @@
 ASWLog_Formatter.h
 Author: Anthony S. West - ASW Software
 
-A light-weight logging tool.
+A logging library.
 
-Source for the ASWLog line formatters.
+IASWLogFormatter, which turns an entry into the line a text logger writes,
+and the built-in formatters: TASWTextFormatter (the default layout),
+TASWPatternFormatter and TASWJSONFormatter (JSON Lines).
 
 Requires C++ 20 or higher.
 

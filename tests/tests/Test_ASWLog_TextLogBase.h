@@ -36,6 +36,9 @@ private:
     typedef TTestGroupBase inherited;
 
 private: // Test methods
+    void Test_ApplicationInfo_WritesTheCommandLineWhenAsked();
+    void Test_ApplicationInfo_WritesTheConfiguredVersion();
+    void Test_ApplicationInfo_WritesTheExecutablesFileVersionByDefault();
     void Test_Async_BacktraceIsTakenWhenTheTriggerIsLogged();
     void Test_Async_BlockWaitsForRoomInTheQueue();
     void Test_Async_CallReturnsBeforeTheEntryIsWritten();
@@ -55,6 +58,7 @@ private: // Test methods
     void Test_Flush_ThrowingHookDoesNotEscape();
     void Test_Formatter_FormatsEveryFileLine();
     void Test_Initialize_ThrowingFormatterStillInitializes();
+    void Test_Initialize_WritesLoggerVersionAfterTheBanner();
     void Test_Initialize_WritesStartupLinesThenCallsAfterEntry();
     void Test_Log_AtLevelOffIsNeverWritten();
     void Test_Log_DroppedWhenNotReadyOrNotPrepared();
