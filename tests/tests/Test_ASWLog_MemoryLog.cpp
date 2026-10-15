@@ -360,4 +360,4 @@ ASW_TEST(TTest_ASWLog_MemoryLog, Threads_ReaderGetsEveryLineOnce)
 } // namespace ASWUnitTests
 
 //---------------------------------------------------------------------------
-ASW_REGISTER_TEST_GROUP(ASWUnitTests::TTest_ASWLog_MemoryLog)
+ASW_REGISTER_TEST_GROUP_IN_SUITE(ASWUnitTests::TTest_ASWLog_MemoryLog, "Sinks")

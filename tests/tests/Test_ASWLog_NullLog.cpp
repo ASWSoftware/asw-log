@@ -256,4 +256,4 @@ ASW_TEST(TTest_ASWLog_NullLog, Wrapped_WritesNothing)
 } // namespace ASWUnitTests
 
 //---------------------------------------------------------------------------
-ASW_REGISTER_TEST_GROUP(ASWUnitTests::TTest_ASWLog_NullLog)
+ASW_REGISTER_TEST_GROUP_IN_SUITE(ASWUnitTests::TTest_ASWLog_NullLog, "Sinks")
