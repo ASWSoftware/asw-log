@@ -626,4 +626,4 @@ ASW_TEST(TTest_ASWLog_WindowsEventLog, Windows_ReportsARefusedEvent)
 } // namespace ASWUnitTests
 
 //---------------------------------------------------------------------------
-ASW_REGISTER_TEST_GROUP(ASWUnitTests::TTest_ASWLog_WindowsEventLog)
+ASW_REGISTER_TEST_GROUP_IN_SUITE(ASWUnitTests::TTest_ASWLog_WindowsEventLog, "Sinks")

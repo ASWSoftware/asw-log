@@ -437,4 +437,4 @@ ASW_TEST(TTest_ASWLog_SyslogLog, ShouldLog_FollowsThePlatform)
 } // namespace ASWUnitTests
 
 //---------------------------------------------------------------------------
-ASW_REGISTER_TEST_GROUP(ASWUnitTests::TTest_ASWLog_SyslogLog)
+ASW_REGISTER_TEST_GROUP_IN_SUITE(ASWUnitTests::TTest_ASWLog_SyslogLog, "Sinks")

@@ -333,4 +333,4 @@ ASW_TEST(TTest_ASWLog_DebuggerLog, Windows_WritesTheCrashLineDirectly)
 } // namespace ASWUnitTests
 
 //---------------------------------------------------------------------------
-ASW_REGISTER_TEST_GROUP(ASWUnitTests::TTest_ASWLog_DebuggerLog)
+ASW_REGISTER_TEST_GROUP_IN_SUITE(ASWUnitTests::TTest_ASWLog_DebuggerLog, "Sinks")

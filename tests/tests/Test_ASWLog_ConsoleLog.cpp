@@ -830,4 +830,4 @@ ASW_TEST(TTest_ASWLog_ConsoleLog, WarnAndAboveWriteToStdErr)
 } // namespace ASWUnitTests
 
 //---------------------------------------------------------------------------
-ASW_REGISTER_TEST_GROUP(ASWUnitTests::TTest_ASWLog_ConsoleLog)
+ASW_REGISTER_TEST_GROUP_IN_SUITE(ASWUnitTests::TTest_ASWLog_ConsoleLog, "Sinks")

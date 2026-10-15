@@ -3587,4 +3587,4 @@ ASW_TEST(TTest_ASWLog_FileLog, Write_EarlierRecordDoesNotRollLogBack)
 } // namespace ASWUnitTests
 
 //---------------------------------------------------------------------------
-ASW_REGISTER_TEST_GROUP(ASWUnitTests::TTest_ASWLog_FileLog)
+ASW_REGISTER_TEST_GROUP_IN_SUITE(ASWUnitTests::TTest_ASWLog_FileLog, "Sinks")
