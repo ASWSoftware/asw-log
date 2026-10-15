@@ -64,6 +64,12 @@ int WINAPI _tWinMain(HINSTANCE, HINSTANCE, LPTSTR, int)
 
         // The form outlives Run(); Application frees it later, during shutdown.
         exitCode = FormASWUnitTestsGUIMain->ExitCode();
+
+        // After a timeout, the abandoned test's thread may still be running, using one of the form's test groups,
+        // and after a crash their state may be corrupted, so the process ends here, as the console runner's does,
+        // without destroying them. The layout and selection were saved as the window closed.
+        if (FormASWUnitTestsGUIMain->WasRunAborted())
+            ExitProcess(static_cast<UINT>(exitCode));
     }
     catch (Exception& exception)
     {
