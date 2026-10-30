@@ -9,6 +9,9 @@
         <Projects Include="..\..\..\rad370\ASWLogTests.cbproj">
             <Dependencies/>
         </Projects>
+        <Projects Include="..\..\..\win32\gui\rad370\ASWLogTests_Win32_GUI.cbproj">
+            <Dependencies/>
+        </Projects>
     </ItemGroup>
     <ProjectExtensions>
         <Borland.Personality>Default.Personality.12</Borland.Personality>
@@ -35,14 +38,23 @@
     <Target Name="ASWLogTests:Make">
         <MSBuild Projects="..\..\..\rad370\ASWLogTests.cbproj" Targets="Make"/>
     </Target>
+    <Target Name="ASWLogTests_Win32_GUI">
+        <MSBuild Projects="..\..\..\win32\gui\rad370\ASWLogTests_Win32_GUI.cbproj"/>
+    </Target>
+    <Target Name="ASWLogTests_Win32_GUI:Clean">
+        <MSBuild Projects="..\..\..\win32\gui\rad370\ASWLogTests_Win32_GUI.cbproj" Targets="Clean"/>
+    </Target>
+    <Target Name="ASWLogTests_Win32_GUI:Make">
+        <MSBuild Projects="..\..\..\win32\gui\rad370\ASWLogTests_Win32_GUI.cbproj" Targets="Make"/>
+    </Target>
     <Target Name="Build">
-        <CallTarget Targets="ASWLogTests_VCL_GUI;ASWLogTests"/>
+        <CallTarget Targets="ASWLogTests_VCL_GUI;ASWLogTests;ASWLogTests_Win32_GUI"/>
     </Target>
     <Target Name="Clean">
-        <CallTarget Targets="ASWLogTests_VCL_GUI:Clean;ASWLogTests:Clean"/>
+        <CallTarget Targets="ASWLogTests_VCL_GUI:Clean;ASWLogTests:Clean;ASWLogTests_Win32_GUI:Clean"/>
     </Target>
     <Target Name="Make">
-        <CallTarget Targets="ASWLogTests_VCL_GUI:Make;ASWLogTests:Make"/>
+        <CallTarget Targets="ASWLogTests_VCL_GUI:Make;ASWLogTests:Make;ASWLogTests_Win32_GUI:Make"/>
     </Target>
     <Import Project="$(BDS)\Bin\CodeGear.Group.Targets" Condition="Exists('$(BDS)\Bin\CodeGear.Group.Targets')"/>
 </Project>

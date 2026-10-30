@@ -30,8 +30,8 @@ if(NOT TARGET ASWLog::ASWLog)
     add_subdirectory("${ASWLOG_ROOT}" aswlog)
 endif()
 
-add_executable(ASWLogTests
-    ${ASWUNITTESTS_SOURCES}
+# The test modules and helpers, which both the console runner and, on Windows, the Win32 GUI runner run.
+set(ASWLOG_TEST_SOURCES
     "${ASWLOG_TESTS_DIR}/Test_ASWLog_Base.cpp"
     "${ASWLOG_TESTS_DIR}/Test_ASWLog_CategoryLog.cpp"
     "${ASWLOG_TESTS_DIR}/Test_ASWLog_Config.cpp"
@@ -58,33 +58,59 @@ add_executable(ASWLogTests
     "${ASWLOG_TESTS_DIR}/UT_Helper_StdErr.cpp"
 )
 
-target_include_directories(ASWLogTests PRIVATE
-    "${ASWUNITTESTS_SOURCE_DIR}"
-    "${ASWLOG_TESTS_DIR}"
-)
-
-target_link_libraries(ASWLogTests PRIVATE ASWLog::ASWLog)
-
 # ASWUnitTests' --test-timeout-seconds uses std::thread/std::future, which needs an explicit threading library on
 # Linux and some MinGW-w64 distributions.
 find_package(Threads REQUIRED)
-target_link_libraries(ASWLogTests PRIVATE Threads::Threads)
 
-if(MSVC)
-    target_compile_options(ASWLogTests PRIVATE /W4 /Zc:__cplusplus)
-else()
-    target_compile_options(ASWLogTests PRIVATE -Wall -Wextra -Wpedantic)
-endif()
+# The settings both test runners share.
+function(aswlog_configure_test_runner target)
+    target_include_directories(${target} PRIVATE "${ASWLOG_TESTS_DIR}")
+    target_link_libraries(${target} PRIVATE ASWLog::ASWLog Threads::Threads)
 
-if(MINGW)
-    # Statically link the MinGW runtime so the executable launches without MinGW's bin directory on PATH (e.g. on a
-    # CI runner).
-    target_link_options(ASWLogTests PRIVATE -static-libgcc -static-libstdc++ -static)
-endif()
+    if(MSVC)
+        target_compile_options(${target} PRIVATE /W4 /Zc:__cplusplus)
+    else()
+        target_compile_options(${target} PRIVATE -Wall -Wextra -Wpedantic)
+    endif()
 
-set_target_properties(ASWLogTests PROPERTIES
-    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
+    if(MINGW)
+        # Statically link the MinGW runtime so the executable launches without MinGW's bin directory on PATH (e.g. on
+        # a CI runner), and can't load another program's older libstdc++-6.dll from it.
+        target_link_options(${target} PRIVATE -static-libgcc -static-libstdc++ -static)
+    endif()
+
+    set_target_properties(${target} PROPERTIES
+        RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
+    )
+endfunction()
+
+add_executable(ASWLogTests
+    ${ASWUNITTESTS_SOURCES}
+    ${ASWLOG_TEST_SOURCES}
 )
+
+target_include_directories(ASWLogTests PRIVATE "${ASWUNITTESTS_SOURCE_DIR}")
+aswlog_configure_test_runner(ASWLogTests)
+
+if(WIN32)
+    # The ASWUnitTests icon, which the resource compiler finds through the include path.
+    target_sources(ASWLogTests PRIVATE "${ASWUNITTESTS_ROOT}/resource/ASWUnitTests_Icon.rc")
+    target_include_directories(ASWLogTests PRIVATE "${ASWUNITTESTS_ROOT}/resource")
+
+    # The Win32 GUI runner: the same tests in a window. Its WinMain takes the place of the console runner's main.cpp,
+    # and its sources list has the icon.
+    include("${ASWUNITTESTS_ROOT}/win32/gui/src/ASWUnitTests_Win32GUI_Sources.cmake")
+
+    add_executable(ASWLogTests_Win32_GUI WIN32
+        ${ASWUNITTESTS_WIN32_GUI_SOURCES}
+        ${ASWLOG_TEST_SOURCES}
+    )
+
+    target_include_directories(ASWLogTests_Win32_GUI PRIVATE ${ASWUNITTESTS_WIN32_GUI_INCLUDE_DIRS})
+    target_link_libraries(ASWLogTests_Win32_GUI PRIVATE ${ASWUNITTESTS_WIN32_GUI_LIBRARIES})
+    target_link_options(ASWLogTests_Win32_GUI PRIVATE ${ASWUNITTESTS_WIN32_GUI_LINK_OPTIONS})
+    aswlog_configure_test_runner(ASWLogTests_Win32_GUI)
+endif()
 
 # The *Fmt methods check a format string against its arguments at compile time, which a unit test can't show, so
 # configuring checks it: tests/compile_checks/Check_FormatString.cpp must compile as case 0 (the control) and fail as
