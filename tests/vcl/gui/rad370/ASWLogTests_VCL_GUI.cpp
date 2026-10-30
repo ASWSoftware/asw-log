@@ -28,9 +28,12 @@ limitations under the License.
 //---------------------------------------------------------------------------
 #include <exception>
 #include <string>
+#include <vector>
 //---------------------------------------------------------------------------
 #include "ASWUnitTests_GUI_CommandLine.h"
 #include "ASWUnitTests_GUI_TextDialog.h"
+#include "ASWUnitTests_GUI_Theme.h"
+#include "ASWUnitTests_GUI_VCLSystem.h"
 //---------------------------------------------------------------------------
 USEFORM("..\..\..\..\third_party\asw-unit-tests\vcl\gui\src\ASWUnitTests_GUI_MainForm.cpp", FormASWUnitTestsGUIMain);
 //---------------------------------------------------------------------------
@@ -50,7 +53,21 @@ int WINAPI _tWinMain(HINSTANCE, HINSTANCE, LPTSTR, int)
         // and the process exits with the same code the console runner would use, without opening the GUI.
         ASWUnitTests::TGUIOptions options;
         ASWUnitTests::TGUICommandLineResult const commandLine =
-            ASWUnitTests::TGUICommandLine::Parse(ASWUnitTests::TGUICommandLine::ProcessArguments(), options);
+            ASWUnitTests::TGUICommandLine::Parse(ASWUnitTests::ProcessArguments(), options);
+
+        // Before any form exists, so each one, the --help text's included, is created in its style rather than
+        // restyled. --layout-reset's deletion of the layout file, which also holds the theme and the dark theme,
+        // comes later.
+        bool const savedTheme = !options.LayoutIgnore && !options.LayoutReset;
+        System::UnicodeString const layoutPath = ASWUnitTests::GUILayoutFilePath();
+        ASWUnitTests::EGUITheme const theme = savedTheme ? ASWUnitTests::LoadGUIThemeFromLayoutFile(layoutPath) :
+                ASWUnitTests::EGUITheme::Windows;
+        std::string const darkTheme = savedTheme ? ASWUnitTests::LoadGUIDarkThemeFromLayoutFile(layoutPath) :
+                ASWUnitTests::GUIDefaultDarkThemeName();
+        std::vector<std::string> themeProblems;
+        System::UnicodeString const darkStyle = ASWUnitTests::LoadGUIDarkStyle(ASWUnitTests::GUIThemesFolderPath(),
+            darkTheme, themeProblems);
+        ASWUnitTests::ApplyGUITheme(theme, darkStyle);
 
         if (commandLine.EarlyExitCode.has_value())
         {
@@ -59,7 +76,7 @@ int WINAPI _tWinMain(HINSTANCE, HINSTANCE, LPTSTR, int)
         }
 
         Application->CreateForm(__classid(TFormASWUnitTestsGUIMain), &FormASWUnitTestsGUIMain);
-        FormASWUnitTestsGUIMain->Start(options);
+        FormASWUnitTestsGUIMain->Start(options, theme, darkTheme, darkStyle, themeProblems);
         Application->Run();
 
         // The form outlives Run(); Application frees it later, during shutdown.

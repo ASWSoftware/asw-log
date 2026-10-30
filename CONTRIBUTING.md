@@ -26,9 +26,10 @@ depends only on the C++ standard library and the operating system's APIs; third-
 3. Add or update focused tests in `tests/tests/` for the behavior change, including error and
    platform-specific cases where applicable. Define a new test with `ASW_TEST(ClassName, TestName)`
    and declare its `Test_TestName()` method public in the group's header; it registers itself. A new
-   test file goes into `tests/cmake/CMakeLists.txt`, `tests/rad370/ASWLogTests.cbproj`, and
-   `tests/vcl/gui/rad370/ASWLogTests_VCL_GUI.cbproj`. A new library source file goes into the root
-   `CMakeLists.txt`, the RAD Studio test and example projects, and `Deploy.bat`.
+   test file goes into `tests/cmake/CMakeLists.txt`, `tests/rad370/ASWLogTests.cbproj`,
+   `tests/vcl/gui/rad370/ASWLogTests_VCL_GUI.cbproj`, and
+   `tests/win32/gui/rad370/ASWLogTests_Win32_GUI.cbproj`. A new library source file goes into the
+   root `CMakeLists.txt`, the RAD Studio test and example projects, and `Deploy.bat`.
 4. Build the affected configuration and run the unit-test executable. See
    [README.md](README.md#unit-tests) for the CMake build commands, and
    `tests/rad370/Build_Win64x_Debug.bat` / `Build_Win64x_Release.bat` for the RAD Studio build. Also

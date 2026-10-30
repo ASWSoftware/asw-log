@@ -37,6 +37,7 @@ jobs:
             generator: ""
             build_args: "--config Release"
             exe_path: build/bin/Release/ASWLogTests.exe
+            gui_exe_path: build/bin/Release/ASWLogTests_Win32_GUI.exe
             # cl takes -MP as well as /MP; Git Bash would turn "/MP" into a path when it starts CMake.
             cxxflags: -MP
             # A multi-config generator, so the package check builds and installs both into the same prefix (the Debug
@@ -48,6 +49,7 @@ jobs:
             generator: "MinGW Makefiles"
             build_args: ""
             exe_path: build/bin/ASWLogTests.exe
+            gui_exe_path: build/bin/ASWLogTests_Win32_GUI.exe
             sanitize: ""
           - name: Linux (GCC)
             os: ubuntu-latest
@@ -168,6 +170,54 @@ jobs:
         with:
           name: test-results-${{ matrix.name }}
           path: junit-results.xml
+          if-no-files-found: error
+
+      - name: Run unit tests in the Win32 GUI
+        # Windows jobs only: the Win32 GUI runner (tests/cmake builds it on Windows) opens its window, runs every test
+        # (--run), writes the same JUnit report as the console runner, then closes and exits with the console runner's
+        # exit code (--exit). Bash waits for a GUI program to end, unlike a Windows command prompt. The step's own
+        # timeout ends a GUI left waiting on a dialog that nobody can close, rather than leaving it to the job's.
+        if: matrix.gui_exe_path != ''
+        id: gui_tests
+        timeout-minutes: 3
+        shell: bash
+        run: |
+          if [ ! -f "${{ matrix.gui_exe_path }}" ]; then
+            echo "ERROR: Executable not found at ${{ matrix.gui_exe_path }}"
+            exit 1
+          fi
+          ./${{ matrix.gui_exe_path }} --project-name "ASWLog-CI-Win32GUI" --run --exit --layout-ignore \
+            --report-junit gui-results.xml --test-timeout-seconds 60 --catch-crashes
+
+      - name: Check the Win32 GUI's report
+        # The GUI ran the same tests as the console runner, so both reports list the same number.
+        if: matrix.gui_exe_path != ''
+        shell: bash
+        run: |
+          console=$(grep -o '<testcase ' junit-results.xml | wc -l)
+          gui=$(grep -o '<testcase ' gui-results.xml | wc -l)
+          echo "Console runner: $console tests, Win32 GUI runner: $gui tests"
+          if [ "$gui" -eq 0 ] || [ "$gui" -ne "$console" ]; then
+            echo "ERROR: The Win32 GUI's report doesn't list the same tests as the console runner's"
+            exit 1
+          fi
+
+      - name: Win32 GUI test results summary
+        # As for the console runner's report above.
+        if: ${{ matrix.gui_exe_path != '' && !cancelled() && steps.gui_tests.outcome != 'skipped' }}
+        uses: dorny/test-reporter@v3
+        with:
+          name: Win32 GUI Test Results - ${{ matrix.name }}
+          path: gui-results.xml
+          reporter: java-junit
+          use-actions-summary: true
+
+      - name: Upload Win32 GUI test results
+        if: ${{ matrix.gui_exe_path != '' && !cancelled() && steps.gui_tests.outcome != 'skipped' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: gui-test-results-${{ matrix.name }}
+          path: gui-results.xml
           if-no-files-found: error
 
       - name: Check the installed CMake package

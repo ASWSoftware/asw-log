@@ -233,7 +233,7 @@ ASW_TEST(TTest_ASWLog_SyslogLog, HandleCrash_SendsTheFormattedCrashLineOnly)
     // Assert
     AssertEquals(1, log.Messages.size(), "Only the formatted crash line should be sent");
     CheckEquals(UserCritical, log.Messages[0].Priority, "The crash line should be sent as LOG_CRIT");
-    CheckEquals(std::string("[CRITICAL]: Crash: test crash"), log.Messages[0].Text, "The crash line should be sent without its line ending");
+    CheckEquals("[CRITICAL]: Crash: test crash", log.Messages[0].Text, "The crash line should be sent without its line ending");
 }
 //---------------------------------------------------------------------------
 ASW_TEST(TTest_ASWLog_SyslogLog, Initialize_OpensSyslogWithTheIdentAndFacility)
@@ -260,7 +260,7 @@ ASW_TEST(TTest_ASWLog_SyslogLog, Initialize_OpensSyslogWithTheIdentAndFacility)
     CheckNotEmpty(executableName, "The executable's file name should be known");
     CheckEquals(executableName, log.Opens[0].Ident, "Without an ident, the executable's file name should be used");
     CheckEquals(ASWLog::SyslogFacility::User, log.Opens[0].Facility, "Initialize should pass the configured facility");
-    CheckEquals(std::string("MyApp"), log.Opens[1].Ident, "Reconfigure should pass the new ident");
+    CheckEquals("MyApp", log.Opens[1].Ident, "Reconfigure should pass the new ident");
     CheckEquals(ASWLog::SyslogFacility::Local3, log.Opens[1].Facility, "Reconfigure should pass the new facility");
 }
 //---------------------------------------------------------------------------
@@ -315,9 +315,9 @@ ASW_TEST(TTest_ASWLog_SyslogLog, Send_FollowsTheMultilineMode)
 
     // Assert
     AssertEquals(3, log.Messages.size(), "Each entry should be one message");
-    CheckEquals(std::string("[INFO]: first\nsecond"), log.Messages[0].Text, "Preserve should keep the line break");
-    CheckEquals(std::string("[INFO]: first\n    | second"), log.Messages[1].Text, "Indent should mark the next line");
-    CheckEquals(std::string("[INFO]: first\\r\\nsecond"), log.Messages[2].Text, "Escape should write \\r and \\n");
+    CheckEquals("[INFO]: first\nsecond", log.Messages[0].Text, "Preserve should keep the line break");
+    CheckEquals("[INFO]: first\n    | second", log.Messages[1].Text, "Indent should mark the next line");
+    CheckEquals("[INFO]: first\\r\\nsecond", log.Messages[2].Text, "Escape should write \\r and \\n");
 }
 //---------------------------------------------------------------------------
 ASW_TEST(TTest_ASWLog_SyslogLog, Send_MapsEachLevelToAPriority)
@@ -376,11 +376,11 @@ ASW_TEST(TTest_ASWLog_SyslogLog, Send_StripsOnlyTheLineEnding)
 
     // Assert
     AssertEquals(5, log.Messages.size(), "Each entry should be one message");
-    CheckEquals(std::string("[INFO]: hello"), log.Messages[0].Text, "The LF ending should be stripped");
-    CheckEquals(std::string("[INFO]: ends with a break\n"), log.Messages[1].Text, "Only the line ending should be stripped, not the message's own break");
-    CheckEquals(std::string("raw text\n"), log.Messages[2].Text, "A raw entry should be sent as is");
-    CheckEquals(std::string("[INFO]: crlf"), log.Messages[3].Text, "The CRLF ending should be stripped");
-    CheckEquals(std::string("[INFO]: ends with LF\n"), log.Messages[4].Text, "With CRLF endings, the message's own LF should stay");
+    CheckEquals("[INFO]: hello", log.Messages[0].Text, "The LF ending should be stripped");
+    CheckEquals("[INFO]: ends with a break\n", log.Messages[1].Text, "Only the line ending should be stripped, not the message's own break");
+    CheckEquals("raw text\n", log.Messages[2].Text, "A raw entry should be sent as is");
+    CheckEquals("[INFO]: crlf", log.Messages[3].Text, "The CRLF ending should be stripped");
+    CheckEquals("[INFO]: ends with LF\n", log.Messages[4].Text, "With CRLF endings, the message's own LF should stay");
 }
 //---------------------------------------------------------------------------
 ASW_TEST(TTest_ASWLog_SyslogLog, ShouldLog_FollowsThePlatform)

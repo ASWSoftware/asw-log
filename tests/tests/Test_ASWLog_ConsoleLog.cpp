@@ -683,7 +683,7 @@ ASW_TEST(TTest_ASWLog_ConsoleLog, OnError_ReportsOnlyTheWriteThatFailedTheStream
         return;
 
     CheckEquals(ASWLog::ErrorKind::WriteFailed, reports[0].Kind, "A failed console write should be reported as WriteFailed");
-    CheckEquals(std::string("Couldn't write to stdout"), reports[0].Message, "The report should name the stream");
+    CheckEquals("Couldn't write to stdout", reports[0].Message, "The report should name the stream");
 }
 //---------------------------------------------------------------------------
 ASW_TEST(TTest_ASWLog_ConsoleLog, OnLogEntry_FiresForQualifyingLevelsOnly)

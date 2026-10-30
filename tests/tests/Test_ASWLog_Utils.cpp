@@ -235,7 +235,7 @@ ASW_TEST(TTest_ASWLog_Utils, ApplyMultilineMode_LeavesOtherLinesAsTheyAre)
     // Assert
     CheckEquals(multiline, preservedLF, "Preserve should leave every line break as it is (LF endings)");
     CheckEquals(multiline, preservedCRLF, "Preserve should leave every line break as it is (CRLF endings)");
-    CheckEquals(std::string("[2026-09-28T21:02:44.342Z][INFO]: no line break here, but more than 8 characters"), plain,
+    CheckEquals("[2026-09-28T21:02:44.342Z][INFO]: no line break here, but more than 8 characters", plain,
         "A line without line breaks should stay as it is");
     CheckSame(plainData, plain.data(), "A line without line breaks should be left in place, not copied");
     CheckEquals(std::string(), ApplyMode("", ASWLog::MultilineMode::Indent), "An empty line should stay empty");
@@ -464,17 +464,17 @@ ASW_TEST(TTest_ASWLog_Utils, GetWindowsEditionName_ProductTypes)
 {
 #if defined(_WIN32)
     // Act & Assert
-    CheckEquals(std::string("Home"), ASWLog::GetWindowsEditionName(PRODUCT_CORE, false),
+    CheckEquals("Home", ASWLog::GetWindowsEditionName(PRODUCT_CORE, false),
         "Windows 10/11 Home should be named");
-    CheckEquals(std::string("Pro"), ASWLog::GetWindowsEditionName(PRODUCT_PROFESSIONAL, false),
+    CheckEquals("Pro", ASWLog::GetWindowsEditionName(PRODUCT_PROFESSIONAL, false),
         "Pro should be named");
-    CheckEquals(std::string("Server Standard"), ASWLog::GetWindowsEditionName(PRODUCT_STANDARD_SERVER, true),
+    CheckEquals("Server Standard", ASWLog::GetWindowsEditionName(PRODUCT_STANDARD_SERVER, true),
         "Server Standard should be named");
-    CheckEquals(std::string("Server Datacenter"), ASWLog::GetWindowsEditionName(PRODUCT_DATACENTER_SERVER, true),
+    CheckEquals("Server Datacenter", ASWLog::GetWindowsEditionName(PRODUCT_DATACENTER_SERVER, true),
         "Server Datacenter (e.g. GitHub's Windows runners) should be named");
-    CheckEquals(std::string("Server (product type 0xABCD)"), ASWLog::GetWindowsEditionName(0xABCD, true),
+    CheckEquals("Server (product type 0xABCD)", ASWLog::GetWindowsEditionName(0xABCD, true),
         "An unlisted server product type should still say Server");
-    CheckEquals(std::string("Unknown (product type 0xABCD)"), ASWLog::GetWindowsEditionName(0xABCD, false),
+    CheckEquals("Unknown (product type 0xABCD)", ASWLog::GetWindowsEditionName(0xABCD, false),
         "An unlisted workstation product type should be Unknown");
 #else
     Skip("GetWindowsEditionName() is Windows-only");
@@ -538,11 +538,11 @@ ASW_TEST(TTest_ASWLog_Utils, JSON_AppendString_EscapesQuotesBackslashAndControls
     ASWLog::JSON::AppendString(appended, "value");
 
     // Assert
-    CheckEquals(std::string("key:\"value\""), appended, "The string should be appended, in quotes");
-    CheckEquals(std::string("\"\""), ToJSONString(""), "An empty text should be an empty string");
-    CheckEquals(std::string(R"("say \"hi\" \\ there")"), ToJSONString(R"(say "hi" \ there)"), "Quotes and backslashes should be escaped");
-    CheckEquals(std::string(R"("a / b ~)" "\x7F" R"(")"), ToJSONString("a / b ~\x7F"), "'/' and DEL should be written as they are");
-    CheckEquals(std::string(R"("line1\nline2\r\n\tend")"), ToJSONString("line1\nline2\r\n\tend"), "Line breaks should be escaped");
+    CheckEquals("key:\"value\"", appended, "The string should be appended, in quotes");
+    CheckEquals("\"\"", ToJSONString(""), "An empty text should be an empty string");
+    CheckEquals(R"("say \"hi\" \\ there")", ToJSONString(R"(say "hi" \ there)"), "Quotes and backslashes should be escaped");
+    CheckEquals(R"("a / b ~)" "\x7F" R"(")", ToJSONString("a / b ~\x7F"), "'/' and DEL should be written as they are");
+    CheckEquals(R"("line1\nline2\r\n\tend")", ToJSONString("line1\nline2\r\n\tend"), "Line breaks should be escaped");
 
     for (int code = 0; code < 0x20; ++code)
     {
@@ -685,8 +685,8 @@ ASW_TEST(TTest_ASWLog_Utils, ReadEnvironmentVariable_ReadsUTF8Values)
     CheckFalse(unsetValue.has_value(), "An unset variable should give nullopt");
     CheckTrue(emptyValue.has_value(), "A variable set to an empty value should be set");
     CheckEquals(std::string(), emptyValue.value_or("unset"), "A variable set to an empty value should give an empty text");
-    CheckEquals(std::string("plain value"), plainValue.value_or("unset"), "A variable should give its value");
-    CheckEquals(std::string("a\xCE\xBB\xE6\x97\xA5"), utf8Value.value_or("unset"), "A non-ASCII name and value should be UTF-8");
+    CheckEquals("plain value", plainValue.value_or("unset"), "A variable should give its value");
+    CheckEquals("a\xCE\xBB\xE6\x97\xA5", utf8Value.value_or("unset"), "A non-ASCII name and value should be UTF-8");
     CheckEquals(longValue, longReadValue.value_or("unset"), "A long value should be read whole");
 }
 //---------------------------------------------------------------------------
@@ -716,10 +716,10 @@ ASW_TEST(TTest_ASWLog_Utils, RenameWithoutReplacing_KeepsExistingTarget)
 
     // Assert
     CheckTrue(existingResult == std::errc::file_exists, "Renaming onto an existing file should fail with file_exists");
-    CheckEquals(std::string("existing_content"), existingContent, "The existing file should not be replaced");
+    CheckEquals("existing_content", existingContent, "The existing file should not be replaced");
     CheckTrue(sourceKept, "The source should stay when the rename is refused");
     CheckFalse(static_cast<bool>(freeResult), "Renaming to a free name should succeed");
-    CheckEquals(std::string("source_content"), ReadText(freeTarget), "The renamed file should keep its content");
+    CheckEquals("source_content", ReadText(freeTarget), "The renamed file should keep its content");
     CheckFalse(std::filesystem::exists(source), "The source name should be gone after the rename");
     CheckTrue(static_cast<bool>(missingResult) && missingResult != std::errc::file_exists, "Renaming a missing file should fail with another error");
 
@@ -771,8 +771,8 @@ ASW_TEST(TTest_ASWLog_Utils, Time_ToDateString_FollowsZone)
     const auto localDate = ASWLog::Time::ToDateString(time, ASWLog::TimeZone::Local);
 
     // Assert
-    CheckEquals(std::string("2026-07-01"), utcDate, "The UTC date should be the default");
-    CheckEquals(std::string("2026-06-30"), localDate, "The local date should be the day before, 4 hours behind UTC");
+    CheckEquals("2026-07-01", utcDate, "The UTC date should be the default");
+    CheckEquals("2026-06-30", localDate, "The local date should be the day before, 4 hours behind UTC");
 }
 //---------------------------------------------------------------------------
 ASW_TEST(TTest_ASWLog_Utils, Time_ToISO8601String)
@@ -799,17 +799,17 @@ ASW_TEST(TTest_ASWLog_Utils, Time_ToLocalISO8601String_IncludesOffset)
     // Act & Assert
     {
         const TScopedTimeZone timeZone("EST5EDT");
-        CheckEquals(std::string("2026-07-01T08:00:00.123-04:00"), ASWLog::Time::ToLocalISO8601String(summer), "Summer should show US Eastern daylight time with milliseconds and its offset");
-        CheckEquals(std::string("2026-01-15T07:00:00.007-05:00"), ASWLog::Time::ToLocalISO8601String(winter), "Winter should show US Eastern standard time with zero-padded milliseconds and its offset");
+        CheckEquals("2026-07-01T08:00:00.123-04:00", ASWLog::Time::ToLocalISO8601String(summer), "Summer should show US Eastern daylight time with milliseconds and its offset");
+        CheckEquals("2026-01-15T07:00:00.007-05:00", ASWLog::Time::ToLocalISO8601String(winter), "Winter should show US Eastern standard time with zero-padded milliseconds and its offset");
     }
     {
         const TScopedTimeZone timeZone("IST-5:30");
-        CheckEquals(std::string("2026-07-01T17:30:00.123+05:30"), ASWLog::Time::ToLocalISO8601String(summer), "A zone ahead of UTC should show a '+' offset with its minutes");
+        CheckEquals("2026-07-01T17:30:00.123+05:30", ASWLog::Time::ToLocalISO8601String(summer), "A zone ahead of UTC should show a '+' offset with its minutes");
     }
     {
         const TScopedTimeZone timeZone("UTC0");
-        CheckEquals(std::string("2026-07-01T12:00:00.123+00:00"), ASWLog::Time::ToLocalISO8601String(summer), "UTC should show a +00:00 offset");
-        CheckEquals(std::string("2026-07-01T12:00:00.000+00:00"), ASWLog::Time::ToLocalISO8601String(std::chrono::sys_days{ 2026y / 7 / 1 } + 12h), "A whole second should show .000");
+        CheckEquals("2026-07-01T12:00:00.123+00:00", ASWLog::Time::ToLocalISO8601String(summer), "UTC should show a +00:00 offset");
+        CheckEquals("2026-07-01T12:00:00.000+00:00", ASWLog::Time::ToLocalISO8601String(std::chrono::sys_days{ 2026y / 7 / 1 } + 12h), "A whole second should show .000");
     }
 }
 //---------------------------------------------------------------------------
@@ -865,10 +865,10 @@ ASW_TEST(TTest_ASWLog_Utils, Time_WriteISO8601_LocalTimeWithEachPrecision)
     // Act & Assert
     {
         const TScopedTimeZone timeZone("EST5EDT");
-        CheckEquals(std::string("2026-01-15T07:00:00.007-05:00"), write(ASWLog::TimePrecision::Milliseconds), "Milliseconds should come before the offset");
-        CheckEquals(std::string("2026-01-15T07:00:00.007000-05:00"), write(ASWLog::TimePrecision::Microseconds), "Microseconds should come before the offset");
+        CheckEquals("2026-01-15T07:00:00.007-05:00", write(ASWLog::TimePrecision::Milliseconds), "Milliseconds should come before the offset");
+        CheckEquals("2026-01-15T07:00:00.007000-05:00", write(ASWLog::TimePrecision::Microseconds), "Microseconds should come before the offset");
         CheckEquals("2026-01-15T07:00:00." + nanosecondDigits + "-05:00", write(ASWLog::TimePrecision::Nanoseconds), "Nanoseconds should come before the offset");
-        CheckEquals(std::string("2026-01-15T07:00:00.007000-05:00"), ASWLog::Time::ToISO8601String(time, ASWLog::TimeZone::Local, ASWLog::TimePrecision::Microseconds), "ToISO8601String should pass the zone and precision on");
+        CheckEquals("2026-01-15T07:00:00.007000-05:00", ASWLog::Time::ToISO8601String(time, ASWLog::TimeZone::Local, ASWLog::TimePrecision::Microseconds), "ToISO8601String should pass the zone and precision on");
     }
     {
         const TScopedTimeZone timeZone("IST-5:30");
@@ -926,7 +926,7 @@ ASW_TEST(TTest_ASWLog_Utils, Time_WriteISO8601_YearPast9999IsWrittenInFull)
     const auto size = ASWLog::Time::WriteISO8601(buffer, time);
 
     // Assert
-    CheckEquals(std::string("10000-01-01T01:02:03.004Z"), std::string(buffer, size), "A year past 9999 should be written in full");
+    CheckEquals("10000-01-01T01:02:03.004Z", std::string(buffer, size), "A year past 9999 should be written in full");
 }
 //---------------------------------------------------------------------------
 ASW_TEST(TTest_ASWLog_Utils, TrimSpaces_RemovesOuterSpacesAndTabs)
@@ -934,9 +934,9 @@ ASW_TEST(TTest_ASWLog_Utils, TrimSpaces_RemovesOuterSpacesAndTabs)
     // Arrange / Act / Assert
     CheckEquals(std::string(), std::string(ASWLog::Detail::TrimSpaces("")), "An empty text should stay empty");
     CheckEquals(std::string(), std::string(ASWLog::Detail::TrimSpaces(" \t \t")), "Only spaces and tabs should become empty");
-    CheckEquals(std::string("a b"), std::string(ASWLog::Detail::TrimSpaces("\t a b \t")), "Outer spaces and tabs should go, inner ones stay");
-    CheckEquals(std::string("x"), std::string(ASWLog::Detail::TrimSpaces("x")), "A single character should stay");
-    CheckEquals(std::string("\nx\n"), std::string(ASWLog::Detail::TrimSpaces(" \nx\n ")), "Line breaks should stay");
+    CheckEquals("a b", std::string(ASWLog::Detail::TrimSpaces("\t a b \t")), "Outer spaces and tabs should go, inner ones stay");
+    CheckEquals("x", std::string(ASWLog::Detail::TrimSpaces("x")), "A single character should stay");
+    CheckEquals("\nx\n", std::string(ASWLog::Detail::TrimSpaces(" \nx\n ")), "Line breaks should stay");
 }
 //---------------------------------------------------------------------------
 

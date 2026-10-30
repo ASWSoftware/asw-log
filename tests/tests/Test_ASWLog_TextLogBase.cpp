@@ -586,7 +586,7 @@ ASW_TEST(TTest_ASWLog_TextLogBase, Async_BacktraceIsTakenWhenTheTriggerIsLogged)
     CheckTrue(linesAfterError == expected, "The error's backtrace should hold only what was logged before it, queued in order");
     CheckEquals(8, output.Lines.size(), "The entry logged after the error should stay kept, for the next backtrace");
     if (output.Lines.size() == 8)
-        CheckEquals(std::string("[DEBUG]: debug_2\n"), output.Lines[6], "DumpBacktrace() should write it");
+        CheckEquals("[DEBUG]: debug_2\n", output.Lines[6], "DumpBacktrace() should write it");
 }
 //---------------------------------------------------------------------------
 ASW_TEST(TTest_ASWLog_TextLogBase, Async_CallReturnsBeforeTheEntryIsWritten)
@@ -613,7 +613,7 @@ ASW_TEST(TTest_ASWLog_TextLogBase, Async_CallReturnsBeforeTheEntryIsWritten)
     CheckEquals(1, output.Lines.size(), "Flush should wait for the queued entry");
     if (output.Lines.size() == 1)
     {
-        CheckEquals(std::string("[INFO]: queued_entry\n"), output.Lines[0], "The entry should be formatted as usual");
+        CheckEquals("[INFO]: queued_entry\n", output.Lines[0], "The entry should be formatted as usual");
         CheckTrue(output.WriteThreadIds[0] != std::this_thread::get_id(), "The logger's own thread should write it");
     }
 }
@@ -640,7 +640,7 @@ ASW_TEST(TTest_ASWLog_TextLogBase, Async_DestructorWritesQueuedEntriesBeforeTheS
     CheckEquals(EntryCount + 1, output.Lines.size(), "Every queued entry and the shutdown line should be written");
     if (output.Lines.size() == EntryCount + 1)
     {
-        CheckEquals(std::string("[INFO]: entry_0\n"), output.Lines.front(), "The queued entries should come first");
+        CheckEquals("[INFO]: entry_0\n", output.Lines.front(), "The queued entries should come first");
         CheckEquals(std::format("[INFO]: entry_{}\n", EntryCount - 1), output.Lines[EntryCount - 1], "The queued entries should keep their order");
         CheckStartsWith(output.Lines.back(), "[INFO]: Logger shutdown: ", "The shutdown line should come last");
     }
@@ -896,8 +896,8 @@ ASW_TEST(TTest_ASWLog_TextLogBase, Async_OnLogEntryRunsOnTheWorkerWithItsOwnCopy
     CheckTrue(wasCalled, "OnLogEntry should be called");
     if (wasCalled)
     {
-        CheckEquals(std::string("temporary_message"), seenMessage, "The record should hold its own copy of the message");
-        CheckEquals(std::string("[INFO]: temporary_message\n"), seenLine, "The callback should get the line as written");
+        CheckEquals("temporary_message", seenMessage, "The record should hold its own copy of the message");
+        CheckEquals("[INFO]: temporary_message\n", seenLine, "The callback should get the line as written");
         CheckTrue(seenThreadId != std::this_thread::get_id(), "OnLogEntry should run on the logger's own thread");
         CheckEquals(1, lineCountSeen, "OnLogEntry should run after the entry was written");
     }
@@ -1106,7 +1106,7 @@ ASW_TEST(TTest_ASWLog_TextLogBase, Formatter_FormatsEveryFileLine)
     CheckEndsWith(contents, ", bye\n", "The shutdown line should end with the shutdown banner");
     CheckEquals(3, callbackLines.size(), "OnLogEntry should get the three logged entries");
     if (callbackLines.size() == 3)
-        CheckEquals(std::string("INFO|hello\n"), callbackLines[0], "OnLogEntry should get the line in the formatter's layout");
+        CheckEquals("INFO|hello\n", callbackLines[0], "OnLogEntry should get the line in the formatter's layout");
 }
 //---------------------------------------------------------------------------
 ASW_TEST(TTest_ASWLog_TextLogBase, Initialize_ThrowingFormatterStillInitializes)
@@ -1159,7 +1159,7 @@ ASW_TEST(TTest_ASWLog_TextLogBase, Initialize_WritesLoggerVersionAfterTheBanner)
     CheckEquals(3, output.Lines.size(), "Initialize should write the banner, the version line and the time line");
     if (output.Lines.size() == 3)
     {
-        CheckEquals(std::string("[INFO]: starting\n"), output.Lines[0], "The banner should come first");
+        CheckEquals("[INFO]: starting\n", output.Lines[0], "The banner should come first");
         CheckEquals(std::format("[INFO]: ASWLog: version={}, logger=TMemoryTextLog\n", ASWLog::Version), output.Lines[1],
             "The version line should follow the banner, with the version and the logger's class");
         CheckStartsWith(output.Lines[2], "[INFO]: Time: ", "The other startup lines should follow: " + output.Lines[2]);
@@ -1186,7 +1186,7 @@ ASW_TEST(TTest_ASWLog_TextLogBase, Initialize_WritesStartupLinesThenCallsAfterEn
     CheckEquals(2, output.Lines.size(), "Initialize should write the banner and the time line");
     if (output.Lines.size() == 2)
     {
-        CheckEquals(std::string("[INFO]: starting\n"), output.Lines[0], "The banner should come first");
+        CheckEquals("[INFO]: starting\n", output.Lines[0], "The banner should come first");
         CheckStartsWith(output.Lines[1], "[INFO]: Time: ", "The time line should follow: " + output.Lines[1]);
     }
     CheckEquals(1, output.AfterEntryCount, "Initialize should call AfterEntryUnlocked once, after the startup lines");
@@ -1631,7 +1631,7 @@ ASW_TEST(TTest_ASWLog_TextLogBase, OnBeforeWrite_RunsOutsideTheLockBeforeQueuing
     CheckTrue(wasMutexFree, "The hook should run before the logger takes its lock");
     CheckTrue(output.Lines == std::vector<std::string>{ expected }, "The line should be written as the hook changed it");
     CheckEquals(expected, seenLine, "OnLogEntry should get the changed line");
-    CheckEquals(std::string("token=***"), seenMessage, "OnLogEntry should get the changed record");
+    CheckEquals("token=***", seenMessage, "OnLogEntry should get the changed record");
     CheckTrue(hookThreadId == std::this_thread::get_id(), "An asynchronous logger should run the hook on the logging thread");
     CheckTrue(asyncOutput.Lines == std::vector<std::string>{ expected }, "A queued line should be written as the hook changed it");
     CheckTrue(wasAsyncCalled, "The asynchronous OnLogEntry should be called");
@@ -1662,7 +1662,7 @@ ASW_TEST(TTest_ASWLog_TextLogBase, OnBeforeWrite_SkipsTheLoggersOwnLines)
     // Assert
     CheckEquals(1, hookCount, "The hook should see only the application's entry");
     AssertEquals(std::size_t(2), output.Lines.size(), "Only the banner and the shutdown line should be written");
-    CheckEquals(std::string("[INFO]: banner\n"), output.Lines[0], "The startup banner should be written");
+    CheckEquals("[INFO]: banner\n", output.Lines[0], "The startup banner should be written");
     CheckContains(output.Lines[1], "Logger shutdown", "The shutdown line should be written");
 }
 //---------------------------------------------------------------------------
@@ -1733,7 +1733,7 @@ ASW_TEST(TTest_ASWLog_TextLogBase, Reconfigure_AppliesNewConfigButKeepsLevel)
     CheckTrue(log.ReconfiguredToBanners == std::vector<std::string>{ "second", "third" },
         "The new config should be stored before ReconfigureUnlocked() is called");
     CheckFalse(reconfiguredWithFailingHook, "Reconfigure() should fail if ReconfigureUnlocked() fails");
-    CheckEquals(std::string("third"), log.GetConfig()->Startup.Banner,
+    CheckEquals("third", log.GetConfig()->Startup.Banner,
         "The new config should be kept when ReconfigureUnlocked() fails");
 }
 //---------------------------------------------------------------------------

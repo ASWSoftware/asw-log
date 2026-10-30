@@ -87,7 +87,7 @@ ASW_TEST(TTest_ASWLog_Version, GetVersionStr_ReturnsVersion)
     const auto version = logger.GetVersionStr();
 
     // Assert
-    CheckEquals(std::string(ASWLOG_VERSION_STRING), std::string(version),
+    CheckEquals(ASWLOG_VERSION_STRING, std::string(version),
         "GetVersionStr() should return ASWLOG_VERSION_STRING");
 }
 //---------------------------------------------------------------------------

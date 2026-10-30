@@ -435,7 +435,7 @@ ASW_TEST(TTest_ASWLog_FileLog, Async_DropsAnEntryWhileTheFileCantBeOpened)
     const std::vector<std::string> expectedMessages{ "before", "after" };
     CheckTrue(initialized && reconfiguredBack, "Initialize and the Reconfigure() back should succeed");
     CheckFalse(reconfiguredToUnopenable, "Reconfigure() to an unopenable file should fail");
-    CheckEquals(std::string(": before\n: after\n"), ReadFileText(logFile), "The queued entry should be dropped while the file can't be opened");
+    CheckEquals(": before\n: after\n", ReadFileText(logFile), "The queued entry should be dropped while the file can't be opened");
     CheckTrue(callbackMessages == expectedMessages, "OnLogEntry should be called only for the entries written");
 }
 //---------------------------------------------------------------------------
@@ -458,7 +458,7 @@ ASW_TEST(TTest_ASWLog_FileLog, Async_EntryAtWaitAtLevelIsInTheFileWhenTheCallRet
 
     // Assert
     CheckTrue(initialized, "Initialize should succeed");
-    CheckEquals(std::string(": info_entry\n: error_entry\n"), contents,
+    CheckEquals(": info_entry\n: error_entry\n", contents,
         "When the Error call returns, its entry and those before it should be in the file");
 }
 //---------------------------------------------------------------------------
@@ -481,7 +481,7 @@ ASW_TEST(TTest_ASWLog_FileLog, Async_EveryWriteFlushesEachBatch)
 
     // Assert
     CheckTrue(initialized, "Initialize should succeed");
-    CheckEquals(std::string(": entry_1\n: entry_2\n"), contents, "The logger's thread should flush what it wrote");
+    CheckEquals(": entry_1\n: entry_2\n", contents, "The logger's thread should flush what it wrote");
 }
 //---------------------------------------------------------------------------
 ASW_TEST(TTest_ASWLog_FileLog, Async_PeriodicFlushesOnTheSameThread)
@@ -503,7 +503,7 @@ ASW_TEST(TTest_ASWLog_FileLog, Async_PeriodicFlushesOnTheSameThread)
 
     // Assert
     CheckTrue(initialized, "Initialize should succeed");
-    CheckEquals(std::string(": entry\n"), contents, "The logger's thread should also flush every FlushInterval");
+    CheckEquals(": entry\n", contents, "The logger's thread should also flush every FlushInterval");
 }
 //---------------------------------------------------------------------------
 ASW_TEST(TTest_ASWLog_FileLog, Async_ReconfigureWritesQueuedEntriesToTheOldFile)
@@ -534,7 +534,7 @@ ASW_TEST(TTest_ASWLog_FileLog, Async_ReconfigureWritesQueuedEntriesToTheOldFile)
     CheckTrue(reconfigured, "Reconfigure should succeed");
     CheckEquals(EntryCount, std::count(oldContents.begin(), oldContents.end(), '\n'),
         "Every entry queued before Reconfigure should go to the old file");
-    CheckEquals(std::string(": new_entry\n"), newContents, "Only the entry logged after Reconfigure should go to the new file");
+    CheckEquals(": new_entry\n", newContents, "Only the entry logged after Reconfigure should go to the new file");
 }
 //---------------------------------------------------------------------------
 ASW_TEST(TTest_ASWLog_FileLog, AutoOpenClose_StaysInitializedBetweenWrites)
@@ -708,7 +708,7 @@ ASW_TEST(TTest_ASWLog_FileLog, BackupLimits_MaxBackupTotalBytesIsStrict)
     CheckTrue(rotated, "RotateLogFiles should succeed");
     CheckEquals(0, CountFilesStartingWith("strict.manual."), "Even the new backup should be deleted when it alone exceeds the limit");
     CheckFalse(std::filesystem::exists(older), "The older backup should be deleted");
-    CheckEquals(std::string(": after\n"), ReadFileText(TestTempDir / "strict.log"), "Logging should go on in the new log file");
+    CheckEquals(": after\n", ReadFileText(TestTempDir / "strict.log"), "Logging should go on in the new log file");
 }
 //---------------------------------------------------------------------------
 ASW_TEST(TTest_ASWLog_FileLog, BackupLimits_ZeroKeepsEveryBackup)
@@ -823,7 +823,7 @@ ASW_TEST(TTest_ASWLog_FileLog, DailyRolling_KeepsExistingBackupForSameDate)
     // Assert
     const auto newBackupContents = ReadFileText(TestTempDir / "rolling_existing.daily.2026-01-15_1.bak");
     CheckTrue(initialized, "Initialize should succeed");
-    CheckEquals(std::string("earlier_backup"), ReadFileText(existingBackup), "Daily rolling should not replace an existing backup for the same day");
+    CheckEquals("earlier_backup", ReadFileText(existingBackup), "Daily rolling should not replace an existing backup for the same day");
     CheckContains(newBackupContents, "day_one_entry", "Daily rolling should add _1 to the name when the day's backup already exists");
 }
 //---------------------------------------------------------------------------
@@ -1376,7 +1376,7 @@ ASW_TEST(TTest_ASWLog_FileLog, FileStream_FlushWorksAfterFailedWrite)
     CheckTrue(opened, "Open should succeed");
     CheckTrue(written, "Write should succeed");
     CheckTrue(flushed, "Flush should succeed after an earlier failure");
-    CheckEquals(std::string("buffered"), contents, "Flush should write the buffered data to the file");
+    CheckEquals("buffered", contents, "Flush should write the buffered data to the file");
 }
 //---------------------------------------------------------------------------
 ASW_TEST(TTest_ASWLog_FileLog, FileStream_InsertionIntoAClosedStreamFails)
@@ -1414,7 +1414,7 @@ ASW_TEST(TTest_ASWLog_FileLog, FileStream_InsertionWritesAndCountsTheSize)
     CheckTrue(opened, "Open should succeed");
     CheckFalse(stream.fail(), "The insertions should succeed");
     CheckTrue(flushed, "Flush should succeed");
-    CheckEquals(std::string("old\ncount=42\n"), ReadFileText(file), "operator<< and put() should append to the file");
+    CheckEquals("old\ncount=42\n", ReadFileText(file), "operator<< and put() should append to the file");
     CheckEquals(13, size, "GetSize() should count the file's bytes and every inserted one");
 }
 //---------------------------------------------------------------------------
@@ -1443,9 +1443,9 @@ ASW_TEST(TTest_ASWLog_FileLog, FlushImmediatelyAtLevel_FlushesEntriesAtOrAboveTh
     // Assert
     CheckTrue(initialized, "Initialize should succeed");
     CheckEquals(std::string(), contentsAfterInfo, "An entry below the level should stay buffered");
-    CheckEquals(std::string(": info_entry\n: warn_entry\n"), contentsAfterWarn,
+    CheckEquals(": info_entry\n: warn_entry\n", contentsAfterWarn,
         "An entry at the level should be flushed with the entries buffered before it");
-    CheckEquals(std::string(": info_entry\n: warn_entry\n: debug_entry\nraw_critical_entry"), contentsAfterRaw,
+    CheckEquals(": info_entry\n: warn_entry\n: debug_entry\nraw_critical_entry", contentsAfterRaw,
         "A raw entry above the level should be flushed too");
     CheckEquals(contentsAfterRaw, contentsAfterForcedTrace, "A forced entry below the level should stay buffered");
 }
@@ -1471,7 +1471,7 @@ ASW_TEST(TTest_ASWLog_FileLog, FlushImmediatelyAtLevel_OffLeavesFlushingToFlushM
     // Assert
     CheckTrue(initialized, "Initialize should succeed");
     CheckEquals(std::string(), contentsBeforeFlush, "With Level::Off, even a Critical entry should stay buffered");
-    CheckEquals(std::string(": critical_entry\n: forced_critical_entry\n"), contentsAfterFlush, "Flush() should write the buffered entries");
+    CheckEquals(": critical_entry\n: forced_critical_entry\n", contentsAfterFlush, "Flush() should write the buffered entries");
 }
 //---------------------------------------------------------------------------
 ASW_TEST(TTest_ASWLog_FileLog, Flush_WritesBufferedManualModeEntries)
@@ -1945,7 +1945,7 @@ ASW_TEST(TTest_ASWLog_FileLog, NewFile_AsyncWorkerWritesTheStartupLinesBeforeThe
 
     // Assert
     CheckTrue(initialized, "Initialize should succeed");
-    CheckEquals(std::string(": Log continued from new_async.size.2026-01-15_103005_250.bak (size)\n: banner\n: second_entry\n"),
+    CheckEquals(": Log continued from new_async.size.2026-01-15_103005_250.bak (size)\n: banner\n: second_entry\n",
         ReadFileText(logFile), "The logger's thread should write the startup lines at the top of the new file, before the entry");
 }
 //---------------------------------------------------------------------------
@@ -1970,9 +1970,9 @@ ASW_TEST(TTest_ASWLog_FileLog, NewFile_DailyRollingStartsWithTheStartupLines)
 
     // Assert
     CheckTrue(initialized, "Initialize should succeed");
-    CheckEquals(std::string(": banner\n: day_one_entry\n"), ReadFileText(TestTempDir / "new_daily.daily.2026-01-15.bak"),
+    CheckEquals(": banner\n: day_one_entry\n", ReadFileText(TestTempDir / "new_daily.daily.2026-01-15.bak"),
         "The daily backup should hold the first day's file as it was");
-    CheckEquals(std::string(": Log continued from new_daily.daily.2026-01-15.bak (daily)\n: banner\n: day_two_entry\n"),
+    CheckEquals(": Log continued from new_daily.daily.2026-01-15.bak (daily)\n: banner\n: day_two_entry\n",
         ReadFileText(logFile), "The new day's file should start with the startup lines, before the entry that rolled it over");
     CheckEquals(1, CountFilesStartingWith("new_daily.daily."), "Writing the startup lines should not roll the log over again");
 }
@@ -2004,7 +2004,7 @@ ASW_TEST(TTest_ASWLog_FileLog, NewFile_FailedRotationWritesNoStartupLines)
     // Assert
     CheckTrue(initialized, "Initialize should succeed");
     CheckEquals(0, CountFilesStartingWith("new_failed.size."), "The rotation should have failed");
-    CheckEquals(std::string(": banner\n: line_one_long_enough_to_reach_the_size_limit_alone\n: line_two\n"),
+    CheckEquals(": banner\n: line_one_long_enough_to_reach_the_size_limit_alone\n: line_two\n",
         ReadFileText(logFile), "A failed rotation starts no new file, so it should write no startup lines");
 }
 //---------------------------------------------------------------------------
@@ -2030,7 +2030,7 @@ ASW_TEST(TTest_ASWLog_FileLog, NewFile_InitializeWritesItsStartupLinesOnce)
     // Assert
     CheckTrue(initialized, "Initialize should succeed");
     CheckTrue(std::filesystem::exists(TestTempDir / "new_initialize.daily.2026-01-14.bak"), "Initialize() should roll the earlier day's log over");
-    CheckEquals(std::string(": banner\n: today_entry\n"), ReadFileText(logFile),
+    CheckEquals(": banner\n: today_entry\n", ReadFileText(logFile),
         "The file Initialize() starts should get its startup lines once, without a continuation line");
 }
 //---------------------------------------------------------------------------
@@ -2083,7 +2083,7 @@ ASW_TEST(TTest_ASWLog_FileLog, NewFile_MinimumLevelAboveInfoLeavesOutTheStartupL
     // Assert
     CheckTrue(initialized, "Initialize should succeed");
     CheckTrue(rotated, "RotateLogFiles should succeed");
-    CheckEquals(std::string(": after_rotation\n"), ReadFileText(logFile),
+    CheckEquals(": after_rotation\n", ReadFileText(logFile),
         "The startup lines are Info lines, so a minimum level above Info should leave them out of a new file too");
 }
 //---------------------------------------------------------------------------
@@ -2112,7 +2112,7 @@ ASW_TEST(TTest_ASWLog_FileLog, NewFile_ReconfigureToANewPathStartsWithTheStartup
     CheckTrue(initialized, "Initialize should succeed");
     CheckTrue(movedToSecond, "Reconfigure() to a new file path should succeed");
     CheckTrue(switchedToAutoOpenClose, "Reconfigure() to File.AutoOpenClosePerWrite should succeed");
-    CheckEquals(std::string(": banner\n: to_first\n"), ReadFileText(firstFile), "The first file should end as it was");
+    CheckEquals(": banner\n: to_first\n", ReadFileText(firstFile), "The first file should end as it was");
     CheckEquals(std::format(": Log continued from {} (reconfigure)\n: banner\n: to_second\n: auto_open_close\n", firstPath),
         ReadFileText(secondFile), "The new file should start with the startup lines, naming the previous file's path, and only once");
 }
@@ -2179,7 +2179,7 @@ ASW_TEST(TTest_ASWLog_FileLog, NewFile_SharedLogGetsTheStartupLinesOnce)
 
     // Assert
     CheckTrue(firstInitialized && secondInitialized, "Initialize should succeed");
-    CheckEquals(std::string(": Log continued from new_shared.daily.2026-01-15.bak (daily)\n: banner\n: first_day_two_entry\n: second_day_two_entry\n"),
+    CheckEquals(": Log continued from new_shared.daily.2026-01-15.bak (daily)\n: banner\n: first_day_two_entry\n: second_day_two_entry\n",
         ReadFileText(logFile), "Only the logger that rolled the shared log over should write the startup lines");
 }
 //---------------------------------------------------------------------------
@@ -2332,7 +2332,7 @@ ASW_TEST(TTest_ASWLog_FileLog, OnBackupCreated_ReportsDailyBackupAtInitialize)
     if (backups.empty())
         return;
 
-    CheckEquals(std::string("daily"), backups[0].Reason, "The reason should be \"daily\"");
+    CheckEquals("daily", backups[0].Reason, "The reason should be \"daily\"");
     CheckTrue(backups[0].BackupPath.filename() == "daily_event.daily.2026-01-14.bak", "The backup should be named for the day it holds");
     CheckTrue(backups[0].LogPath == config.File.ResolvePath(), "LogPath should be the log file");
 }
@@ -2368,8 +2368,8 @@ ASW_TEST(TTest_ASWLog_FileLog, OnBackupCreated_ReportsEachBackup)
     if (backups.size() != 2)
         return;
 
-    CheckEquals(std::string("size"), backups[0].Reason, "The size rotation's reason should be \"size\"");
-    CheckEquals(std::string("before-upgrade"), backups[1].Reason, "A manual rotation's reason should be its tag");
+    CheckEquals("size", backups[0].Reason, "The size rotation's reason should be \"size\"");
+    CheckEquals("before-upgrade", backups[1].Reason, "A manual rotation's reason should be its tag");
     CheckTrue(backups[0].LogPath == config.File.ResolvePath(), "LogPath should be the log file");
     CheckStartsWith(backups[1].BackupPath.filename().string(), "event.before-upgrade.", "BackupPath should be the manual backup");
     CheckTrue(backupExisted == std::vector<bool>{ true, true }, "The backup should exist during the call");
@@ -2437,7 +2437,7 @@ ASW_TEST(TTest_ASWLog_FileLog, OnBackupCreated_ThrowingCallbackStillCleansUp)
     CheckTrue(initialized, "Initialize should succeed");
     CheckTrue(rotated, "RotateLogFiles should succeed");
     CheckFalse(backupPath.empty() || std::filesystem::exists(backupPath), "The cleanup should still run after the callback threw");
-    CheckEquals(std::string(": after\n"), ReadFileText(logFile), "Logging should go on");
+    CheckEquals(": after\n", ReadFileText(logFile), "Logging should go on");
 }
 //---------------------------------------------------------------------------
 ASW_TEST(TTest_ASWLog_FileLog, OnError_ReportsFailedDelete)
@@ -2691,7 +2691,7 @@ ASW_TEST(TTest_ASWLog_FileLog, OnLogEntry_FiresForQualifyingLevelsOnly)
         CheckContains(callbackMessages[0], "at_threshold", "Callback should receive the same formatted line written to disk");
         CheckEquals(ASWLog::Level::Critical, callbackLevels[1], "Second callback should report the Critical entry's level");
         CheckContains(callbackMessages[1], "above_threshold", "Callback should receive the same formatted line written to disk");
-        CheckEquals(std::string("at_threshold"), callbackRecordMessages[0], "Callback should receive the entry's record, with the unformatted message");
+        CheckEquals("at_threshold", callbackRecordMessages[0], "Callback should receive the entry's record, with the unformatted message");
         CheckTrue(callbackRecords[0].Timestamp != std::chrono::system_clock::time_point{}, "The callback's record should be stamped with its time");
         CheckEquals(static_cast<int64_t>(ASWLog::GetCurrentOSThreadId()), static_cast<int64_t>(callbackRecords[0].ThreadId), "The callback's record should carry the logging thread's id");
     }
@@ -2761,7 +2761,7 @@ ASW_TEST(TTest_ASWLog_FileLog, Open_KeepsAnOpenFile)
     CheckTrue(initialized, "Initialize should succeed");
     CheckTrue(opened, "Open() on an open logger should succeed");
     CheckTrue(openAfterOpen, "The logger should still report open");
-    CheckEquals(std::string(": before_open\n: after_open\n"), ReadFileText(logFile), "The logger should go on writing to its file");
+    CheckEquals(": before_open\n: after_open\n", ReadFileText(logFile), "The logger should go on writing to its file");
 }
 //---------------------------------------------------------------------------
 ASW_TEST(TTest_ASWLog_FileLog, Periodic_CloseStopsAndOpenRestartsTheThread)
@@ -2789,7 +2789,7 @@ ASW_TEST(TTest_ASWLog_FileLog, Periodic_CloseStopsAndOpenRestartsTheThread)
     CheckTrue(closed, "Close should succeed");
     CheckEquals(wakeCountAfterClose, wakeCountWhileClosed, "Close should stop the flush thread");
     CheckTrue(opened, "Open should succeed");
-    CheckEquals(std::string(": entry_after_reopen\n"), contents, "Open should start the flush thread again");
+    CheckEquals(": entry_after_reopen\n", contents, "Open should start the flush thread again");
 }
 //---------------------------------------------------------------------------
 ASW_TEST(TTest_ASWLog_FileLog, Periodic_CloseStopsTheThreadWithoutWaitingForTheInterval)
@@ -2817,7 +2817,7 @@ ASW_TEST(TTest_ASWLog_FileLog, Periodic_CloseStopsTheThreadWithoutWaitingForTheI
     CheckEquals(std::string(), contentsBeforeClose, "Writing an entry shouldn't flush it in Periodic mode");
     CheckTrue(closed, "Close should succeed");
     CheckLessThan(closeTime.count(), WaitTimeout.count(), "Close should stop the flush thread without waiting for its interval");
-    CheckEquals(std::string(": buffered_entry\n"), contentsAfterClose, "Close should flush the buffered entry");
+    CheckEquals(": buffered_entry\n", contentsAfterClose, "Close should flush the buffered entry");
 }
 //---------------------------------------------------------------------------
 ASW_TEST(TTest_ASWLog_FileLog, Periodic_ConcurrentLoggingAndReconfigure)
@@ -2900,7 +2900,7 @@ ASW_TEST(TTest_ASWLog_FileLog, Periodic_DestructorStopsTheThreadWithoutWaitingFo
     // Assert
     CheckTrue(initialized, "Initialize should succeed");
     CheckLessThan(destroyTime.count(), WaitTimeout.count(), "The destructor should stop the flush thread without waiting for its interval");
-    CheckEquals(std::string(": buffered_entry\n"), contents, "The destructor should flush the buffered entry");
+    CheckEquals(": buffered_entry\n", contents, "The destructor should flush the buffered entry");
 }
 //---------------------------------------------------------------------------
 ASW_TEST(TTest_ASWLog_FileLog, Periodic_ErrorHandlerCanCloseAndReopenOnTheThread)
@@ -2967,7 +2967,7 @@ ASW_TEST(TTest_ASWLog_FileLog, Periodic_FlushesAfterTheLastEntry)
 
     // Assert
     CheckTrue(initialized, "Initialize should succeed");
-    CheckEquals(std::string(": last_entry\n"), contents, "The flush thread should flush the last entry within the interval");
+    CheckEquals(": last_entry\n", contents, "The flush thread should flush the last entry within the interval");
 }
 //---------------------------------------------------------------------------
 ASW_TEST(TTest_ASWLog_FileLog, Periodic_ReconfigureAppliesANewInterval)
@@ -2991,7 +2991,7 @@ ASW_TEST(TTest_ASWLog_FileLog, Periodic_ReconfigureAppliesANewInterval)
     // Assert
     CheckTrue(initialized, "Initialize should succeed");
     CheckTrue(reconfigured, "Reconfigure should succeed");
-    CheckEquals(std::string(": entry\n"), contents, "The flush thread should use the new interval at once");
+    CheckEquals(": entry\n", contents, "The flush thread should use the new interval at once");
 }
 //---------------------------------------------------------------------------
 ASW_TEST(TTest_ASWLog_FileLog, Periodic_ReconfigureStartsAndStopsTheThread)
@@ -3022,8 +3022,8 @@ ASW_TEST(TTest_ASWLog_FileLog, Periodic_ReconfigureStartsAndStopsTheThread)
     CheckTrue(initialized, "Initialize should succeed");
     CheckTrue(startedPeriodic, "Reconfigure to Periodic should succeed");
     CheckTrue(stoppedPeriodic, "Reconfigure to Manual should succeed");
-    CheckEquals(std::string(": periodic_entry\n"), contentsInPeriodic, "Reconfigure to Periodic should start the flush thread");
-    CheckEquals(std::string(": periodic_entry\n"), contentsInManual, "Reconfigure to Manual should stop the flush thread");
+    CheckEquals(": periodic_entry\n", contentsInPeriodic, "Reconfigure to Periodic should start the flush thread");
+    CheckEquals(": periodic_entry\n", contentsInManual, "Reconfigure to Manual should stop the flush thread");
 }
 //---------------------------------------------------------------------------
 ASW_TEST(TTest_ASWLog_FileLog, Periodic_ZeroIntervalFlushesEveryEntry)
@@ -3043,7 +3043,7 @@ ASW_TEST(TTest_ASWLog_FileLog, Periodic_ZeroIntervalFlushesEveryEntry)
 
     // Assert
     CheckTrue(initialized, "Initialize should succeed");
-    CheckEquals(std::string(": entry\n"), contents, "With no interval, each entry should be flushed as it is written");
+    CheckEquals(": entry\n", contents, "With no interval, each entry should be flushed as it is written");
 }
 //---------------------------------------------------------------------------
 ASW_TEST(TTest_ASWLog_FileLog, Reconfigure_FlushesEntriesBufferedByPreviousMode)
@@ -3069,9 +3069,9 @@ ASW_TEST(TTest_ASWLog_FileLog, Reconfigure_FlushesEntriesBufferedByPreviousMode)
     CheckNotContains(contentsBefore, "buffered_entry",
         "With FlushMode::Manual, the entry should still be buffered");
     CheckTrue(reconfigured, "Reconfigure() should succeed");
-    CheckEquals(std::string(": buffered_entry\n"), contentsAfterReconfigure,
+    CheckEquals(": buffered_entry\n", contentsAfterReconfigure,
         "Reconfigure() should flush the entries buffered under the previous flush mode");
-    CheckEquals(std::string(": buffered_entry\n: flushed_entry\n"), contentsAfterEntry,
+    CheckEquals(": buffered_entry\n: flushed_entry\n", contentsAfterEntry,
         "The new flush mode should apply to the next entry");
 }
 //---------------------------------------------------------------------------
@@ -3103,11 +3103,11 @@ ASW_TEST(TTest_ASWLog_FileLog, Reconfigure_MovesOutputToNewFile)
 
     // Assert
     CheckTrue(movedToSecond, "Reconfigure() to a new file path should succeed");
-    CheckEquals(std::string(": to_first\n"), firstContents, "Entries before Reconfigure() should stay in the first file");
+    CheckEquals(": to_first\n", firstContents, "Entries before Reconfigure() should stay in the first file");
     CheckTrue(firstFileRemoved, "Reconfigure() should close the first file");
     CheckTrue(switchedToAutoOpenClose, "Reconfigure() to File.AutoOpenClosePerWrite should succeed");
     CheckFalse(openAfterSwitch, "With File.AutoOpenClosePerWrite, the file should stay closed until the next entry");
-    CheckEquals(std::string(": to_second\n: auto_open_close\n"), ReadFileText(secondFile),
+    CheckEquals(": to_second\n: auto_open_close\n", ReadFileText(secondFile),
         "Entries after Reconfigure() should go to the new file, in either open mode");
 }
 //---------------------------------------------------------------------------
@@ -3140,7 +3140,7 @@ ASW_TEST(TTest_ASWLog_FileLog, Reconfigure_UnopenableFileFailsButLoggerStaysInit
     CheckTrue(logger.GetConfig()->File.FilePath == config.File.FilePath,
         "GetConfig() should return the config of the last Reconfigure()");
     CheckTrue(reconfiguredBack, "The logger should stay initialized after the failure, so it can be reconfigured again");
-    CheckEquals(std::string(": written\n"), ReadFileText(logFile),
+    CheckEquals(": written\n", ReadFileText(logFile),
         "Logging should resume in the file of the last Reconfigure()");
 }
 //---------------------------------------------------------------------------
@@ -3263,9 +3263,9 @@ ASW_TEST(TTest_ASWLog_FileLog, RotateLogFiles_FailsWhenEveryBackupNameIsTaken)
         CheckTrue(reports[0].Code == std::errc::file_exists, "The report should say that the names are taken: " + reports[0].Code.message());
     }
 
-    CheckEquals(std::string(": before_rotation\n: after_rotation\n"), ReadFileText(logFile), "The log should stay in place and take the next entries");
-    CheckEquals(std::string("kept"), ReadFileText(TestTempDir / (backupName + ".bak")), "The first backup name should not be replaced");
-    CheckEquals(std::string("kept"), ReadFileText(TestTempDir / (backupName + "_1000.bak")), "The last backup name should not be replaced");
+    CheckEquals(": before_rotation\n: after_rotation\n", ReadFileText(logFile), "The log should stay in place and take the next entries");
+    CheckEquals("kept", ReadFileText(TestTempDir / (backupName + ".bak")), "The first backup name should not be replaced");
+    CheckEquals("kept", ReadFileText(TestTempDir / (backupName + "_1000.bak")), "The last backup name should not be replaced");
 }
 //---------------------------------------------------------------------------
 ASW_TEST(TTest_ASWLog_FileLog, RotateLogFiles_KeepsEveryBackup)
@@ -3347,10 +3347,10 @@ ASW_TEST(TTest_ASWLog_FileLog, SetEnabled_FalseStopsAutoOpenCloseLogging)
     logger.LogInfo("enabled_again");
 
     // Assert
-    CheckEquals(std::string(": after_close\n"), contentsAfterClose,
+    CheckEquals(": after_close\n", contentsAfterClose,
         "With File.AutoOpenClosePerWrite, an entry after Close() reopens the file (documented on IASWLog::Close())");
     CheckFalse(fileExistsWhileDisabled, "A disabled logger should not reopen (or recreate) its file, even for a forced entry");
-    CheckEquals(std::string(": enabled_again\n"), ReadFileText(logFile), "Logging should resume once enabled again");
+    CheckEquals(": enabled_again\n", ReadFileText(logFile), "Logging should resume once enabled again");
 }
 //---------------------------------------------------------------------------
 ASW_TEST(TTest_ASWLog_FileLog, ShutdownLine_TimeFollowsTimestampZone)
@@ -3537,7 +3537,7 @@ ASW_TEST(TTest_ASWLog_FileLog, SyncToDiskAtLevel_FlushesAndSyncsEntriesAtOrAbove
     // Assert
     CheckTrue(initialized, "Initialize should succeed");
     CheckEquals(std::string(), contentsAfterInfo, "An entry below the level should stay buffered");
-    CheckEquals(std::string(": info_entry\nraw_warn_entry"), contentsAfterWarn,
+    CheckEquals(": info_entry\nraw_warn_entry", contentsAfterWarn,
         "An entry at the level should be flushed with the entries buffered before it");
     CheckEquals(0, reports.size(), "Syncing a log file should succeed");
 }

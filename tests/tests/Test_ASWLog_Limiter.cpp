@@ -232,7 +232,7 @@ ASW_TEST(TTest_ASWLog_Limiter, EveryN_AllowsEveryNthCall)
     }
 
     // Assert
-    CheckEquals(std::string("x..x..x."), pattern, "The 1st, 4th and 7th calls should be allowed");
+    CheckEquals("x..x..x.", pattern, "The 1st, 4th and 7th calls should be allowed");
     AssertEquals(3, refusedCounts.size(), "Three calls should be allowed");
     CheckEquals(0, refusedCounts[0], "The first follows no refused calls");
     CheckEquals(2, refusedCounts[1], "Each later one follows n - 1 refused calls");
@@ -260,7 +260,7 @@ ASW_TEST(TTest_ASWLog_Limiter, Macros_EveryIntervalAddsTheSuppressedField)
     const auto lines = log.GetLines();
     AssertEquals(2, lines.size(), "The first call and the first one after the interval should be written");
     CheckGreaterThan(calls, 2, "Calls within the interval should have been skipped");
-    CheckEquals(std::string("[WARN][attempt=0]: Retrying"), lines[0], "The first entry follows no skipped calls");
+    CheckEquals("[WARN][attempt=0]: Retrying", lines[0], "The first entry follows no skipped calls");
     CheckEquals(std::format("[WARN][suppressed={} attempt={}]: Retrying", calls - 2, calls - 1), lines[1],
         "The next entry should say how many calls were skipped, with the call's own fields");
 }
@@ -285,9 +285,9 @@ ASW_TEST(TTest_ASWLog_Limiter, Macros_EveryNCountsOnlyEntriesThatWouldBeWritten)
     // Assert
     const auto lines = log.GetLines();
     AssertEquals(3, lines.size(), "Every 4th written entry of 10 should be written");
-    CheckEquals(std::string("[INFO]: Item 1"), lines[0], "The first entry should be written");
-    CheckEquals(std::string("[INFO]: Item 5"), lines[1], "Then the 5th");
-    CheckEquals(std::string("[INFO]: Item 9"), lines[2], "Then the 9th");
+    CheckEquals("[INFO]: Item 1", lines[0], "The first entry should be written");
+    CheckEquals("[INFO]: Item 5", lines[1], "Then the 5th");
+    CheckEquals("[INFO]: Item 9", lines[2], "Then the 9th");
 }
 //---------------------------------------------------------------------------
 ASW_TEST(TTest_ASWLog_Limiter, Macros_KeepTheCallersSourceLocation)
@@ -309,8 +309,8 @@ ASW_TEST(TTest_ASWLog_Limiter, Macros_KeepTheCallersSourceLocation)
     // Assert
     AssertTrue(location.has_value(), "The entry should be written");
     CheckEquals(expectedLine, location->line(), "The entry should have the macro's line");
-    CheckContains(std::string(location->function_name()), "Test_Macros_KeepTheCallersSourceLocation", "The entry should have the calling function");
-    CheckEndsWith(std::string(location->file_name()), "Test_ASWLog_Limiter.cpp", "The entry should have the calling file");
+    CheckContains(location->function_name(), "Test_Macros_KeepTheCallersSourceLocation", "The entry should have the calling function");
+    CheckEndsWith(location->file_name(), "Test_ASWLog_Limiter.cpp", "The entry should have the calling file");
 }
 //---------------------------------------------------------------------------
 ASW_TEST(TTest_ASWLog_Limiter, Macros_OnceLogsTheFirstEntryThatWouldBeWritten)
@@ -335,7 +335,7 @@ ASW_TEST(TTest_ASWLog_Limiter, Macros_OnceLogsTheFirstEntryThatWouldBeWritten)
     CheckEquals(0, filteredLineCount, "Filtered calls should write nothing");
     const auto lines = log.GetLines();
     AssertEquals(1, lines.size(), "Only the first entry that would be written should be written");
-    CheckEquals(std::string("[DEBUG]: Once counted"), lines[0], "It should be the formatted entry");
+    CheckEquals("[DEBUG]: Once counted", lines[0], "It should be the formatted entry");
     CheckEquals(1, LimiterFormatCount, "Only the written entry's arguments should be formatted");
 }
 //---------------------------------------------------------------------------

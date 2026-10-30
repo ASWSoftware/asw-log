@@ -88,12 +88,12 @@
         <AllPackageLibs>rtl.lib;vcl.lib</AllPackageLibs>
         <_TCHARMapping>wchar_t</_TCHARMapping>
         <Multithreaded>true</Multithreaded>
-        <Icon_MainIcon>$(BDS)\bin\cbuilder_PROJECTICON.ico</Icon_MainIcon>
+        <Icon_MainIcon>..\..\..\..\third_party\asw-unit-tests\resource\ASWUnitTests.ico</Icon_MainIcon>
         <UWP_CppLogo44>$(BDS)\bin\Artwork\Windows\UWP\cppreg_UwpDefault_44.png</UWP_CppLogo44>
         <UWP_CppLogo150>$(BDS)\bin\Artwork\Windows\UWP\cppreg_UwpDefault_150.png</UWP_CppLogo150>
         <SanitizedProjectName>ASWLogTests_VCL_GUI</SanitizedProjectName>
-        <IncludePath>..\..\..\..\third_party\asw-unit-tests\vcl\gui\src\;..\..\..\..\third_party\asw-unit-tests\src\;..\..\..\..\ASWLog\;..\..\..\tests\;$(IncludePath)</IncludePath>
-        <ILINK_LibraryPath>..\..\..\..\third_party\asw-unit-tests\vcl\gui\src\;..\..\..\..\third_party\asw-unit-tests\src\;..\..\..\..\ASWLog\;..\..\..\tests\;$(ILINK_LibraryPath)</ILINK_LibraryPath>
+        <IncludePath>..\..\..\..\third_party\asw-unit-tests\vcl\gui\src\;..\..\..\..\third_party\asw-unit-tests\gui\src\;..\..\..\..\third_party\asw-unit-tests\src\;..\..\..\..\ASWLog\;..\..\..\tests\;$(IncludePath)</IncludePath>
+        <ILINK_LibraryPath>..\..\..\..\third_party\asw-unit-tests\vcl\gui\src\;..\..\..\..\third_party\asw-unit-tests\gui\src\;..\..\..\..\third_party\asw-unit-tests\src\;..\..\..\..\ASWLog\;..\..\..\tests\;$(ILINK_LibraryPath)</ILINK_LibraryPath>
         <Defines>ASWUNITTESTS_RTL_EXCEPTIONS;$(Defines)</Defines>
         <BCC_AllWarnings>true</BCC_AllWarnings>
         <BCC_SelectedWarnings>false</BCC_SelectedWarnings>
@@ -101,6 +101,7 @@
         <VerInfo_Locale>1033</VerInfo_Locale>
         <VerInfo_Keys>CompanyName=;FileDescription=$(MSBuildProjectName);FileVersion=1.0.0.0;InternalName=;LegalCopyright=;LegalTrademarks=;OriginalFilename=;ProgramID=com.embarcadero.$(MSBuildProjectName);ProductName=$(MSBuildProjectName);ProductVersion=1.0.0.0;Comments=</VerInfo_Keys>
         <BCC_UseClassicCompiler>false</BCC_UseClassicCompiler>
+        <Custom_Styles>Carbon|VCLSTYLE|$(BDSCOMMONDIR)\Styles\Carbon.vsf;&quot;Charcoal Dark Slate|VCLSTYLE|$(BDSCOMMONDIR)\Styles\CharcoalDarkSlate.vsf&quot;;&quot;Cobalt XEMedia|VCLSTYLE|$(BDSCOMMONDIR)\Styles\CobaltXEMedia.vsf&quot;;&quot;Onyx Blue|VCLSTYLE|$(BDSCOMMONDIR)\Styles\OnyxBlue.vsf&quot;;&quot;Tablet Dark|VCLSTYLE|$(BDSCOMMONDIR)\Styles\TabletDark.vsf&quot;</Custom_Styles>
     </PropertyGroup>
     <PropertyGroup Condition="'$(Base_Win32)'!=''">
         <PackageImports>adortl;bcbie;bcbsmp;bindcomp;bindcompdbx;bindcompfmx;bindcompvcl;bindcompvclsmp;bindcompvclwinx;bindengine;CloudService;CustomIPTransport;dbexpress;dbrtl;dbxcds;DbxClientDriver;DbxCommonDriver;DBXInterBaseDriver;DBXMySQLDriver;DBXSqliteDriver;dsnap;dsnapcon;dsnapxml;FireDAC;FireDACADSDriver;FireDACCommon;FireDACCommonDriver;FireDACCommonODBC;FireDACIBDriver;FireDACMSAccDriver;FireDACMySQLDriver;FireDACPgDriver;FireDACSqliteDriver;fmx;fmxase;fmxdae;fmxFireDAC;fmxobj;FMXTee;FmxTeeUI;IndyCore;IndyIPClient;IndyIPCommon;IndyIPServer;IndyProtocols;IndySystem;inet;inetdb;inetdbxpress;inetstn;RESTBackendComponents;RESTComponents;rtl;Skia;soapmidas;soaprtl;soapserver;Tee;TeeDB;TeeUI;tethering;vcl;vclactnband;vcldb;vcldsnap;vcledge;vclFireDAC;vclie;vclimg;VCLRESTComponents;VclSmp;vcltouch;vclwinx;vclx;xmlrtl;$(PackageImports)</PackageImports>
@@ -419,12 +420,20 @@
             <DependentOn>..\..\..\..\third_party\asw-unit-tests\src\ASWUnitTests_Version.h</DependentOn>
             <BuildOrder>19</BuildOrder>
         </CppCompile>
-        <CppCompile Include="..\..\..\..\third_party\asw-unit-tests\vcl\gui\src\ASWUnitTests_GUI_CommandLine.cpp">
-            <DependentOn>..\..\..\..\third_party\asw-unit-tests\vcl\gui\src\ASWUnitTests_GUI_CommandLine.h</DependentOn>
+        <CppCompile Include="..\..\..\..\third_party\asw-unit-tests\gui\src\ASWUnitTests_GUI_CommandLine.cpp">
+            <DependentOn>..\..\..\..\third_party\asw-unit-tests\gui\src\ASWUnitTests_GUI_CommandLine.h</DependentOn>
             <BuildOrder>20</BuildOrder>
         </CppCompile>
-        <CppCompile Include="..\..\..\..\third_party\asw-unit-tests\vcl\gui\src\ASWUnitTests_GUI_Layout.cpp">
-            <DependentOn>..\..\..\..\third_party\asw-unit-tests\vcl\gui\src\ASWUnitTests_GUI_Layout.h</DependentOn>
+        <CppCompile Include="..\..\..\..\third_party\asw-unit-tests\gui\src\ASWUnitTests_GUI_Commands.cpp">
+            <DependentOn>..\..\..\..\third_party\asw-unit-tests\gui\src\ASWUnitTests_GUI_Commands.h</DependentOn>
+            <BuildOrder>68</BuildOrder>
+        </CppCompile>
+        <CppCompile Include="..\..\..\..\third_party\asw-unit-tests\gui\src\ASWUnitTests_GUI_INIDocument.cpp">
+            <DependentOn>..\..\..\..\third_party\asw-unit-tests\gui\src\ASWUnitTests_GUI_INIDocument.h</DependentOn>
+            <BuildOrder>69</BuildOrder>
+        </CppCompile>
+        <CppCompile Include="..\..\..\..\third_party\asw-unit-tests\gui\src\ASWUnitTests_GUI_Layout.cpp">
+            <DependentOn>..\..\..\..\third_party\asw-unit-tests\gui\src\ASWUnitTests_GUI_Layout.h</DependentOn>
             <BuildOrder>21</BuildOrder>
         </CppCompile>
         <CppCompile Include="..\..\..\..\third_party\asw-unit-tests\vcl\gui\src\ASWUnitTests_GUI_MainForm.cpp">
@@ -433,16 +442,16 @@
             <DependentOn>..\..\..\..\third_party\asw-unit-tests\vcl\gui\src\ASWUnitTests_GUI_MainForm.h</DependentOn>
             <BuildOrder>22</BuildOrder>
         </CppCompile>
-        <CppCompile Include="..\..\..\..\third_party\asw-unit-tests\vcl\gui\src\ASWUnitTests_GUI_RunObserver.cpp">
-            <DependentOn>..\..\..\..\third_party\asw-unit-tests\vcl\gui\src\ASWUnitTests_GUI_RunObserver.h</DependentOn>
+        <CppCompile Include="..\..\..\..\third_party\asw-unit-tests\gui\src\ASWUnitTests_GUI_RunObserver.cpp">
+            <DependentOn>..\..\..\..\third_party\asw-unit-tests\gui\src\ASWUnitTests_GUI_RunObserver.h</DependentOn>
             <BuildOrder>23</BuildOrder>
         </CppCompile>
-        <CppCompile Include="..\..\..\..\third_party\asw-unit-tests\vcl\gui\src\ASWUnitTests_GUI_Selection.cpp">
-            <DependentOn>..\..\..\..\third_party\asw-unit-tests\vcl\gui\src\ASWUnitTests_GUI_Selection.h</DependentOn>
+        <CppCompile Include="..\..\..\..\third_party\asw-unit-tests\gui\src\ASWUnitTests_GUI_Selection.cpp">
+            <DependentOn>..\..\..\..\third_party\asw-unit-tests\gui\src\ASWUnitTests_GUI_Selection.h</DependentOn>
             <BuildOrder>41</BuildOrder>
         </CppCompile>
-        <CppCompile Include="..\..\..\..\third_party\asw-unit-tests\vcl\gui\src\ASWUnitTests_GUI_Shuffle.cpp">
-            <DependentOn>..\..\..\..\third_party\asw-unit-tests\vcl\gui\src\ASWUnitTests_GUI_Shuffle.h</DependentOn>
+        <CppCompile Include="..\..\..\..\third_party\asw-unit-tests\gui\src\ASWUnitTests_GUI_Shuffle.cpp">
+            <DependentOn>..\..\..\..\third_party\asw-unit-tests\gui\src\ASWUnitTests_GUI_Shuffle.h</DependentOn>
             <BuildOrder>45</BuildOrder>
         </CppCompile>
         <CppCompile Include="..\..\..\..\third_party\asw-unit-tests\vcl\gui\src\ASWUnitTests_GUI_ShuffleSeedDialog.cpp">
@@ -453,13 +462,29 @@
             <DependentOn>..\..\..\..\third_party\asw-unit-tests\vcl\gui\src\ASWUnitTests_GUI_Strings.h</DependentOn>
             <BuildOrder>24</BuildOrder>
         </CppCompile>
-        <CppCompile Include="..\..\..\..\third_party\asw-unit-tests\vcl\gui\src\ASWUnitTests_GUI_TestList.cpp">
-            <DependentOn>..\..\..\..\third_party\asw-unit-tests\vcl\gui\src\ASWUnitTests_GUI_TestList.h</DependentOn>
+        <CppCompile Include="..\..\..\..\third_party\asw-unit-tests\gui\src\ASWUnitTests_GUI_TestList.cpp">
+            <DependentOn>..\..\..\..\third_party\asw-unit-tests\gui\src\ASWUnitTests_GUI_TestList.h</DependentOn>
             <BuildOrder>25</BuildOrder>
+        </CppCompile>
+        <CppCompile Include="..\..\..\..\third_party\asw-unit-tests\gui\src\ASWUnitTests_GUI_Theme.cpp">
+            <DependentOn>..\..\..\..\third_party\asw-unit-tests\gui\src\ASWUnitTests_GUI_Theme.h</DependentOn>
+            <BuildOrder>70</BuildOrder>
+        </CppCompile>
+        <CppCompile Include="..\..\..\..\third_party\asw-unit-tests\gui\src\ASWUnitTests_GUI_Tree.cpp">
+            <DependentOn>..\..\..\..\third_party\asw-unit-tests\gui\src\ASWUnitTests_GUI_Tree.h</DependentOn>
+            <BuildOrder>71</BuildOrder>
+        </CppCompile>
+        <CppCompile Include="..\..\..\..\third_party\asw-unit-tests\gui\src\ASWUnitTests_GUI_View.cpp">
+            <DependentOn>..\..\..\..\third_party\asw-unit-tests\gui\src\ASWUnitTests_GUI_View.h</DependentOn>
+            <BuildOrder>72</BuildOrder>
         </CppCompile>
         <CppCompile Include="..\..\..\..\third_party\asw-unit-tests\vcl\gui\src\ASWUnitTests_GUI_TextDialog.cpp">
             <DependentOn>..\..\..\..\third_party\asw-unit-tests\vcl\gui\src\ASWUnitTests_GUI_TextDialog.h</DependentOn>
             <BuildOrder>26</BuildOrder>
+        </CppCompile>
+        <CppCompile Include="..\..\..\..\third_party\asw-unit-tests\vcl\gui\src\ASWUnitTests_GUI_VCLSystem.cpp">
+            <DependentOn>..\..\..\..\third_party\asw-unit-tests\vcl\gui\src\ASWUnitTests_GUI_VCLSystem.h</DependentOn>
+            <BuildOrder>73</BuildOrder>
         </CppCompile>
         <FormResources Include="..\..\..\..\third_party\asw-unit-tests\vcl\gui\src\ASWUnitTests_GUI_MainForm.dfm"/>
         <BuildConfiguration Include="Base">
