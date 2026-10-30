@@ -672,8 +672,8 @@ ASW_TEST(TTest_ASWLog_CrashHandler, AppendCrashJSONLine_ShowsTheFields)
     ASWLog::Detail::AppendCrashJSONLine(line, record, false);
 
     // Assert
-    CheckEquals(std::string(R"({"time":"2026-10-04T12:34:56.789Z","epoch_ms":1791117296789,"level":"DEBUG","pid":12,"tid":345,)"
-        R"("fields":{"user":"a\"my","n":17,"x":9.5,"ok":true,"nan":"NaN"},"message":"kept"})" "\n"), std::string(line.View()),
+    CheckEquals(R"({"time":"2026-10-04T12:34:56.789Z","epoch_ms":1791117296789,"level":"DEBUG","pid":12,"tid":345,)"
+        R"("fields":{"user":"a\"my","n":17,"x":9.5,"ok":true,"nan":"NaN"},"message":"kept"})" "\n", std::string(line.View()),
         "The fields should follow the thread id, as an object");
     CheckEquals(ASWLog::TASWJSONFormatter().Format(record, ASWLog::TASWLogConfig()) + "\n", std::string(line.View()),
         "The fixed layout should match the JSON formatter's default fields");
@@ -704,11 +704,11 @@ ASW_TEST(TTest_ASWLog_CrashHandler, AppendCrashJSONLine_UsesTheFixedLayout)
     ASWLog::Detail::AppendCrashJSONLine(categorizedLine, categorizedRaw, false);
 
     // Assert
-    CheckEquals(std::string(R"({"time":"2026-10-04T12:34:56.789Z","epoch_ms":1791117296789,"level":"CRITICAL","pid":12,"tid":345,)"
-        R"("message":"Crash: \"test\""})" "\n"), std::string(lfLine.View()), "The line should have the fixed layout");
+    CheckEquals(R"({"time":"2026-10-04T12:34:56.789Z","epoch_ms":1791117296789,"level":"CRITICAL","pid":12,"tid":345,)"
+        R"("message":"Crash: \"test\""})" "\n", std::string(lfLine.View()), "The line should have the fixed layout");
     CheckEndsWith(std::string(crlfLine.View()), "\"}\r\n", "The line should end with the configured line ending");
-    CheckEquals(std::string(R"({"time":"2026-10-04T12:34:56.789Z","epoch_ms":1791117296789,"level":"DEBUG","category":"Net.Http",)"
-        R"("pid":12,"tid":345,"raw":true,"message":"kept\n"})" "\n"), std::string(categorizedLine.View()),
+    CheckEquals(R"({"time":"2026-10-04T12:34:56.789Z","epoch_ms":1791117296789,"level":"DEBUG","category":"Net.Http",)"
+        R"("pid":12,"tid":345,"raw":true,"message":"kept\n"})" "\n", std::string(categorizedLine.View()),
         "The category and the raw mark should be written like the JSON formatter writes them");
 
     const ASWLog::TASWJSONFormatter formatter;
@@ -878,7 +878,7 @@ ASW_TEST(TTest_ASWLog_CrashHandler, AppendCrashLine_ShowsTheFields)
     ASWLog::Detail::AppendCrashLine(line, record, false);
 
     // Assert
-    CheckEquals(std::string("[2026-10-08T01:02:03.004Z][DEBUG][P:12][T:345][user=\"amy\" n=17]: kept\n"), std::string(line.View()),
+    CheckEquals("[2026-10-08T01:02:03.004Z][DEBUG][P:12][T:345][user=\"amy\" n=17]: kept\n", std::string(line.View()),
         "The fields should follow the thread id, as in the built-in layout");
 }
 //---------------------------------------------------------------------------
@@ -900,9 +900,9 @@ ASW_TEST(TTest_ASWLog_CrashHandler, AppendCrashLine_UsesTheFixedLayout)
     ASWLog::Detail::AppendCrashLine(crlfLine, record, true);
 
     // Assert
-    CheckEquals(std::string("[2026-10-04T12:34:56.789Z][CRITICAL][P:12][T:345]: Crash: test\n"), std::string(lfLine.View()),
+    CheckEquals("[2026-10-04T12:34:56.789Z][CRITICAL][P:12][T:345]: Crash: test\n", std::string(lfLine.View()),
         "The line should have the fixed layout");
-    CheckEquals(std::string("[2026-10-04T12:34:56.789Z][CRITICAL][P:12][T:345]: Crash: test\r\n"), std::string(crlfLine.View()),
+    CheckEquals("[2026-10-04T12:34:56.789Z][CRITICAL][P:12][T:345]: Crash: test\r\n", std::string(crlfLine.View()),
         "The line should end with the configured line ending");
     CheckStartsWith(std::string(lfLine.View()), "[" + ASWLog::Time::ToISO8601String(record.Timestamp) + "]",
         "The time should be written like the formatter writes it");
@@ -925,7 +925,7 @@ ASW_TEST(TTest_ASWLog_CrashHandler, AppendCrashLine_ShowsTheCategory)
     ASWLog::Detail::AppendCrashLine(line, record, false);
 
     // Assert
-    CheckEquals(std::string("[2026-10-08T01:02:03.004Z][DEBUG][Net.Http][P:12][T:345]: kept\n"), std::string(line.View()),
+    CheckEquals("[2026-10-08T01:02:03.004Z][DEBUG][Net.Http][P:12][T:345]: kept\n", std::string(line.View()),
         "The category should follow the level, as in the built-in layout");
 }
 //---------------------------------------------------------------------------
@@ -1065,7 +1065,7 @@ ASW_TEST(TTest_ASWLog_CrashHandler, CrashProcess_TerminateThenAbortWritesOneCras
     // Assert: the terminate handler writes the line; the SIGABRT handler that follows passes the crash on without one
     const auto contents = ReadFileText(TestTempDir / "terminate_then_abort.log");
     CheckEquals(PassedOnAbortExitCode, exitCode, "The crash should be passed on to the abort handler installed before");
-    CheckEquals(std::string("[INFO]: entry_1\n[CRITICAL]: Crash: std::terminate() called\n"), contents,
+    CheckEquals("[INFO]: entry_1\n[CRITICAL]: Crash: std::terminate() called\n", contents,
         "The crash should get one line, from the terminate handler");
 }
 //---------------------------------------------------------------------------
@@ -1076,9 +1076,9 @@ ASW_TEST(TTest_ASWLog_CrashHandler, CrashProcess_TerminateWritesTheExceptionAndF
 
     // Assert
     CheckEquals(PassedOnTerminateExitCode, exitCode, "The crash should be passed on to the terminate handler installed before");
-    CheckEquals(std::string("[INFO]: entry_1\n[INFO]: entry_2\n[CRITICAL]: Crash: std::terminate() called, exception: helper exception\n"),
+    CheckEquals("[INFO]: entry_1\n[INFO]: entry_2\n[CRITICAL]: Crash: std::terminate() called, exception: helper exception\n",
         ReadFileText(TestTempDir / "terminate.log"), "The buffered entries should be flushed, then the formatted crash line written");
-    CheckEquals(std::string("[INFO]: other_entry\n"), ReadFileText(TestTempDir / "terminate_other.log"),
+    CheckEquals("[INFO]: other_entry\n", ReadFileText(TestTempDir / "terminate_other.log"),
         "A logger with WriteCrashLine false should be flushed, without the crash line");
     CheckNotContains(ReadFileText(TestTempDir / "terminate_output.txt"), "Sanitizer", "No sanitizer report");
 }
@@ -1100,7 +1100,7 @@ ASW_TEST(TTest_ASWLog_CrashHandler, HandleCrash_ConsoleLogWritesTheLineToStdErr)
     std::cerr.rdbuf(previousErr);
 
     // Assert
-    CheckEquals(std::string("[CRITICAL]: Crash: test crash\n"), capturedErr.str(), "The crash line should go to stderr");
+    CheckEquals("[CRITICAL]: Crash: test crash\n", capturedErr.str(), "The crash line should go to stderr");
     CheckEquals(std::string(), capturedOut.str(), "Nothing should go to stdout");
 }
 //---------------------------------------------------------------------------
@@ -1116,7 +1116,7 @@ ASW_TEST(TTest_ASWLog_CrashHandler, HandleCrash_DisabledLoggerIsOnlyFlushed)
     ASWLog::HandleCrash("test crash");
 
     // Assert
-    CheckEquals(std::string("[INFO]: entry_1\n"), ReadFileText(TestTempDir / "disabled.log"),
+    CheckEquals("[INFO]: entry_1\n", ReadFileText(TestTempDir / "disabled.log"),
         "A disabled logger should be flushed, without the crash line");
 }
 //---------------------------------------------------------------------------
@@ -1135,7 +1135,7 @@ ASW_TEST(TTest_ASWLog_CrashHandler, HandleCrash_CrashLineHasTheThreadsScopeField
     }
 
     // Assert
-    CheckEquals(std::string("[CRITICAL][requestId=\"r-1\"]: Crash: scoped\n"), ReadFileText(TestTempDir / "scoped.log"),
+    CheckEquals("[CRITICAL][requestId=\"r-1\"]: Crash: scoped\n", ReadFileText(TestTempDir / "scoped.log"),
         "The formatted crash line should have the crashing thread's scope fields");
     CheckEndsWith(ReadFileText(TestTempDir / "scoped_busy.log"), std::format("][T:{}][requestId=\"r-1\"]: Crash: scoped\n",
         ASWLog::GetCurrentOSThreadId()), "The fixed-layout crash line should have them too");
@@ -1178,7 +1178,7 @@ ASW_TEST(TTest_ASWLog_CrashHandler, HandleCrash_FlushesAndWritesTheCrashLine)
 
     // Assert: read while the logger is still open
     CheckEquals(std::string(), before, "The entry should still be buffered before the crash");
-    CheckEquals(std::string("[INFO]: entry_1\n[CRITICAL]: Crash: test crash\n"), ReadFileText(TestTempDir / "crash.log"),
+    CheckEquals("[INFO]: entry_1\n[CRITICAL]: Crash: test crash\n", ReadFileText(TestTempDir / "crash.log"),
         "The buffered entry should be flushed, then the formatted crash line written and flushed");
 }
 //---------------------------------------------------------------------------
@@ -1240,8 +1240,8 @@ ASW_TEST(TTest_ASWLog_CrashHandler, HandleCrash_SkipsClosedAndDestroyedLoggers)
     ASWLog::HandleCrash("test crash");
 
     // Assert
-    CheckEquals(std::string("[INFO]: entry_1\n"), ReadFileText(TestTempDir / "closed.log"), "A closed logger should get no crash line");
-    CheckEquals(std::string("[INFO]: entry_1\n"), ReadFileText(TestTempDir / "destroyed.log"), "A destroyed logger should get no crash line");
+    CheckEquals("[INFO]: entry_1\n", ReadFileText(TestTempDir / "closed.log"), "A closed logger should get no crash line");
+    CheckEquals("[INFO]: entry_1\n", ReadFileText(TestTempDir / "destroyed.log"), "A destroyed logger should get no crash line");
 }
 //---------------------------------------------------------------------------
 ASW_TEST(TTest_ASWLog_CrashHandler, HandleCrash_SyncsTheLineAtSyncToDiskAtLevel)
@@ -1342,7 +1342,7 @@ ASW_TEST(TTest_ASWLog_CrashHandler, HandleCrash_WaitsForQueuedEntries)
     log.Close();
 
     // Assert
-    CheckEquals(std::string("[INFO]: entry_1\n[INFO]: entry_2\n[INFO]: entry_3\n[CRITICAL]: Crash: test crash\n"),
+    CheckEquals("[INFO]: entry_1\n[INFO]: entry_2\n[INFO]: entry_3\n[CRITICAL]: Crash: test crash\n",
         ReadFileText(TestTempDir / "async.log"), "The queued entries should be written before the crash line");
 }
 //---------------------------------------------------------------------------
@@ -1359,7 +1359,7 @@ ASW_TEST(TTest_ASWLog_CrashHandler, HandleCrash_WriteCrashLineFalseOnlyFlushes)
     ASWLog::HandleCrash("test crash");
 
     // Assert
-    CheckEquals(std::string("[INFO]: entry_1\n"), ReadFileText(TestTempDir / "no_line.log"),
+    CheckEquals("[INFO]: entry_1\n", ReadFileText(TestTempDir / "no_line.log"),
         "The logger should be flushed, without the crash line");
 }
 //---------------------------------------------------------------------------
@@ -1381,8 +1381,8 @@ ASW_TEST(TTest_ASWLog_CrashHandler, HandleCrash_WritesTheBacktraceBeforeTheCrash
     log.Close();
 
     // Assert
-    CheckEquals(std::string("[INFO]: info_1\n[INFO]: Backtrace: the last 1 entry below the minimum level\n[DEBUG]: debug_1\n"
-        "[INFO]: Backtrace end\n[CRITICAL]: Crash: test crash\n"), afterCrash,
+    CheckEquals("[INFO]: info_1\n[INFO]: Backtrace: the last 1 entry below the minimum level\n[DEBUG]: debug_1\n"
+        "[INFO]: Backtrace end\n[CRITICAL]: Crash: test crash\n", afterCrash,
         "The backtrace should be formatted and written between the flushed entries and the crash line");
     CheckEndsWith(ReadFileText(TestTempDir / "backtrace.log"), "[CRITICAL]: Crash: test crash\n[ERROR]: error_1\n",
         "The written backtrace should be forgotten");

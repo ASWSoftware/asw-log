@@ -111,8 +111,8 @@ ASW_TEST(TTest_ASWLog_Types, AsyncOverflowPolicy_FromString)
 ASW_TEST(TTest_ASWLog_Types, AsyncOverflowPolicy_ToString)
 {
     // Arrange / Act / Assert
-    CheckEquals(std::string("BLOCK"), std::string(ASWLog::AsyncOverflowPolicy_ToString(ASWLog::AsyncOverflowPolicy::Block)), "Block should stringify as BLOCK");
-    CheckEquals(std::string("DROP_NEWEST"), std::string(ASWLog::AsyncOverflowPolicy_ToString(ASWLog::AsyncOverflowPolicy::DropNewest)), "DropNewest should stringify as DROP_NEWEST");
+    CheckEquals("BLOCK", std::string(ASWLog::AsyncOverflowPolicy_ToString(ASWLog::AsyncOverflowPolicy::Block)), "Block should stringify as BLOCK");
+    CheckEquals("DROP_NEWEST", std::string(ASWLog::AsyncOverflowPolicy_ToString(ASWLog::AsyncOverflowPolicy::DropNewest)), "DropNewest should stringify as DROP_NEWEST");
 }
 //---------------------------------------------------------------------------
 ASW_TEST(TTest_ASWLog_Types, ColorMode_FromString)
@@ -144,24 +144,24 @@ ASW_TEST(TTest_ASWLog_Types, ColorMode_ToString)
     const std::string never = std::string(ASWLog::ColorMode_ToString(ASWLog::ColorMode::Never));
 
     // Act & Assert
-    CheckEquals(std::string("AUTO"), autoMode, "Auto should stringify as AUTO");
-    CheckEquals(std::string("ALWAYS"), always, "Always should stringify as ALWAYS");
-    CheckEquals(std::string("NEVER"), never, "Never should stringify as NEVER");
+    CheckEquals("AUTO", autoMode, "Auto should stringify as AUTO");
+    CheckEquals("ALWAYS", always, "Always should stringify as ALWAYS");
+    CheckEquals("NEVER", never, "Never should stringify as NEVER");
 }
 //---------------------------------------------------------------------------
 ASW_TEST(TTest_ASWLog_Types, ErrorKind_ToString)
 {
     // Arrange / Act / Assert
-    CheckEquals(std::string("OPEN_FAILED"), std::string(ASWLog::ErrorKind_ToString(ASWLog::ErrorKind::OpenFailed)), "OpenFailed should stringify as OPEN_FAILED");
-    CheckEquals(std::string("WRITE_FAILED"), std::string(ASWLog::ErrorKind_ToString(ASWLog::ErrorKind::WriteFailed)), "WriteFailed should stringify as WRITE_FAILED");
-    CheckEquals(std::string("FLUSH_FAILED"), std::string(ASWLog::ErrorKind_ToString(ASWLog::ErrorKind::FlushFailed)), "FlushFailed should stringify as FLUSH_FAILED");
-    CheckEquals(std::string("SYNC_FAILED"), std::string(ASWLog::ErrorKind_ToString(ASWLog::ErrorKind::SyncFailed)), "SyncFailed should stringify as SYNC_FAILED");
-    CheckEquals(std::string("CLOSE_FAILED"), std::string(ASWLog::ErrorKind_ToString(ASWLog::ErrorKind::CloseFailed)), "CloseFailed should stringify as CLOSE_FAILED");
-    CheckEquals(std::string("ROTATION_FAILED"), std::string(ASWLog::ErrorKind_ToString(ASWLog::ErrorKind::RotationFailed)), "RotationFailed should stringify as ROTATION_FAILED");
-    CheckEquals(std::string("DELETE_FAILED"), std::string(ASWLog::ErrorKind_ToString(ASWLog::ErrorKind::DeleteFailed)), "DeleteFailed should stringify as DELETE_FAILED");
-    CheckEquals(std::string("EXCEPTION"), std::string(ASWLog::ErrorKind_ToString(ASWLog::ErrorKind::Exception)), "Exception should stringify as EXCEPTION");
-    CheckEquals(std::string("ENTRIES_DROPPED"), std::string(ASWLog::ErrorKind_ToString(ASWLog::ErrorKind::EntriesDropped)), "EntriesDropped should stringify as ENTRIES_DROPPED");
-    CheckEquals(std::string("INVALID_SETTING"), std::string(ASWLog::ErrorKind_ToString(ASWLog::ErrorKind::InvalidSetting)), "InvalidSetting should stringify as INVALID_SETTING");
+    CheckEquals("OPEN_FAILED", std::string(ASWLog::ErrorKind_ToString(ASWLog::ErrorKind::OpenFailed)), "OpenFailed should stringify as OPEN_FAILED");
+    CheckEquals("WRITE_FAILED", std::string(ASWLog::ErrorKind_ToString(ASWLog::ErrorKind::WriteFailed)), "WriteFailed should stringify as WRITE_FAILED");
+    CheckEquals("FLUSH_FAILED", std::string(ASWLog::ErrorKind_ToString(ASWLog::ErrorKind::FlushFailed)), "FlushFailed should stringify as FLUSH_FAILED");
+    CheckEquals("SYNC_FAILED", std::string(ASWLog::ErrorKind_ToString(ASWLog::ErrorKind::SyncFailed)), "SyncFailed should stringify as SYNC_FAILED");
+    CheckEquals("CLOSE_FAILED", std::string(ASWLog::ErrorKind_ToString(ASWLog::ErrorKind::CloseFailed)), "CloseFailed should stringify as CLOSE_FAILED");
+    CheckEquals("ROTATION_FAILED", std::string(ASWLog::ErrorKind_ToString(ASWLog::ErrorKind::RotationFailed)), "RotationFailed should stringify as ROTATION_FAILED");
+    CheckEquals("DELETE_FAILED", std::string(ASWLog::ErrorKind_ToString(ASWLog::ErrorKind::DeleteFailed)), "DeleteFailed should stringify as DELETE_FAILED");
+    CheckEquals("EXCEPTION", std::string(ASWLog::ErrorKind_ToString(ASWLog::ErrorKind::Exception)), "Exception should stringify as EXCEPTION");
+    CheckEquals("ENTRIES_DROPPED", std::string(ASWLog::ErrorKind_ToString(ASWLog::ErrorKind::EntriesDropped)), "EntriesDropped should stringify as ENTRIES_DROPPED");
+    CheckEquals("INVALID_SETTING", std::string(ASWLog::ErrorKind_ToString(ASWLog::ErrorKind::InvalidSetting)), "InvalidSetting should stringify as INVALID_SETTING");
     CheckEquals(static_cast<std::size_t>(ASWLog::ErrorKind::InvalidSetting) + 1, ASWLog::ErrorKindCount, "ErrorKindCount should count every kind (InvalidSetting is the last)");
 }
 //---------------------------------------------------------------------------
@@ -199,10 +199,10 @@ ASW_TEST(TTest_ASWLog_Types, FlushMode_ToString)
     const std::string periodic = std::string(ASWLog::FlushMode_ToString(ASWLog::FlushMode::Periodic));
 
     // Act & Assert
-    CheckEquals(std::string("EVERY_WRITE"), everyWrite, "EVERY_WRITE should stringify as EVERY_WRITE");
-    CheckEquals(std::string("ON_NEW_LINE"), onNewLine, "ON_NEW_LINE should stringify as ON_NEW_LINE");
-    CheckEquals(std::string("MANUAL"), manual, "MANUAL should stringify as MANUAL");
-    CheckEquals(std::string("PERIODIC"), periodic, "PERIODIC should stringify as PERIODIC");
+    CheckEquals("EVERY_WRITE", everyWrite, "EVERY_WRITE should stringify as EVERY_WRITE");
+    CheckEquals("ON_NEW_LINE", onNewLine, "ON_NEW_LINE should stringify as ON_NEW_LINE");
+    CheckEquals("MANUAL", manual, "MANUAL should stringify as MANUAL");
+    CheckEquals("PERIODIC", periodic, "PERIODIC should stringify as PERIODIC");
 }
 //---------------------------------------------------------------------------
 ASW_TEST(TTest_ASWLog_Types, Level_FromString)
@@ -255,13 +255,13 @@ ASW_TEST(TTest_ASWLog_Types, Level_ToString)
     const std::string off = std::string(ASWLog::Level_ToString(ASWLog::Level::Off));
 
     // Act & Assert
-    CheckEquals(std::string("TRACE"), trace, "Trace should stringify as TRACE");
-    CheckEquals(std::string("DEBUG"), debug, "Debug should stringify as DEBUG");
-    CheckEquals(std::string("INFO"), info, "Info should stringify as INFO");
-    CheckEquals(std::string("WARN"), warn, "Warn should stringify as WARN");
-    CheckEquals(std::string("ERROR"), error, "Error should stringify as ERROR");
-    CheckEquals(std::string("CRITICAL"), critical, "Critical should stringify as CRITICAL");
-    CheckEquals(std::string("OFF"), off, "Off should stringify as OFF");
+    CheckEquals("TRACE", trace, "Trace should stringify as TRACE");
+    CheckEquals("DEBUG", debug, "Debug should stringify as DEBUG");
+    CheckEquals("INFO", info, "Info should stringify as INFO");
+    CheckEquals("WARN", warn, "Warn should stringify as WARN");
+    CheckEquals("ERROR", error, "Error should stringify as ERROR");
+    CheckEquals("CRITICAL", critical, "Critical should stringify as CRITICAL");
+    CheckEquals("OFF", off, "Off should stringify as OFF");
     CheckEquals(static_cast<std::size_t>(ASWLog::Level::Off), ASWLog::LevelCount,
         "LevelCount should count the severity levels, which come before Off");
 }
@@ -296,8 +296,8 @@ ASW_TEST(TTest_ASWLog_Types, LineEnding_ToString)
     const std::string crlf = std::string(ASWLog::LineEnding_ToString(ASWLog::LineEnding::CRLF));
 
     // Act & Assert
-    CheckEquals(std::string("LF"), lf, "LF should stringify as LF");
-    CheckEquals(std::string("CRLF"), crlf, "CRLF should stringify as CRLF");
+    CheckEquals("LF", lf, "LF should stringify as LF");
+    CheckEquals("CRLF", crlf, "CRLF should stringify as CRLF");
 }
 //---------------------------------------------------------------------------
 ASW_TEST(TTest_ASWLog_Types, LogError_ToString)
@@ -320,7 +320,7 @@ ASW_TEST(TTest_ASWLog_Types, LogError_ToString)
     const auto everyPartText = everyPart.ToString();
 
     // Assert
-    CheckEquals(std::string("EXCEPTION: Dropped an entry: out of memory"), messageOnlyText, "The empty parts should be left out");
+    CheckEquals("EXCEPTION: Dropped an entry: out of memory", messageOnlyText, "The empty parts should be left out");
     CheckEquals("OPEN_FAILED: Couldn't open the log file 'logs/app.log': " + code.message() + " (3 more not reported)", everyPartText, "Every part should be in the line");
 }
 //---------------------------------------------------------------------------
@@ -342,9 +342,9 @@ ASW_TEST(TTest_ASWLog_Types, MultilineMode_FromString)
 ASW_TEST(TTest_ASWLog_Types, MultilineMode_ToString)
 {
     // Act & Assert
-    CheckEquals(std::string("PRESERVE"), std::string(ASWLog::MultilineMode_ToString(ASWLog::MultilineMode::Preserve)), "Preserve should stringify as PRESERVE");
-    CheckEquals(std::string("INDENT"), std::string(ASWLog::MultilineMode_ToString(ASWLog::MultilineMode::Indent)), "Indent should stringify as INDENT");
-    CheckEquals(std::string("ESCAPE"), std::string(ASWLog::MultilineMode_ToString(ASWLog::MultilineMode::Escape)), "Escape should stringify as ESCAPE");
+    CheckEquals("PRESERVE", std::string(ASWLog::MultilineMode_ToString(ASWLog::MultilineMode::Preserve)), "Preserve should stringify as PRESERVE");
+    CheckEquals("INDENT", std::string(ASWLog::MultilineMode_ToString(ASWLog::MultilineMode::Indent)), "Indent should stringify as INDENT");
+    CheckEquals("ESCAPE", std::string(ASWLog::MultilineMode_ToString(ASWLog::MultilineMode::Escape)), "Escape should stringify as ESCAPE");
 }
 //---------------------------------------------------------------------------
 ASW_TEST(TTest_ASWLog_Types, PendingEntry_ChangingFieldsWhileVisitingIsSafe)
@@ -395,8 +395,8 @@ ASW_TEST(TTest_ASWLog_Types, PendingEntry_FindsFieldsOfTheEntryAndItsScopes)
     AssertNotNull(requestId, "A scope's field should be found");
     AssertNotNull(user, "A field the entry and its scope both have should be found");
     AssertNotNull(orderId, "The entry's own field should be found");
-    CheckEquals(std::string("8f3a"), std::string(requestId->GetText()), "The scope's value should be returned");
-    CheckEquals(std::string("bob"), std::string(user->GetText()), "The entry's own value should beat the scope's");
+    CheckEquals("8f3a", std::string(requestId->GetText()), "The scope's value should be returned");
+    CheckEquals("bob", std::string(user->GetText()), "The entry's own value should beat the scope's");
     CheckEquals(17, orderId->GetInt(), "The entry's own value should be returned");
     CheckNull(missing, "A field the entry doesn't have should give null");
     CheckTrue(DescribeFields(entry) == std::vector<std::string>{ "requestId=8f3a", "user=bob", "orderId=17" },
@@ -424,7 +424,7 @@ ASW_TEST(TTest_ASWLog_Types, PendingEntry_RemoveFieldRemovesItForThisEntry)
     CheckTrue(DescribeFields(entry) == std::vector<std::string>{ "requestId=8f3a", "orderId=17" },
         "The field should be gone, its own value and the scope's");
     CheckNull(entry.GetRecord().Scope, "The entry's fields should no longer depend on the scope");
-    CheckEquals(std::string("amy"), std::string(ASWLog::TASWLogScope::GetCurrent()->GetFields()[0].Value.GetText()),
+    CheckEquals("amy", std::string(ASWLog::TASWLogScope::GetCurrent()->GetFields()[0].Value.GetText()),
         "The scope itself should keep the field");
 }
 //---------------------------------------------------------------------------
@@ -475,11 +475,11 @@ ASW_TEST(TTest_ASWLog_Types, PendingEntry_SetMessageOwnsTheText)
     }
 
     // Assert
-    CheckEquals(std::string("password=***"), std::string(entry.GetRecord().Message), "The entry should own its new message");
-    CheckEquals(std::string("password=secret"), std::string(record.Message), "The original record should be unchanged");
+    CheckEquals("password=***", std::string(entry.GetRecord().Message), "The entry should own its new message");
+    CheckEquals("password=secret", std::string(record.Message), "The original record should be unchanged");
     CheckEquals(ASWLog::Level::Warn, entry.GetRecord().LogLevel, "The level should be kept");
     CheckTrue(entry.GetRecord().Raw, "The flags should be kept");
-    CheckEquals(std::string("Net"), std::string(entry.GetRecord().Category), "The category should be kept");
+    CheckEquals("Net", std::string(entry.GetRecord().Category), "The category should be kept");
 }
 //---------------------------------------------------------------------------
 ASW_TEST(TTest_ASWLog_Types, SyslogFacility_FromString)
@@ -504,11 +504,11 @@ ASW_TEST(TTest_ASWLog_Types, SyslogFacility_FromString)
 ASW_TEST(TTest_ASWLog_Types, SyslogFacility_ToString)
 {
     // Act & Assert
-    CheckEquals(std::string("USER"), std::string(ASWLog::SyslogFacility_ToString(ASWLog::SyslogFacility::User)), "User should stringify as USER");
-    CheckEquals(std::string("DAEMON"), std::string(ASWLog::SyslogFacility_ToString(ASWLog::SyslogFacility::Daemon)), "Daemon should stringify as DAEMON");
-    CheckEquals(std::string("LOCAL0"), std::string(ASWLog::SyslogFacility_ToString(ASWLog::SyslogFacility::Local0)), "Local0 should stringify as LOCAL0");
-    CheckEquals(std::string("LOCAL4"), std::string(ASWLog::SyslogFacility_ToString(ASWLog::SyslogFacility::Local4)), "Local4 should stringify as LOCAL4");
-    CheckEquals(std::string("LOCAL7"), std::string(ASWLog::SyslogFacility_ToString(ASWLog::SyslogFacility::Local7)), "Local7 should stringify as LOCAL7");
+    CheckEquals("USER", std::string(ASWLog::SyslogFacility_ToString(ASWLog::SyslogFacility::User)), "User should stringify as USER");
+    CheckEquals("DAEMON", std::string(ASWLog::SyslogFacility_ToString(ASWLog::SyslogFacility::Daemon)), "Daemon should stringify as DAEMON");
+    CheckEquals("LOCAL0", std::string(ASWLog::SyslogFacility_ToString(ASWLog::SyslogFacility::Local0)), "Local0 should stringify as LOCAL0");
+    CheckEquals("LOCAL4", std::string(ASWLog::SyslogFacility_ToString(ASWLog::SyslogFacility::Local4)), "Local4 should stringify as LOCAL4");
+    CheckEquals("LOCAL7", std::string(ASWLog::SyslogFacility_ToString(ASWLog::SyslogFacility::Local7)), "Local7 should stringify as LOCAL7");
     CheckEquals(8, static_cast<int>(ASWLog::SyslogFacility::User) << 3, "User should be RFC 5424 facility 1 (LOG_USER = 8)");
     CheckEquals(184, static_cast<int>(ASWLog::SyslogFacility::Local7) << 3, "Local7 should be RFC 5424 facility 23 (LOG_LOCAL7 = 184)");
 }
@@ -537,9 +537,9 @@ ASW_TEST(TTest_ASWLog_Types, TimePrecision_FromString)
 ASW_TEST(TTest_ASWLog_Types, TimePrecision_ToString)
 {
     // Act & Assert
-    CheckEquals(std::string("MILLISECONDS"), std::string(ASWLog::TimePrecision_ToString(ASWLog::TimePrecision::Milliseconds)), "Milliseconds should stringify as MILLISECONDS");
-    CheckEquals(std::string("MICROSECONDS"), std::string(ASWLog::TimePrecision_ToString(ASWLog::TimePrecision::Microseconds)), "Microseconds should stringify as MICROSECONDS");
-    CheckEquals(std::string("NANOSECONDS"), std::string(ASWLog::TimePrecision_ToString(ASWLog::TimePrecision::Nanoseconds)), "Nanoseconds should stringify as NANOSECONDS");
+    CheckEquals("MILLISECONDS", std::string(ASWLog::TimePrecision_ToString(ASWLog::TimePrecision::Milliseconds)), "Milliseconds should stringify as MILLISECONDS");
+    CheckEquals("MICROSECONDS", std::string(ASWLog::TimePrecision_ToString(ASWLog::TimePrecision::Microseconds)), "Microseconds should stringify as MICROSECONDS");
+    CheckEquals("NANOSECONDS", std::string(ASWLog::TimePrecision_ToString(ASWLog::TimePrecision::Nanoseconds)), "Nanoseconds should stringify as NANOSECONDS");
 }
 //---------------------------------------------------------------------------
 ASW_TEST(TTest_ASWLog_Types, TimeZone_FromString)
@@ -558,8 +558,8 @@ ASW_TEST(TTest_ASWLog_Types, TimeZone_FromString)
 ASW_TEST(TTest_ASWLog_Types, TimeZone_ToString)
 {
     // Act & Assert
-    CheckEquals(std::string("UTC"), std::string(ASWLog::TimeZone_ToString(ASWLog::TimeZone::UTC)), "UTC should stringify as UTC");
-    CheckEquals(std::string("LOCAL"), std::string(ASWLog::TimeZone_ToString(ASWLog::TimeZone::Local)), "Local should stringify as LOCAL");
+    CheckEquals("UTC", std::string(ASWLog::TimeZone_ToString(ASWLog::TimeZone::UTC)), "UTC should stringify as UTC");
+    CheckEquals("LOCAL", std::string(ASWLog::TimeZone_ToString(ASWLog::TimeZone::Local)), "Local should stringify as LOCAL");
 }
 //---------------------------------------------------------------------------
 

@@ -202,14 +202,14 @@ ASW_TEST(TTest_ASWLog_NullLog, Lifecycle_SucceedsAndKeepsTheConfig)
     AssertNotNull(defaultConfig, "GetConfig() should return a config before Initialize()");
     CheckEmpty(defaultConfig->Startup.Banner, "The config before Initialize() should be the default");
     CheckTrue(initialized && reconfigured, "Initialize() and Reconfigure() should succeed");
-    CheckEquals(std::string("initialized"), initializedConfig->Startup.Banner, "An earlier snapshot should stay unchanged");
-    CheckEquals(std::string("reconfigured"), log.GetConfig()->Startup.Banner, "GetConfig() should return the last config passed in");
+    CheckEquals("initialized", initializedConfig->Startup.Banner, "An earlier snapshot should stay unchanged");
+    CheckEquals("reconfigured", log.GetConfig()->Startup.Banner, "GetConfig() should return the last config passed in");
     CheckEquals(ASWLog::Level::Debug, levelAfterInitialize, "Initialize() should seed the minimum level");
     CheckEquals(ASWLog::Level::Debug, levelAfterReconfigure, "Reconfigure() should keep the minimum level");
     CheckEquals(ASWLog::Level::Warn, log.GetMinimumLevel(), "The minimum level should read back as set");
     CheckTrue(log.Open() && log.Flush() && log.IsOpen() && log.Close(), "Open(), Flush(), IsOpen() and Close() should succeed");
     CheckContains(log.GetFullVersionStr(), "TASWNullLog", "The full version should name the logger");
-    CheckEquals(std::string(ASWLog::Version), std::string(log.GetVersionStr()), "The version should be the library's");
+    CheckEquals(ASWLog::Version, std::string(log.GetVersionStr()), "The version should be the library's");
 }
 //---------------------------------------------------------------------------
 ASW_TEST(TTest_ASWLog_NullLog, ShouldLog_IsAlwaysFalse)

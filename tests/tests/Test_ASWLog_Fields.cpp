@@ -276,7 +276,7 @@ ASW_TEST(TTest_ASWLog_Fields, Async_OnLogEntryGetsTheFieldsAfterTheScopeEnds)
     // Assert
     AssertTrue(wasCalled, "OnLogEntry should be called");
     AssertEquals(std::size_t(1), described.size(), "OnLogEntry should be called once");
-    CheckEquals(std::string("requestId=t:r-1 user=t:amy attempt=i:2"), described[0],
+    CheckEquals("requestId=t:r-1 user=t:amy attempt=i:2", described[0],
         "OnLogEntry should get copies of the entry's fields and its scope's, made when the entry was queued");
 }
 //---------------------------------------------------------------------------
@@ -301,8 +301,8 @@ ASW_TEST(TTest_ASWLog_Fields, Backtrace_KeepsTheFieldsAfterTheScopeEnds)
 
     // Assert
     AssertEquals(std::size_t(4), logger.Written.size(), "The backtrace's markers, its entry and the error should be written");
-    CheckEquals(std::string("kept|requestId=t:r-7 step=t:parse"), logger.Written[1], "The kept entry should keep copies of its fields");
-    CheckEquals(std::string("failed|code=i:5"), logger.Written[3], "The error should have its own fields only");
+    CheckEquals("kept|requestId=t:r-7 step=t:parse", logger.Written[1], "The kept entry should keep copies of its fields");
+    CheckEquals("failed|code=i:5", logger.Written[3], "The error should have its own fields only");
 }
 //---------------------------------------------------------------------------
 ASW_TEST(TTest_ASWLog_Fields, Capture_TakesTheScopesToAnotherThread)
@@ -344,13 +344,13 @@ ASW_TEST(TTest_ASWLog_Fields, Capture_TakesTheScopesToAnotherThread)
         CheckNotSame(context.GetFields()[0].Key.data(), copy->GetFields()[0].Key.data(), "A copy should have its own keys");
         CheckNotSame(context.GetFields()[1].Value.GetText().data(), copy->GetFields()[1].Value.GetText().data(),
             "A copy should have its own texts");
-        CheckEquals(std::string("requestId=t:r-1 user=t:bob"), DescribeFieldList(nullptr, copy->GetFields()), "A copy should read the same");
+        CheckEquals("requestId=t:r-1 user=t:bob", DescribeFieldList(nullptr, copy->GetFields()), "A copy should read the same");
     }
 
     CheckTrue(emptyContext.IsEmpty(), "Capture() without a scope should give an empty context");
-    CheckEquals(std::string("requestId=t:r-1 user=t:bob"), DescribeFieldList(nullptr, context.GetFields()),
+    CheckEquals("requestId=t:r-1 user=t:bob", DescribeFieldList(nullptr, context.GetFields()),
         "The context should hold each key once, the inner scope's value winning");
-    CheckEquals(std::string("requestId=t:r-1 user=t:carl task=i:3"), onOtherThread,
+    CheckEquals("requestId=t:r-1 user=t:carl task=i:3", onOtherThread,
         "A scope made from the context should apply it on the other thread, its own fields replacing the same keys");
     CheckEmpty(afterScopeOnOtherThread, "The other thread should have no scope once it ends");
 }
@@ -367,9 +367,9 @@ ASW_TEST(TTest_ASWLog_Fields, ForEachLogField_EachKeyOnceInnermostWins)
     const auto scopesOnly = DescribeFieldList(ASWLog::TASWLogScope::GetCurrent(), {});
 
     // Assert
-    CheckEquals(std::string("user=t:bob req=i:2 depth=i:1 x=i:2"), described,
+    CheckEquals("user=t:bob req=i:2 depth=i:1 x=i:2", described,
         "Each key should come once, where it first appears, with its innermost (or the entry's own) value");
-    CheckEquals(std::string("user=t:amy req=i:2 depth=i:1"), scopesOnly, "Without the entry's fields, the inner scope should win");
+    CheckEquals("user=t:amy req=i:2 depth=i:1", scopesOnly, "Without the entry's fields, the inner scope should win");
 }
 //---------------------------------------------------------------------------
 ASW_TEST(TTest_ASWLog_Fields, ForEachLogField_RepeatedKeysInTheEntrysOwnFields)
@@ -382,7 +382,7 @@ ASW_TEST(TTest_ASWLog_Fields, ForEachLogField_RepeatedKeysInTheEntrysOwnFields)
     const auto none = DescribeFieldList(nullptr, {});
 
     // Assert
-    CheckEquals(std::string("a=i:3 b=i:5 c=i:4"), described, "A repeated key should come once, where it first appears, with its last value");
+    CheckEquals("a=i:3 b=i:5 c=i:4", described, "A repeated key should come once, where it first appears, with its last value");
     CheckEmpty(none, "No fields should give nothing");
 }
 //---------------------------------------------------------------------------
@@ -582,7 +582,7 @@ ASW_TEST(TTest_ASWLog_Fields, Value_RejectsCharactersEnumsAndPointers)
     CheckFalse(std::is_constructible_v<ASWLog::TASWLogValue, const int*>, "A pointer that isn't text should be rejected");
     CheckFalse(std::is_constructible_v<ASWLog::TASWLogValue, std::nullptr_t>, "nullptr should be rejected");
     CheckTrue(std::is_constructible_v<ASWLog::TASWLogValue, const char*>, "A C string should be accepted");
-    CheckEquals(std::string(""), std::string(ASWLog::TASWLogValue(static_cast<const char*>(nullptr)).GetText()),
+    CheckEquals("", std::string(ASWLog::TASWLogValue(static_cast<const char*>(nullptr)).GetText()),
         "A null C string should be empty text");
 }
 //---------------------------------------------------------------------------

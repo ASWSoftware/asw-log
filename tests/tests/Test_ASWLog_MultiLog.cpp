@@ -978,8 +978,8 @@ ASW_TEST(TTest_ASWLog_MultiLog, Reconfigure_PassesConfigToEverySink)
     CheckTrue(reconfigured, "Reconfigure() should return true once every sink's Reconfigure() succeeds");
     CheckTrue(failingSink.Calls == twoReconfigures, "Each Reconfigure() should reach the failing sink");
     CheckTrue(sink.Calls == twoReconfigures, "A sink's failed Reconfigure() should not stop the other sinks");
-    CheckEquals(std::string("reconfigured"), sink.GetConfig()->Startup.Banner, "Each sink should get the new config");
-    CheckEquals(std::string("reconfigured"), multiLog.GetConfig()->Startup.Banner, "The multi-log should keep the new config");
+    CheckEquals("reconfigured", sink.GetConfig()->Startup.Banner, "Each sink should get the new config");
+    CheckEquals("reconfigured", multiLog.GetConfig()->Startup.Banner, "The multi-log should keep the new config");
 }
 //---------------------------------------------------------------------------
 ASW_TEST(TTest_ASWLog_MultiLog, RemoveAllLoggers_ClearsRegistrationAndReturnsCount)

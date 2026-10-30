@@ -123,7 +123,7 @@ ASW_TEST(TTest_ASWLog_Config, ApplyEnvironment_AppliesPatternAfterFormat)
     const auto* patternFormatter = dynamic_cast<const ASWLog::TASWPatternFormatter*>(config.Line.Formatter.get());
     CheckNotNull(patternFormatter, "PATTERN should win over FORMAT");
     if (patternFormatter != nullptr)
-        CheckEquals(std::string("{level} {message}"), std::string(patternFormatter->GetPattern()), "The pattern should be the variable's");
+        CheckEquals("{level} {message}", std::string(patternFormatter->GetPattern()), "The pattern should be the variable's");
 
     // Act: FORMAT=Text alone goes back to the built-in layout
     {
@@ -168,8 +168,8 @@ ASW_TEST(TTest_ASWLog_Config, ApplyEnvironment_AppliesTheCategoryLevels)
     if (errors.size() == 1)
     {
         CheckEquals(ASWLog::ErrorKind::InvalidSetting, errors[0].Kind, "The report should be InvalidSetting");
-        CheckEquals(std::string("CATEGORIES='ConfigTestNet=Trace,Db=Loud': 'Db=Loud': 'Loud' isn't a level (Trace, Debug, Info, Warn, "
-            "Error, Critical or Off)"), errors[0].Message, "The report should name the setting, the value and the bad item");
+        CheckEquals("CATEGORIES='ConfigTestNet=Trace,Db=Loud': 'Db=Loud': 'Loud' isn't a level (Trace, Debug, Info, Warn, "
+            "Error, Critical or Off)", errors[0].Message, "The report should name the setting, the value and the bad item");
     }
 }
 //---------------------------------------------------------------------------
@@ -238,8 +238,8 @@ ASW_TEST(TTest_ASWLog_Config, ApplyEnvironment_ReadsUTF8Values)
 
     // Assert
     CheckTrue(isValid, "The paths should be valid");
-    CheckEquals(std::string("logs\xCE\xBB"), ASWLog::PathToUTF8String(config.File.FolderPath), "FOLDER should be read as UTF-8");
-    CheckEquals(std::string("\xE6\x97\xA5.txt"), ASWLog::PathToUTF8String(config.File.FilePath), "FILE should be read as UTF-8");
+    CheckEquals("logs\xCE\xBB", ASWLog::PathToUTF8String(config.File.FolderPath), "FOLDER should be read as UTF-8");
+    CheckEquals("\xE6\x97\xA5.txt", ASWLog::PathToUTF8String(config.File.FilePath), "FILE should be read as UTF-8");
 #if defined(_WIN32)
     CheckTrue(config.File.FolderPath.wstring() == L"logs\x03BB", "FOLDER should name the lambda, not ANSI code page characters");
 #endif
@@ -414,8 +414,8 @@ ASW_TEST(TTest_ASWLog_Config, ApplySetting_ReportsAnUnknownKey)
     if (errors.size() == 3)
     {
         CheckEquals(ASWLog::ErrorKind::InvalidSetting, errors[0].Kind, "The report should be InvalidSetting");
-        CheckEquals(std::string("'LEVL' isn't a setting"), errors[0].Message, "The report should name the key");
-        CheckEquals(std::string("'ASWLOG_LEVEL' isn't a setting"), errors[1].Message, "The report should name the key as given");
+        CheckEquals("'LEVL' isn't a setting", errors[0].Message, "The report should name the key");
+        CheckEquals("'ASWLOG_LEVEL' isn't a setting", errors[1].Message, "The report should name the key as given");
     }
 }
 //---------------------------------------------------------------------------
@@ -497,7 +497,7 @@ ASW_TEST(TTest_ASWLog_Config, ApplySetting_WritesToStdErrWithoutHandler)
 
     // Assert
     CheckFalse(isValid, "The value should be invalid");
-    CheckEquals(std::string("ASWLog: INVALID_SETTING: LEVEL='Verbose': expected Trace, Debug, Info, Warn, Error, Critical or Off\n"),
+    CheckEquals("ASWLog: INVALID_SETTING: LEVEL='Verbose': expected Trace, Debug, Info, Warn, Error, Critical or Off\n",
         written, "Without OnError, an invalid value should be written to stderr as one line");
 }
 //---------------------------------------------------------------------------

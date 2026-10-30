@@ -266,9 +266,9 @@ ASW_TEST(TTest_ASWLog_Formatter, FormatLine_CategoryOnlyWhenSetAndShown)
     const auto hiddenLine = ASWLog::TASWTextFormatter::FormatLine(categorized, config);
 
     // Assert
-    CheckEquals(std::string("[WARN][Net.Http]: categorized"), categorizedLine, "The category should follow the level");
-    CheckEquals(std::string("[WARN]: uncategorized"), uncategorizedLine, "An entry without a category should show no field for it");
-    CheckEquals(std::string("[WARN]: categorized"), hiddenLine, "ShowCategory false should hide the category");
+    CheckEquals("[WARN][Net.Http]: categorized", categorizedLine, "The category should follow the level");
+    CheckEquals("[WARN]: uncategorized", uncategorizedLine, "An entry without a category should show no field for it");
+    CheckEquals("[WARN]: categorized", hiddenLine, "ShowCategory false should hide the category");
 }
 //---------------------------------------------------------------------------
 ASW_TEST(TTest_ASWLog_Formatter, FormatLine_EntryFieldsBeforeTheMessage)
@@ -298,10 +298,10 @@ ASW_TEST(TTest_ASWLog_Formatter, FormatLine_EntryFieldsBeforeTheMessage)
     const auto hiddenLine = ASWLog::TASWTextFormatter::FormatLine(record, config);
 
     // Assert
-    CheckEquals(std::string(R"([WARN][user="amy" n=17 neg=-3 big=18446744073709551615 x=9.99 ok=true q="say \"hi\" \\\n" empty=""]: msg)"),
+    CheckEquals(R"([WARN][user="amy" n=17 neg=-3 big=18446744073709551615 x=9.99 ok=true q="say \"hi\" \\\n" empty=""]: msg)",
         line, "The fields should come in brackets before the message, texts quoted and escaped");
-    CheckEquals(std::string("[WARN]: msg"), emptyScopeLine, "A scope without fields should add no brackets");
-    CheckEquals(std::string("[WARN]: msg"), hiddenLine, "ShowFields false should hide the fields");
+    CheckEquals("[WARN]: msg", emptyScopeLine, "A scope without fields should add no brackets");
+    CheckEquals("[WARN]: msg", hiddenLine, "ShowFields false should hide the fields");
 }
 //---------------------------------------------------------------------------
 ASW_TEST(TTest_ASWLog_Formatter, FormatLine_LargestIdsAndEachLevel)
@@ -353,7 +353,7 @@ ASW_TEST(TTest_ASWLog_Formatter, FormatLine_NoFields)
     const auto line = ASWLog::TASWTextFormatter::FormatLine(MakeRecord("just the message"), config);
 
     // Assert
-    CheckEquals(std::string(": just the message"), line, "With every field off, only the separator and message remain");
+    CheckEquals(": just the message", line, "With every field off, only the separator and message remain");
 }
 //---------------------------------------------------------------------------
 ASW_TEST(TTest_ASWLog_Formatter, FormatLine_TimestampFollowsZoneAndPrecision)
@@ -369,7 +369,7 @@ ASW_TEST(TTest_ASWLog_Formatter, FormatLine_TimestampFollowsZoneAndPrecision)
     const auto line = ASWLog::TASWTextFormatter::FormatLine(MakeRecord("local"), config);
 
     // Assert
-    CheckEquals(std::string("[2026-09-21T10:13:20.123000-04:00]: local"), line, "The timestamp should be local time with microseconds and the offset");
+    CheckEquals("[2026-09-21T10:13:20.123000-04:00]: local", line, "The timestamp should be local time with microseconds and the offset");
 }
 //---------------------------------------------------------------------------
 ASW_TEST(TTest_ASWLog_Formatter, Formatter_RawEntryLeavesOutTheFields)
@@ -392,7 +392,7 @@ ASW_TEST(TTest_ASWLog_Formatter, Formatter_RawEntryLeavesOutTheFields)
 
     // Assert
     CheckTrue(initialized, "Initialize should succeed");
-    CheckEquals(std::string("[INFO][requestId=\"r-1\" n=1]: line\nraw\n"), ReadFileText(TestTempDir / "raw_fields.log"),
+    CheckEquals("[INFO][requestId=\"r-1\" n=1]: line\nraw\n", ReadFileText(TestTempDir / "raw_fields.log"),
         "A formatted entry should have its fields; a raw entry is written as is, without them");
 }
 //---------------------------------------------------------------------------
@@ -425,13 +425,13 @@ ASW_TEST(TTest_ASWLog_Formatter, Formatter_ReceivesRecordFromLoggingThread)
         const auto& record = records[0];
         CheckTrue(record.Timestamp == FixedTime, "The record's time should come from the logger's NowUTC()");
         CheckEquals(ASWLog::Level::Debug, record.LogLevel, "The record should have the entry's level");
-        CheckEquals(std::string("from worker"), record.Message, "The record should have the message");
+        CheckEquals("from worker", record.Message, "The record should have the message");
         CheckEquals(loggedLine, record.Line, "The record should have the caller's source location");
         CheckEquals(ASWLog::GetCurrentOSProcessId(), record.ProcessId, "The record should have the process id");
         CheckEquals(workerThreadId, record.ThreadId, "The record should have the id of the thread that logged");
     }
 
-    CheckEquals(std::string("DEBUG|from worker\n"), ReadFileText(TestTempDir / "record.log"),
+    CheckEquals("DEBUG|from worker\n", ReadFileText(TestTempDir / "record.log"),
         "The file should get the formatter's line plus the line ending");
 }
 //---------------------------------------------------------------------------
@@ -486,9 +486,9 @@ ASW_TEST(TTest_ASWLog_Formatter, JSONFormatter_DefaultFields)
     const auto categorizedLine = formatter.Format(categorized, config);
 
     // Assert
-    CheckEquals(std::string(R"({"time":"2026-09-21T14:13:20.123Z","epoch_ms":1790000000123,"level":"WARN","pid":1234,"tid":5678,"message":"msg"})"),
+    CheckEquals(R"({"time":"2026-09-21T14:13:20.123Z","epoch_ms":1790000000123,"level":"WARN","pid":1234,"tid":5678,"message":"msg"})",
         line, "The default fields should be written as members, in the built-in layout's order");
-    CheckEquals(std::string(R"({"time":"2026-09-21T14:13:20.123Z","epoch_ms":1790000000123,"level":"WARN","category":"Net","pid":1234,"tid":5678,"message":"from net"})"),
+    CheckEquals(R"({"time":"2026-09-21T14:13:20.123Z","epoch_ms":1790000000123,"level":"WARN","category":"Net","pid":1234,"tid":5678,"message":"from net"})",
         categorizedLine, "The category should follow the level");
     CheckTrue(IsJSONObjectLine(line) && IsJSONObjectLine(categorizedLine), "Each line should be one JSON object");
 }
@@ -524,7 +524,7 @@ ASW_TEST(TTest_ASWLog_Formatter, JSONFormatter_EachShowOption)
     CheckEquals(expected, allLine, "Each field should be written, in the built-in layout's order");
     CheckMatches(memoryLine, R"(\{"ws":[1-9][0-9]*,"pws":[1-9][0-9]*,"message":"memory"\})",
         "The working set and peak working set should be numbers");
-    CheckEquals(std::string(R"({"message":"all fields"})"), noFieldsLine, "With every field off, only the message should remain");
+    CheckEquals(R"({"message":"all fields"})", noFieldsLine, "With every field off, only the message should remain");
     CheckTrue(IsJSONObjectLine(allLine) && IsJSONObjectLine(memoryLine) && IsJSONObjectLine(noFieldsLine), "Each line should be one JSON object");
 }
 //---------------------------------------------------------------------------
@@ -543,7 +543,7 @@ ASW_TEST(TTest_ASWLog_Formatter, JSONFormatter_EmptyScopeLeavesOutTheFields)
     const auto line = formatter.Format(record, config);
 
     // Assert
-    CheckEquals(std::string(R"({"message":"msg"})"), line, "A scope without fields should add no \"fields\" object");
+    CheckEquals(R"({"message":"msg"})", line, "A scope without fields should add no \"fields\" object");
 }
 //---------------------------------------------------------------------------
 ASW_TEST(TTest_ASWLog_Formatter, JSONFormatter_EntryFields)
@@ -580,7 +580,7 @@ ASW_TEST(TTest_ASWLog_Formatter, JSONFormatter_EntryFields)
         R"("nan":"NaN","inf":"Infinity","ninf":"-Infinity"})";
     CheckEquals("{" + fields + R"(,"message":"msg"})", line, "The fields should be an object before the message, each key once");
     CheckEquals("{" + fields + R"(,"raw":true,"message":"msg"})", rawLine, "A raw entry should have its fields too");
-    CheckEquals(std::string(R"({"message":"msg"})"), hiddenLine, "ShowFields false should leave them out");
+    CheckEquals(R"({"message":"msg"})", hiddenLine, "ShowFields false should leave them out");
     CheckTrue(IsJSONObjectLine(line) && IsJSONObjectLine(rawLine), "Each line should be one JSON object");
 }
 //---------------------------------------------------------------------------
@@ -595,7 +595,7 @@ ASW_TEST(TTest_ASWLog_Formatter, JSONFormatter_EscapesTheTexts)
     const auto line = ASWLog::TASWJSONFormatter().Format(record, config);
 
     // Assert
-    CheckEquals(std::string(R"({"category":"N\"et\t","message":"say \"hi\" \\ \n\u0001 )" "\xCE\xBB " "\xEF\xBF\xBD" R"(end"})"), line,
+    CheckEquals(R"({"category":"N\"et\t","message":"say \"hi\" \\ \n\u0001 )" "\xCE\xBB " "\xEF\xBF\xBD" R"(end"})", line,
         "The texts should be escaped, valid UTF-8 kept and invalid UTF-8 replaced with U+FFFD");
     CheckTrue(IsJSONObjectLine(line), "The line should be one JSON object");
 }
@@ -672,7 +672,7 @@ ASW_TEST(TTest_ASWLog_Formatter, JSONFormatter_RawEntries)
     CheckTrue(formatter.FormatsRawEntries(), "The JSON formatter should format raw entries, so each line is a whole entry");
     CheckFalse(ASWLog::TASWTextFormatter().FormatsRawEntries(), "The built-in layout should leave raw entries as they are");
     CheckFalse(ASWLog::TASWPatternFormatter("{message}").FormatsRawEntries(), "A pattern should leave raw entries as they are");
-    CheckEquals(std::string(R"({"raw":true,"message":"partial "})"), line, "A raw entry should be marked before the message");
+    CheckEquals(R"({"raw":true,"message":"partial "})", line, "A raw entry should be marked before the message");
 }
 //---------------------------------------------------------------------------
 ASW_TEST(TTest_ASWLog_Formatter, JSONFormatter_TimeFollowsZoneAndPrecision)
@@ -695,9 +695,9 @@ ASW_TEST(TTest_ASWLog_Formatter, JSONFormatter_TimeFollowsZoneAndPrecision)
     const auto oldLine = formatter.Format(before1970, utcConfig);
 
     // Assert
-    CheckEquals(std::string(R"({"time":"2026-09-21T10:13:20.123000-04:00","epoch_ms":1790000000123,"message":"local"})"), localLine,
+    CheckEquals(R"({"time":"2026-09-21T10:13:20.123000-04:00","epoch_ms":1790000000123,"message":"local"})", localLine,
         "The time should follow the zone and precision; the epoch milliseconds don't depend on them");
-    CheckEquals(std::string(R"({"time":"1969-12-31T23:59:58.500Z","epoch_ms":-1500,"message":"old"})"), oldLine,
+    CheckEquals(R"({"time":"1969-12-31T23:59:58.500Z","epoch_ms":-1500,"message":"old"})", oldLine,
         "A time before 1970 should have negative epoch milliseconds, rounded down");
 }
 //---------------------------------------------------------------------------
@@ -716,15 +716,15 @@ ASW_TEST(TTest_ASWLog_Formatter, PatternFormatter_AffixesOnlyAroundAValue)
         };
 
     // Act & Assert
-    CheckEquals(std::string("[Net] msg|msg"), formatBoth("{[category] }{message}"), "Unquoted punctuation and spaces should be written only with a value");
-    CheckEquals(std::string("cat=Net msg|msg"), formatBoth("{'cat=' category ' '}{message}"), "Quoted text should be written only with a value");
-    CheckEquals(std::string("it's Net|"), formatBoth("{'it''s ' category}"), "'' should write a quote inside quoted text");
-    CheckEquals(std::string("[cat:Net] msg|msg"), formatBoth("{['cat:'category] }{message}"), "Quoted and unquoted text should mix");
-    CheckEquals(std::string("Net | msg|msg"), formatBoth("{category ' | '}{message}"), "Spaces next to quoted text should only separate it");
-    CheckEquals(std::string(" | Net msg|msg"), formatBoth("{ | category }{message}"), "Unquoted spaces away from quotes should be written");
+    CheckEquals("[Net] msg|msg", formatBoth("{[category] }{message}"), "Unquoted punctuation and spaces should be written only with a value");
+    CheckEquals("cat=Net msg|msg", formatBoth("{'cat=' category ' '}{message}"), "Quoted text should be written only with a value");
+    CheckEquals("it's Net|", formatBoth("{'it''s ' category}"), "'' should write a quote inside quoted text");
+    CheckEquals("[cat:Net] msg|msg", formatBoth("{['cat:'category] }{message}"), "Quoted and unquoted text should mix");
+    CheckEquals("Net | msg|msg", formatBoth("{category ' | '}{message}"), "Spaces next to quoted text should only separate it");
+    CheckEquals(" | Net msg|msg", formatBoth("{ | category }{message}"), "Unquoted spaces away from quotes should be written");
     CheckEquals(std::format("({}) msg|msg", withValues.Location.function_name()), formatBoth("{(function) }{message}"),
         "A field without a value, like an empty function name, should write nothing at all");
-    CheckEquals(std::string("[Net]msg|[]msg"), formatBoth("[{category}]{message}"), "Text outside the braces should always be written");
+    CheckEquals("[Net]msg|[]msg", formatBoth("[{category}]{message}"), "Text outside the braces should always be written");
 }
 //---------------------------------------------------------------------------
 ASW_TEST(TTest_ASWLog_Formatter, PatternFormatter_BracesAndPlainText)
@@ -739,8 +739,8 @@ ASW_TEST(TTest_ASWLog_Formatter, PatternFormatter_BracesAndPlainText)
     const auto empty = ASWLog::TASWPatternFormatter("").Format(record, config);
 
     // Assert
-    CheckEquals(std::string("{WARN} } {"), escaped, "{{ and }} should write a brace");
-    CheckEquals(std::string("plain text"), plain, "A pattern without placeholders should write its text");
+    CheckEquals("{WARN} } {", escaped, "{{ and }} should write a brace");
+    CheckEquals("plain text", plain, "A pattern without placeholders should write its text");
     CheckEmpty(empty, "An empty pattern should write an empty line");
 }
 //---------------------------------------------------------------------------
@@ -824,8 +824,8 @@ ASW_TEST(TTest_ASWLog_Formatter, PatternFormatter_FieldsPlaceholder)
     const auto lineWithout = formatter.Format(MakeRecord("msg"), config);
 
     // Assert
-    CheckEquals(std::string("[a=1 b=\"x y\"] msg"), line, "{fields} should write the fields as the built-in layout does");
-    CheckEquals(std::string("msg"), lineWithout, "{fields} should write nothing, affixes included, without fields");
+    CheckEquals("[a=1 b=\"x y\"] msg", line, "{fields} should write the fields as the built-in layout does");
+    CheckEquals("msg", lineWithout, "{fields} should write nothing, affixes included, without fields");
 }
 //---------------------------------------------------------------------------
 ASW_TEST(TTest_ASWLog_Formatter, PatternFormatter_FileLoggerWritesItsLines)
@@ -847,7 +847,7 @@ ASW_TEST(TTest_ASWLog_Formatter, PatternFormatter_FileLoggerWritesItsLines)
 
     // Assert
     CheckTrue(initialized, "Initialize should succeed");
-    CheckEquals(std::string("WARN  [Net] from_net\r\nINFO  plain\r\nraw\n"), ReadFileText(TestTempDir / "pattern.log"),
+    CheckEquals("WARN  [Net] from_net\r\nINFO  plain\r\nraw\n", ReadFileText(TestTempDir / "pattern.log"),
         "Each line should follow the pattern, then the line ending; a raw entry is written as is");
 }
 //---------------------------------------------------------------------------
@@ -917,11 +917,11 @@ ASW_TEST(TTest_ASWLog_Formatter, PatternFormatter_WidthPadsShortValues)
     critical.LogLevel = ASWLog::Level::Critical;
 
     // Act & Assert
-    CheckEquals(std::string("INFO |"), padded.Format(info, config), "A shorter value should be padded on the right");
-    CheckEquals(std::string("ERROR|"), padded.Format(error, config), "A value of the width should be written as is");
-    CheckEquals(std::string("CRITICAL|"), padded.Format(critical, config), "A longer value should not be cut");
-    CheckEquals(std::string("[INFO  ]|"), withAffixes.Format(info, config), "The affixes should go around the padded value");
-    CheckEquals(std::string("|"), emptyField.Format(info, config), "An empty field should not be padded");
+    CheckEquals("INFO |", padded.Format(info, config), "A shorter value should be padded on the right");
+    CheckEquals("ERROR|", padded.Format(error, config), "A value of the width should be written as is");
+    CheckEquals("CRITICAL|", padded.Format(critical, config), "A longer value should not be cut");
+    CheckEquals("[INFO  ]|", withAffixes.Format(info, config), "The affixes should go around the padded value");
+    CheckEquals("|", emptyField.Format(info, config), "An empty field should not be padded");
 }
 //---------------------------------------------------------------------------
 

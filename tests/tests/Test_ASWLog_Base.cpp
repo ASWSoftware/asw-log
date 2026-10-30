@@ -465,11 +465,11 @@ ASW_TEST(TTest_ASWLog_Base, GetConfig_ReturnsUnchangingSnapshot)
     CheckTrue(defaultConfig != nullptr && defaultConfig->Startup.Banner.empty(),
         "Before Initialize(), GetConfig() should return the default config");
     CheckTrue(reconfigured, "Reconfigure() should succeed once initialized");
-    CheckEquals(std::string("first"), firstSnapshot->Startup.Banner,
+    CheckEquals("first", firstSnapshot->Startup.Banner,
         "A snapshot should keep the settings it was taken with after Reconfigure()");
-    CheckEquals(std::string("second"), secondSnapshot->Startup.Banner,
+    CheckEquals("second", secondSnapshot->Startup.Banner,
         "GetConfig() should return the settings passed to Reconfigure()");
-    CheckEquals(std::string("first"), firstConfig.Startup.Banner,
+    CheckEquals("first", firstConfig.Startup.Banner,
         "The config passed to Initialize() should be copied, not kept");
 }
 //---------------------------------------------------------------------------
@@ -545,16 +545,16 @@ ASW_TEST(TTest_ASWLog_Base, LogFormatMethods_AcceptEveryArgumentKind)
 
     // Act and Assert
     logger.LogInfoFmt("{} {} {} {} {}", value, constValue, text, view, 5);
-    CheckEquals(std::string("1 2 three four 5"), logger.LastMessage, "A level shortcut should format every kind of argument");
+    CheckEquals("1 2 three four 5", logger.LastMessage, "A level shortcut should format every kind of argument");
 
     logger.LogFmt(ASWLog::Level::Info, "{} {} {} {} {}", value, constValue, text, view, 5);
-    CheckEquals(std::string("1 2 three four 5"), logger.LastMessage, "LogFmt() should format every kind of argument");
+    CheckEquals("1 2 three four 5", logger.LastMessage, "LogFmt() should format every kind of argument");
 
     logger.LogWarnFmt(constantFormat, value, text);
-    CheckEquals(std::string("1-three"), logger.LastMessage, "A constexpr string_view format should be accepted");
+    CheckEquals("1-three", logger.LastMessage, "A constexpr string_view format should be accepted");
 
     logger.LogInfoFmt(ASWLog::RuntimeFormat(runtimeFormat), value, constValue, text, view, 5);
-    CheckEquals(std::string("1 2 three four 5"), logger.LastMessage, "A RuntimeFormat() string that matches its arguments should format like a literal");
+    CheckEquals("1 2 three four 5", logger.LastMessage, "A RuntimeFormat() string that matches its arguments should format like a literal");
 }
 //---------------------------------------------------------------------------
 ASW_TEST(TTest_ASWLog_Base, LogFormatMethods_LogErrorInsteadOfThrowing)
@@ -580,8 +580,8 @@ ASW_TEST(TTest_ASWLog_Base, LogFormatMethods_LogErrorInsteadOfThrowing)
     // Assert
     CheckStartsWith(wrongArgumentCountMessage, "[ASWLog format error: ", "A format string that doesn't match its arguments should log the error: " + wrongArgumentCountMessage);
     CheckEndsWith(wrongArgumentCountMessage, "] bad {} {}", "The logged error should end with the format string: " + wrongArgumentCountMessage);
-    CheckEquals(std::string("[ASWLog format error: formatter failed] value {}"), stdExceptionMessage, "A std::exception from a formatter should be logged with its message");
-    CheckEquals(std::string("[ASWLog format error: unknown exception] value {}"), otherExceptionMessage, "Any other exception from a formatter should be logged too");
+    CheckEquals("[ASWLog format error: formatter failed] value {}", stdExceptionMessage, "A std::exception from a formatter should be logged with its message");
+    CheckEquals("[ASWLog format error: unknown exception] value {}", otherExceptionMessage, "Any other exception from a formatter should be logged too");
 }
 //---------------------------------------------------------------------------
 ASW_TEST(TTest_ASWLog_Base, LogFormatMethods_PassCallerLocation)
@@ -599,9 +599,9 @@ ASW_TEST(TTest_ASWLog_Base, LogFormatMethods_PassCallerLocation)
         {
             const auto& location = logger.LastLocation;
             CheckEquals(expectedMessage, logger.LastMessage, method + " should format the message", loc);
-            CheckEquals(thisFile, std::string(location.file_name()), method + " should pass the caller's file, not ASWLog_Interface.h", loc);
+            CheckEquals(thisFile, location.file_name(), method + " should pass the caller's file, not ASWLog_Interface.h", loc);
             CheckEquals(expectedLine, location.line(), method + " should pass the caller's line", loc);
-            CheckContains(std::string(location.function_name()), testName, method + " should pass the caller's function", loc);
+            CheckContains(location.function_name(), testName, method + " should pass the caller's function", loc);
         };
 
     // Act and Assert: each expected line is the line after the one that records it
@@ -666,7 +666,7 @@ ASW_TEST(TTest_ASWLog_Base, LogFormatMethods_SkipFormattingWhenNotWritten)
 
     logger.LogInfoFmt("{}", TCountedValue{});
     CheckEquals(1, CountedValueFormatCount, "An entry at the minimum level should be formatted once");
-    CheckEquals(std::string("counted"), logger.LastMessage, "The formatted entry should reach the logger");
+    CheckEquals("counted", logger.LastMessage, "The formatted entry should reach the logger");
 
     logger.LogForceFmt(ASWLog::Level::Trace, "{}", TCountedValue{});
     logger.LogForceRawFmt(ASWLog::Level::Trace, "{}", TCountedValue{});
@@ -692,42 +692,42 @@ ASW_TEST(TTest_ASWLog_Base, LogLevelConvenienceMethods)
 
     // Assert
     CheckEquals(ASWLog::Level::Trace, logger.LastLevel, "LogTrace should set Trace level");
-    CheckEquals(std::string("trace"), logger.LastMessage, "LogTrace should store the message");
+    CheckEquals("trace", logger.LastMessage, "LogTrace should store the message");
 
     // Act
     logger.LogDebug("debug");
 
     // Assert
     CheckEquals(ASWLog::Level::Debug, logger.LastLevel, "LogDebug should set Debug level");
-    CheckEquals(std::string("debug"), logger.LastMessage, "LogDebug should store the message");
+    CheckEquals("debug", logger.LastMessage, "LogDebug should store the message");
 
     // Act
     logger.LogInfo("info");
 
     // Assert
     CheckEquals(ASWLog::Level::Info, logger.LastLevel, "LogInfo should set Info level");
-    CheckEquals(std::string("info"), logger.LastMessage, "LogInfo should store the message");
+    CheckEquals("info", logger.LastMessage, "LogInfo should store the message");
 
     // Act
     logger.LogWarn("warn");
 
     // Assert
     CheckEquals(ASWLog::Level::Warn, logger.LastLevel, "LogWarn should set Warn level");
-    CheckEquals(std::string("warn"), logger.LastMessage, "LogWarn should store the message");
+    CheckEquals("warn", logger.LastMessage, "LogWarn should store the message");
 
     // Act
     logger.LogError("error");
 
     // Assert
     CheckEquals(ASWLog::Level::Error, logger.LastLevel, "LogError should set Error level");
-    CheckEquals(std::string("error"), logger.LastMessage, "LogError should store the message");
+    CheckEquals("error", logger.LastMessage, "LogError should store the message");
 
     // Act
     logger.LogCritical("critical");
 
     // Assert
     CheckEquals(ASWLog::Level::Critical, logger.LastLevel, "LogCritical should set Critical level");
-    CheckEquals(std::string("critical"), logger.LastMessage, "LogCritical should store the message");
+    CheckEquals("critical", logger.LastMessage, "LogCritical should store the message");
 }
 //---------------------------------------------------------------------------
 ASW_TEST(TTest_ASWLog_Base, LogMethods_PassRecordsToWrite)
@@ -952,7 +952,7 @@ ASW_TEST(TTest_ASWLog_Base, OnBeforeWrite_ThrowingHookDropsTheEntryAndReports)
     CheckTrue(logger.Written == std::vector<std::string>{ "ERROR|good" }, "Only the entry the hook didn't throw for should be written");
     AssertEquals(std::size_t(1), reports.size(), "The dropped entry should be reported");
     CheckEquals(ASWLog::ErrorKind::Exception, reports[0].Kind, "A throwing hook should be reported as an Exception");
-    CheckEquals(std::string("Dropped an entry, OnBeforeWrite threw: boom"), reports[0].Message,
+    CheckEquals("Dropped an entry, OnBeforeWrite threw: boom", reports[0].Message,
         "The report should name the hook and give the exception's what()");
 }
 //---------------------------------------------------------------------------
@@ -1017,12 +1017,12 @@ ASW_TEST(TTest_ASWLog_Base, ReportError_ThrottlesEachKindSeparately)
     if (reports.size() != 5)
         return;
 
-    CheckEquals(std::string("first"), reports[0].Message, "The first failure should be reported");
+    CheckEquals("first", reports[0].Message, "The first failure should be reported");
     CheckEquals(0, reports[0].SuppressedCount, "Nothing was left out before the first report");
-    CheckEquals(std::string("other kind"), reports[1].Message, "Another kind should have its own interval");
-    CheckEquals(std::string("after the interval"), reports[2].Message, "The kind should be reported again once the interval has passed");
+    CheckEquals("other kind", reports[1].Message, "Another kind should have its own interval");
+    CheckEquals("after the interval", reports[2].Message, "The kind should be reported again once the interval has passed");
     CheckEquals(3, reports[2].SuppressedCount, "The report should count the failures left out since the previous one");
-    CheckEquals(std::string("unthrottled 2"), reports[4].Message, "With an interval of 0, every failure should be reported");
+    CheckEquals("unthrottled 2", reports[4].Message, "With an interval of 0, every failure should be reported");
     CheckEquals(0, reports[4].SuppressedCount, "With an interval of 0, nothing should be left out");
 }
 //---------------------------------------------------------------------------
@@ -1085,7 +1085,7 @@ ASW_TEST(TTest_ASWLog_Base, ReportError_WritesToStdErrWithoutHandler)
     std::erase(written, '\r'); // In case stderr is in text mode on Windows
 
     // Assert
-    CheckEquals(std::string("ASWLog TTestLogger: OPEN_FAILED: Couldn't open the log file\n"), written,
+    CheckEquals("ASWLog TTestLogger: OPEN_FAILED: Couldn't open the log file\n", written,
         "Without OnError, a failure should be written to stderr as one line naming the logger, once per interval");
 }
 //---------------------------------------------------------------------------
@@ -1276,13 +1276,13 @@ ASW_TEST(TTest_ASWLog_Base, Write_ThrowingWriteRecordDropsEntry)
 
     // Assert
     CheckEquals(1, logger.WriteRecordCount, "Only the entry written after the failures should be recorded");
-    CheckEquals(std::string("written"), logger.LastMessage, "The logger should keep working after WriteRecord() threw");
+    CheckEquals("written", logger.LastMessage, "The logger should keep working after WriteRecord() threw");
     CheckEquals(2, reports.size(), "Each dropped entry should be reported");
     if (reports.empty())
         return;
 
     CheckEquals(ASWLog::ErrorKind::Exception, reports[0].Kind, "A dropped entry should be reported as an Exception");
-    CheckEquals(std::string("Dropped an entry: write failed"), reports[0].Message, "The report should give the exception's what()");
+    CheckEquals("Dropped an entry: write failed", reports[0].Message, "The report should give the exception's what()");
 }
 //---------------------------------------------------------------------------
 

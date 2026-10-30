@@ -343,7 +343,7 @@ ASW_TEST(TTest_ASWLog_WindowsEventLog, HandleCrash_ReportsTheFormattedCrashLineO
     AssertEquals(1, log.Events.size(), "Only the formatted crash line should be reported");
     CheckEquals(EventType::Error, log.Events[0].Type, "The crash line should be an Error event");
     CheckEquals(1005, log.Events[0].EventId, "The crash line should have Critical's event ID");
-    CheckEquals(std::string("[CRITICAL]: Crash: test crash"), log.Events[0].Text, "The crash line should be reported without its line ending");
+    CheckEquals("[CRITICAL]: Crash: test crash", log.Events[0].Text, "The crash line should be reported without its line ending");
 }
 //---------------------------------------------------------------------------
 ASW_TEST(TTest_ASWLog_WindowsEventLog, Open_OpensTheConfiguredSource)
@@ -367,8 +367,8 @@ ASW_TEST(TTest_ASWLog_WindowsEventLog, Open_OpensTheConfiguredSource)
     AssertEquals(3, log.Sources.size(), "Initialize, Reconfigure and Open should each open the source");
     CheckNotEmpty(executableStem, "The executable's file name should be known");
     CheckEquals(executableStem, log.Sources[0], "Without a source, the executable's file name without its extension should be used");
-    CheckEquals(std::string("MyApp"), log.Sources[1], "Reconfigure should open the new source");
-    CheckEquals(std::string("MyApp"), log.Sources[2], "Open after Close should open the current config's source again");
+    CheckEquals("MyApp", log.Sources[1], "Reconfigure should open the new source");
+    CheckEquals("MyApp", log.Sources[2], "Open after Close should open the current config's source again");
 }
 //---------------------------------------------------------------------------
 ASW_TEST(TTest_ASWLog_WindowsEventLog, RegisterSource_NeedsAdministratorRights)
@@ -487,11 +487,11 @@ ASW_TEST(TTest_ASWLog_WindowsEventLog, Report_StripsOnlyTheLineEnding)
 
     // Assert
     AssertEquals(5, log.Events.size(), "Each entry should be one event");
-    CheckEquals(std::string("[INFO]: hello"), log.Events[0].Text, "The LF ending should be stripped");
-    CheckEquals(std::string("[INFO]: ends with a break\n"), log.Events[1].Text, "Only the line ending should be stripped, not the message's own break");
-    CheckEquals(std::string("raw text\n"), log.Events[2].Text, "A raw entry should be reported as is");
-    CheckEquals(std::string("[INFO]: crlf"), log.Events[3].Text, "The CRLF ending should be stripped");
-    CheckEquals(std::string("[INFO]: ends with LF\n"), log.Events[4].Text, "With CRLF endings, the message's own LF should stay");
+    CheckEquals("[INFO]: hello", log.Events[0].Text, "The LF ending should be stripped");
+    CheckEquals("[INFO]: ends with a break\n", log.Events[1].Text, "Only the line ending should be stripped, not the message's own break");
+    CheckEquals("raw text\n", log.Events[2].Text, "A raw entry should be reported as is");
+    CheckEquals("[INFO]: crlf", log.Events[3].Text, "The CRLF ending should be stripped");
+    CheckEquals("[INFO]: ends with LF\n", log.Events[4].Text, "With CRLF endings, the message's own LF should stay");
 }
 //---------------------------------------------------------------------------
 ASW_TEST(TTest_ASWLog_WindowsEventLog, ShouldLog_FollowsThePlatform)

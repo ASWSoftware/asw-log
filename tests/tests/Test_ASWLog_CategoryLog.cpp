@@ -575,7 +575,7 @@ ASW_TEST(TTest_ASWLog_CategoryLog, FileLog_WritesTheCategoryAfterTheLevel)
     // Assert
     CheckTrue(initialized, "Initialize should succeed");
     CheckTrue(reconfigured, "Reconfigure should succeed");
-    CheckEquals(std::string("[DEBUG][Net]: net_debug\n[INFO]: plain_info\n[INFO]: hidden\n"), ReadFileText(logFile),
+    CheckEquals("[DEBUG][Net]: net_debug\n[INFO]: plain_info\n[INFO]: hidden\n", ReadFileText(logFile),
         "The category should follow the level, its own level should let its Debug entry in, and ShowCategory should hide it");
 }
 //---------------------------------------------------------------------------
@@ -707,7 +707,7 @@ ASW_TEST(TTest_ASWLog_CategoryLog, Nesting_JoinsNamesAndInheritsLevels)
     const bool shouldLogWhileNetDisabled = httpLog.ShouldLog(ASWLog::Level::Error);
 
     // Assert
-    CheckEquals(std::string("Net.Http"), std::string(httpLog.GetName()), "A nested category's name should follow its parent's");
+    CheckEquals("Net.Http", std::string(httpLog.GetName()), "A nested category's name should follow its parent's");
     const std::vector<std::string> expected{ "DEBUG|Net.Http|at_nets_level", "INFO|Net|net_info" };
     CheckTrue(logger.Written == expected, "A nested category should use its own level if set, else its parent's, else the logger's");
     CheckEquals(ASWLog::Level::Debug, levelFollowingNet, "A nested category without a level of its own should follow its parent's");
@@ -859,7 +859,7 @@ ASW_TEST(TTest_ASWLog_CategoryLog, Write_StampsTheNameAndOwnLevel)
     netLog.Log(ASWLog::Level::Info, "with_own_level", location);
 
     // Assert
-    CheckEquals(std::string("Net"), std::string(netLog.GetName()), "GetName should return the name");
+    CheckEquals("Net", std::string(netLog.GetName()), "GetName should return the name");
     const std::vector<std::string> expected{ "INFO|Net|without_own_level", "INFO|Net|with_own_level" };
     CheckTrue(logger.Written == expected, "Each entry should carry the category's name");
     AssertEquals(2, logger.CategoryLevels.size(), "Both entries should be written");

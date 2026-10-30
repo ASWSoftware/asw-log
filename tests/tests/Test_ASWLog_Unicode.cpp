@@ -348,9 +348,9 @@ ASW_TEST(TTest_ASWLog_Unicode, Formatters_ConvertTheWrappedText)
     const auto wideWide = std::format(L"[{}]", ASWLog::Wide(L"x"));
 
     // Assert
-    CheckEquals(std::string("[a\xCE\xBB]"), narrowWide, "Wide() should format wchar_t text as UTF-8");
-    CheckEquals(std::string("[   ab]"), narrowUTF16, "Wide() should format char16_t text, with a width");
-    CheckEquals(std::string("[ab  ]"), narrowUTF8, "UTF8() should format as it is in a narrow format");
+    CheckEquals("[a\xCE\xBB]", narrowWide, "Wide() should format wchar_t text as UTF-8");
+    CheckEquals("[   ab]", narrowUTF16, "Wide() should format char16_t text, with a width");
+    CheckEquals("[ab  ]", narrowUTF8, "UTF8() should format as it is in a narrow format");
     CheckTrue(wideUTF8 == L"[a\x03BB]", "UTF8() should format UTF-8 as wide text in a wide format");
     CheckTrue(wideUTF8Padded == L"[ab  ]", "UTF8() should take a width in a wide format");
     CheckTrue(wideUTF16 == L"[" + wideEmoji + L"]", "Wide() should format char16_t text in a wide format");
@@ -472,8 +472,8 @@ ASW_TEST(TTest_ASWLog_Unicode, LogFmt_WideFormatWritesUTF8)
     CheckEquals(22, log.Entries.size(), "The mismatched entry should still be written");
     if (log.Entries.size() == 22)
     {
-        CheckStartsWith(log.Entries[21].Message, std::string("[ASWLog format error: "), "A mismatched runtime format should be described");
-        CheckEndsWith(log.Entries[21].Message, std::string("] {} {}"), "The description should end with the format string");
+        CheckStartsWith(log.Entries[21].Message, "[ASWLog format error: ", "A mismatched runtime format should be described");
+        CheckEndsWith(log.Entries[21].Message, "] {} {}", "The description should end with the format string");
     }
 }
 //---------------------------------------------------------------------------
@@ -676,12 +676,12 @@ ASW_TEST(TTest_ASWLog_Unicode, WideText_TakesEachKindOfText)
     const std::u16string utf16String = u"utf16 \x03BB";
 
     // Act & Assert: made implicitly from each kind of text
-    CheckEquals(std::string("a\xCE\xBB"), toUTF8(L"a\x03BB"), "A wchar_t literal should be taken");
-    CheckEquals(std::string("a\xCE\xBB"), toUTF8(u"a\x03BB"), "A char16_t literal should be taken");
-    CheckEquals(std::string("wide \xCE\xBB"), toUTF8(wideString), "A std::wstring should be taken");
-    CheckEquals(std::string("utf16 \xCE\xBB"), toUTF8(utf16String), "A std::u16string should be taken");
-    CheckEquals(std::string("wide"), toUTF8(std::wstring_view(wideString).substr(0, 4)), "A std::wstring_view should be taken");
-    CheckEquals(std::string("utf16"), toUTF8(std::u16string_view(utf16String).substr(0, 5)), "A std::u16string_view should be taken");
+    CheckEquals("a\xCE\xBB", toUTF8(L"a\x03BB"), "A wchar_t literal should be taken");
+    CheckEquals("a\xCE\xBB", toUTF8(u"a\x03BB"), "A char16_t literal should be taken");
+    CheckEquals("wide \xCE\xBB", toUTF8(wideString), "A std::wstring should be taken");
+    CheckEquals("utf16 \xCE\xBB", toUTF8(utf16String), "A std::u16string should be taken");
+    CheckEquals("wide", toUTF8(std::wstring_view(wideString).substr(0, 4)), "A std::wstring_view should be taken");
+    CheckEquals("utf16", toUTF8(std::u16string_view(utf16String).substr(0, 5)), "A std::u16string_view should be taken");
     CheckEquals(std::string(), toUTF8(nullWide), "A null wchar_t pointer should be empty text");
     CheckEquals(std::string(), toUTF8(nullUTF16), "A null char16_t pointer should be empty text");
 
@@ -729,7 +729,7 @@ ASW_TEST(TTest_ASWLog_Unicode, WideToUTF8_ReplacesWhatIsNotACharacter)
         const std::wstring invalid{ static_cast<wchar_t>(surrogate), static_cast<wchar_t>(tooLarge), static_cast<wchar_t>(0x1F600) };
 
         // Act & Assert
-        CheckEquals(std::string("\xEF\xBF\xBD\xEF\xBF\xBD\xF0\x9F\x98\x80"), ASWLog::WideToUTF8(invalid),
+        CheckEquals("\xEF\xBF\xBD\xEF\xBF\xBD\xF0\x9F\x98\x80", ASWLog::WideToUTF8(invalid),
             "A surrogate or a value above U+10FFFF should become U+FFFD");
     }
 }
